@@ -160,10 +160,36 @@ application already owns Ctrl+Space, Relay logs a warning and stays reachable
 from the tray. A launcher that refuses to start because a shortcut is taken is
 a worse launcher.
 
+## Password vault
+
+`src-tauri/src/vault.rs` is the first thing in Relay that persists a secret.
+Entries (`VaultEntry`: label, username, password, optional URL/notes) live on
+disk as one AES-256-GCM ciphertext (`vault.json` in the app-data directory),
+keyed by an Argon2id hash of a master password plus a random salt stored
+alongside it. There is no password reset — losing the master password loses
+the vault, by design; a recovery path would be a second way in.
+
+Decrypted entries exist only in memory (`VaultState`, Tauri-managed), only
+while unlocked. Listing entries returns `VaultEntrySummary` — everything but
+the password — so a rendered list never puts every plaintext secret into the
+DOM at once; a password crosses IPC again, on demand, through
+`reveal_password`. GCM's authentication tag doubles as the wrong-password
+check, so unlocking needs no separate verifier on disk. `generate_password`
+is pure and stateless, so the palette's password generator works before a
+vault even exists. `export` writes a second, still-encrypted `VaultFile` to
+the user's documents folder — a portable backup, not a plaintext dump.
+
+The frontend surface is `src/app/features/vault/vault.ts`, reached the same
+way Settings is: a palette command dispatches `CoreCommand::OpenVault`, which
+shows the main window and emits `AppEvent::OpenVaultRequested` for `Home` to
+switch views to, since the palette and the main window are separate webviews
+with no shared JS state.
+
 ## Not built yet
 
-Project and task models, agent orchestration, external service connectors,
-settings persistence beyond the store plugin, and the context layer that lets
-commands know what you are working on. The events/jobs pipeline above is
-built and tested end to end but currently has no producer — an agent run, a
-project scan, a file watcher all still need to be written.
+Project and task models, agent orchestration, external service connectors
+(a GitHub connector and a Gmail connector are the next two planned), and the
+context layer that lets commands know what you are working on. The
+events/jobs pipeline above is built and tested end to end but currently has
+no producer — an agent run, a project scan, a file watcher all still need to
+be written.

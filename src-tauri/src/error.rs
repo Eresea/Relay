@@ -23,6 +23,36 @@ pub enum Error {
 
     #[error(transparent)]
     Tauri(#[from] tauri::Error),
+
+    #[error(transparent)]
+    Io(#[from] std::io::Error),
+
+    #[error("no vault has been created yet")]
+    VaultNotFound,
+
+    #[error("a vault already exists")]
+    VaultAlreadyExists,
+
+    #[error("the vault is locked")]
+    VaultLocked,
+
+    #[error("master password must be at least 8 characters")]
+    WeakMasterPassword,
+
+    #[error("wrong master password")]
+    WrongMasterPassword,
+
+    #[error("no vault entry `{0}`")]
+    UnknownVaultEntry(String),
+
+    #[error("vault data is corrupt: {0}")]
+    VaultCorrupt(String),
+
+    #[error("select at least one character type")]
+    InvalidPasswordOptions,
+
+    #[error("encryption failed")]
+    Crypto,
 }
 
 impl Serialize for Error {

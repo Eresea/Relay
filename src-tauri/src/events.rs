@@ -29,6 +29,11 @@ pub enum AppEvent {
     /// react to it are separate webviews with no shared JS state.
     OpenSettingsRequested,
 
+    /// The "Password vault" command was run. Mirrors `OpenSettingsRequested`
+    /// for the same reason: the palette that dispatched the command and the
+    /// main window that must switch views are separate webviews.
+    OpenVaultRequested,
+
     /// A notification to show in the HUD. `hue_source` names the long-lived
     /// object this is about (a job id today, an agent id once agents exist)
     /// — the HUD hashes it to a colour, never the notification's own id,
@@ -130,6 +135,12 @@ mod tests {
     fn open_settings_requested_is_a_bare_tag() {
         let json = serde_json::to_string(&AppEvent::OpenSettingsRequested).unwrap();
         assert_eq!(json, r#"{"type":"openSettingsRequested"}"#);
+    }
+
+    #[test]
+    fn open_vault_requested_is_a_bare_tag() {
+        let json = serde_json::to_string(&AppEvent::OpenVaultRequested).unwrap();
+        assert_eq!(json, r#"{"type":"openVaultRequested"}"#);
     }
 
     #[test]
