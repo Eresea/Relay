@@ -45,7 +45,10 @@ pub fn start(app: AppHandle, registry: JobRegistry) -> Result<()> {
                     Ok(Some(entry)) => entry,
                     Ok(None) => break,
                     Err(error) => {
-                        log::warn!("scan: could not read an entry of {}: {error}", dir.display());
+                        log::warn!(
+                            "scan: could not read an entry of {}: {error}",
+                            dir.display()
+                        );
                         break;
                     }
                 };
