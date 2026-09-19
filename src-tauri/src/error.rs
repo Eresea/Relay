@@ -1,5 +1,7 @@
 use serde::{Serialize, Serializer};
 
+use crate::jobs::JobId;
+
 /// Every error that can cross the IPC boundary.
 ///
 /// Tauri commands must return something `Serialize`, and a bare `String` loses
@@ -9,8 +11,11 @@ pub enum Error {
     #[error("no window labelled `{0}`")]
     MissingWindow(&'static str),
 
-    #[error("unknown command `{0}`")]
-    UnknownCommand(String),
+    #[error("no job `{0}`")]
+    UnknownJob(JobId),
+
+    #[error("job `{0}` was cancelled")]
+    JobCancelled(JobId),
 
     #[error(transparent)]
     Tauri(#[from] tauri::Error),

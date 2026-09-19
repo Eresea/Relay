@@ -29,7 +29,7 @@ export function registerDefaultCommands(): () => void {
       title: 'Open settings',
       group: 'Relay',
       icon: 'settings',
-      run: () => tauri.runCoreCommand('open_settings'),
+      run: () => tauri.runCoreCommand({ id: 'open_settings' }),
     },
     {
       id: 'relay.app.reload',
@@ -45,7 +45,7 @@ export function registerDefaultCommands(): () => void {
       title: 'Quit Relay',
       group: 'Relay',
       icon: 'circle-alert',
-      run: () => tauri.runCoreCommand('quit'),
+      run: () => tauri.runCoreCommand({ id: 'quit' }),
     },
   ];
 

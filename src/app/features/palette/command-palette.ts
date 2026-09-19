@@ -1,10 +1,12 @@
 import {
   ChangeDetectionStrategy,
   Component,
+  afterRenderEffect,
   computed,
   inject,
   signal,
   viewChild,
+  viewChildren,
   type ElementRef,
 } from '@angular/core';
 
@@ -41,6 +43,10 @@ export class CommandPalette {
   private readonly tauri = inject(TauriBridge);
 
   private readonly field = viewChild.required<ElementRef<HTMLInputElement>>('field');
+  /** DOM order matches `flat()`'s order, since both are driven by the same
+   * `sections()` computed — so `rows()[activeIndex()]` is always the row
+   * currently selected. */
+  private readonly rows = viewChildren<ElementRef<HTMLElement>>('row');
 
   protected readonly query = signal('');
   protected readonly activeIndex = signal(0);
@@ -61,6 +67,15 @@ export class CommandPalette {
   protected readonly flat = computed(() => this.sections().flatMap((s) => s.matches));
 
   protected readonly active = computed(() => this.flat()[this.activeIndex()]?.command);
+
+  constructor() {
+    // Runs after the DOM reflects the current activeIndex, so the row being
+    // scrolled to actually exists. Arrowing past the visible rows without
+    // this walks the selection off-screen with no visual sign it moved.
+    afterRenderEffect(() => {
+      this.rows()[this.activeIndex()]?.nativeElement.scrollIntoView({ block: 'nearest' });
+    });
+  }
 
   protected onQuery(value: string): void {
     this.query.set(value);

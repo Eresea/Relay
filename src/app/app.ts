@@ -1,12 +1,14 @@
-import { ChangeDetectionStrategy, Component, DestroyRef, inject, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, DestroyRef, inject } from '@angular/core';
 
 import { CommandRegistry } from '@core/command-registry';
 import { registerDefaultCommands } from '@core/default-commands';
+import { NotificationCenter } from '@core/notification-center';
 import { currentSurface, isOverlaySurface } from '@core/surface';
-import { TauriBridge } from '@core/tauri';
+import { TauriBridge, type CoreCommand } from '@core/tauri';
 import { ThemeService } from '@core/theme';
 import { CommandPalette } from '@features/palette/command-palette';
 import { Home } from '@features/home/home';
+import { HudSurface } from '@features/hud/hud-surface';
 
 /**
  * Relay renders one of three surfaces depending on which window is asking.
@@ -16,14 +18,14 @@ import { Home } from '@features/home/home';
 @Component({
   selector: 'rl-root',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [CommandPalette, Home],
+  imports: [CommandPalette, Home, HudSurface],
   template: `
     @switch (surface) {
       @case ('palette') {
         <rl-command-palette />
       }
       @case ('hud') {
-        <!-- Populated by the notification stream; empty until one arrives. -->
+        <rl-hud-surface />
       }
       @default {
         <rl-home />
@@ -40,9 +42,9 @@ import { Home } from '@features/home/home';
 export class App {
   private readonly registry = inject(CommandRegistry);
   private readonly tauri = inject(TauriBridge);
+  private readonly notifications = inject(NotificationCenter);
 
   protected readonly surface = currentSurface();
-  protected readonly coreReady = signal(false);
 
   constructor() {
     // Touch the theme service so the effect that writes data-theme runs.
@@ -53,9 +55,11 @@ export class App {
     }
 
     const dispose = registerDefaultCommands();
-    inject(DestroyRef).onDestroy(dispose);
+    const destroyRef = inject(DestroyRef);
+    destroyRef.onDestroy(dispose);
 
     void this.mergeCoreCommands();
+    void this.subscribeToEvents(destroyRef);
   }
 
   /** Commands owned by the Rust side — system actions, service control. */
@@ -65,10 +69,18 @@ export class App {
       this.registry.register(
         ...core.map((c) => ({
           ...c,
-          run: () => this.tauri.runCoreCommand(c.id),
+          // c.id comes from the same Rust source as CoreCommand's ids
+          // (core_commands.rs tests this pairing), but arrives here as a
+          // plain string — TS cannot see that connection statically.
+          run: () => this.tauri.runCoreCommand({ id: c.id } as CoreCommand),
         })),
       );
     }
-    this.coreReady.set(true);
+  }
+
+  /** Routes the core's push channel into whichever service owns that kind of event. */
+  private async subscribeToEvents(destroyRef: DestroyRef): Promise<void> {
+    const unlisten = await this.tauri.onEvent((event) => this.notifications.handle(event));
+    destroyRef.onDestroy(unlisten);
   }
 }

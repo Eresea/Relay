@@ -1,5 +1,7 @@
 mod commands;
 mod error;
+mod events;
+mod jobs;
 mod overlay;
 #[cfg(desktop)]
 mod shortcuts;
@@ -7,6 +9,8 @@ mod shortcuts;
 mod tray;
 
 use tauri::WindowEvent;
+
+use jobs::JobRegistry;
 
 pub fn run() {
     let mut builder = tauri::Builder::default();
@@ -24,6 +28,7 @@ pub fn run() {
     }
 
     builder
+        .manage(JobRegistry::default())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_store::Builder::default().build())
         .plugin(
@@ -34,6 +39,8 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             commands::core_commands,
             commands::run_core_command,
+            commands::cancel_job,
+            commands::is_job_running,
             commands::dismiss_palette,
             commands::toggle_palette,
         ])
