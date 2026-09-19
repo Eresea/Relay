@@ -291,6 +291,19 @@ mod tests {
         // `spawn` uses the thread pool rather than an interleaved single task.
         let sink = FakeSink::default();
         let registry = JobRegistry::default();
+
+        // `spawn` hands off to `tauri::async_runtime`'s lazily-created shared
+        // runtime, which pays a one-time cost (spinning up its own worker
+        // threads) the first time anything in the process calls it. Warm it
+        // up here so that cost — which can be tens of milliseconds on a
+        // loaded CI runner — doesn't land inside the timing window below and
+        // produce a false failure unrelated to whether the two jobs actually
+        // ran concurrently.
+        let warmup = spawn(sink.clone(), registry.clone(), "warmup", |_ctx| async {
+            Ok(())
+        });
+        wait_until_finished(&registry, &warmup).await;
+
         let started = Instant::now();
 
         let a = spawn(sink.clone(), registry.clone(), "a", |_ctx| async move {
