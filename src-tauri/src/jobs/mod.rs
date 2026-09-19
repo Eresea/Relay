@@ -2,9 +2,18 @@
 //!
 //! A job is any core-side work that outlives a single IPC round trip — an
 //! agent run, a directory scan, eventually a build watcher. It runs on
-//! Tokio's thread pool via `tokio::spawn`, never blocks the command that
-//! started it, and reports progress as `AppEvent::Notification`s rather than
-//! a single response at the end.
+//! Tokio's thread pool via `tauri::async_runtime::spawn`, never blocks the
+//! command that started it, and reports progress as `AppEvent::Notification`s
+//! rather than a single response at the end.
+//!
+//! `tauri::async_runtime::spawn`, not plain `tokio::spawn`, is required here:
+//! a synchronous `#[tauri::command]` (every command in `commands.rs` is one)
+//! runs directly on the native IPC callback thread, which has no Tokio
+//! runtime entered, so `tokio::spawn`'s `Handle::current()` panics — and
+//! since that panic crosses a WebView2 FFI boundary, it aborts the whole
+//! process rather than unwinding. `async_runtime::spawn` owns a lazily
+//! initialized runtime handle and enters it before spawning, so it works
+//! regardless of which thread calls it.
 //!
 //! The registry and `spawn` below take an `EventSink` rather than an
 //! `AppHandle` directly, so job logic can be exercised with a fake sink in
@@ -183,7 +192,7 @@ where
     let done_registry = registry.clone();
     let done_sink = sink.clone();
 
-    tokio::spawn(async move {
+    tauri::async_runtime::spawn(async move {
         let ok = work(context).await.is_ok();
         done_registry.finish(&done_id);
         done_sink.emit(AppEvent::NotificationDone {

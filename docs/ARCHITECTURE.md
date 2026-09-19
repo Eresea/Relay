@@ -84,11 +84,16 @@ done, with a short grace period before a finished notification is dropped)
 that `HudSurface` renders.
 
 Background work itself lives in `src-tauri/src/jobs/mod.rs`. `jobs::spawn`
-takes an `async` closure and runs it on `tokio::spawn` — not
-`tauri::async_runtime::spawn`, since Tauri v2's own async commands already run
-inside a Tokio context, so there is no reason to go through Tauri's
-indirection. Two jobs spawned this way run genuinely concurrently, on
-whichever worker threads Tokio's multi-threaded runtime has free; this is
+takes an `async` closure and runs it on `tauri::async_runtime::spawn`, not
+plain `tokio::spawn` — every command in `commands.rs` is a synchronous
+`#[tauri::command]`, which Tauri's codegen runs directly on the native IPC
+callback thread with no Tokio runtime entered, so `tokio::spawn`'s
+`Handle::current()` panics there; because that panic crosses a WebView2 FFI
+boundary, it aborts the whole process instead of unwinding.
+`async_runtime::spawn` owns a lazily initialized runtime handle and enters it
+before spawning, so it works no matter which thread calls it. Two jobs
+spawned this way still run genuinely concurrently, on whichever worker
+threads Tokio's multi-threaded runtime has free; this is
 covered by a test that spawns two 30ms jobs and asserts they finish in ~30ms
 together, not ~60ms in sequence.
 
