@@ -736,8 +736,17 @@ mod tests {
         ));
     }
 
+    // `std::env` is process-global mutable state, but `cargo test` runs tests
+    // in parallel threads by default — without this lock these two tests
+    // race each other's `set_var`/`remove_var` calls, which is exactly what
+    // made this suite flaky in CI while passing locally by luck of thread
+    // scheduling. Every test touching `CLIENT_ID_VAR`/`CLIENT_SECRET_VAR`
+    // must hold it for its whole body.
+    static ENV_LOCK: Mutex<()> = Mutex::new(());
+
     #[test]
     fn client_credentials_requires_an_id() {
+        let _guard = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         std::env::remove_var(CLIENT_ID_VAR);
         assert!(matches!(
             client_credentials(),
@@ -747,6 +756,7 @@ mod tests {
 
     #[test]
     fn client_credentials_reads_both_env_vars() {
+        let _guard = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         std::env::set_var(CLIENT_ID_VAR, "id-123");
         std::env::set_var(CLIENT_SECRET_VAR, "secret-456");
         let (id, secret) = client_credentials().unwrap();
