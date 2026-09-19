@@ -3257,6 +3257,7 @@ dependencies = [
  "aes-gcm",
  "argon2",
  "base64 0.22.1",
+ "http",
  "keyring",
  "log",
  "rand 0.8.8",

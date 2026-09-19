@@ -176,6 +176,37 @@ impl HttpGitHubClient {
     }
 }
 
+/// Reads a response body and parses it as `T`, reporting the HTTP status and
+/// a snippet of the body on failure rather than `reqwest`'s bare "error
+/// decoding response body" — which is all `Response::json` gives you, and
+/// tells you nothing about *why* (an HTML error page from a proxy in front
+/// of `github.com`, an OAuth error object shaped nothing like the success
+/// response, GitHub itself returning something unexpected). A wrong or
+/// unregistered OAuth client id, in particular, surfaces exactly this way:
+/// GitHub answers the device-code request with an error body that has none
+/// of `DeviceCodeResponse`'s required fields.
+async fn read_json<T: serde::de::DeserializeOwned>(response: reqwest::Response) -> Result<T> {
+    let status = response.status();
+    let body = response
+        .text()
+        .await
+        .map_err(|e| Error::GithubRequestFailed(e.to_string()))?;
+    serde_json::from_str(&body).map_err(|e| {
+        Error::GithubRequestFailed(format!(
+            "GitHub returned {status} with a body Relay could not parse ({e}): {}",
+            truncate(&body, 200)
+        ))
+    })
+}
+
+fn truncate(body: &str, max_chars: usize) -> String {
+    let mut truncated: String = body.chars().take(max_chars).collect();
+    if truncated.len() < body.len() {
+        truncated.push('…');
+    }
+    truncated
+}
+
 impl GitHubClient for HttpGitHubClient {
     async fn start_device_flow(&self) -> Result<DeviceCodeResponse> {
         let response = self
@@ -189,10 +220,7 @@ impl GitHubClient for HttpGitHubClient {
             .send()
             .await
             .map_err(|e| Error::GithubRequestFailed(e.to_string()))?;
-        response
-            .json()
-            .await
-            .map_err(|e| Error::GithubRequestFailed(e.to_string()))
+        read_json(response).await
     }
 
     async fn poll_device_token(&self, device_code: &str) -> Result<TokenResponse> {
@@ -208,10 +236,7 @@ impl GitHubClient for HttpGitHubClient {
             .send()
             .await
             .map_err(|e| Error::GithubRequestFailed(e.to_string()))?;
-        response
-            .json()
-            .await
-            .map_err(|e| Error::GithubRequestFailed(e.to_string()))
+        read_json(response).await
     }
 
     async fn refresh_token(&self, refresh_token: &str) -> Result<TokenResponse> {
@@ -227,10 +252,7 @@ impl GitHubClient for HttpGitHubClient {
             .send()
             .await
             .map_err(|e| Error::GithubRequestFailed(e.to_string()))?;
-        response
-            .json()
-            .await
-            .map_err(|e| Error::GithubRequestFailed(e.to_string()))
+        read_json(response).await
     }
 
     async fn fetch_viewer_login(&self, token: &str) -> Result<String> {
@@ -241,10 +263,7 @@ impl GitHubClient for HttpGitHubClient {
         struct User {
             login: String,
         }
-        let user: User = response
-            .json()
-            .await
-            .map_err(|e| Error::GithubRequestFailed(e.to_string()))?;
+        let user: User = read_json(response).await?;
         Ok(user.login)
     }
 
@@ -267,10 +286,7 @@ impl GitHubClient for HttpGitHubClient {
         }
         let new_etag = etag_header(&response);
         check_rate_limit(&response)?;
-        let body: SearchIssuesResponse = response
-            .json()
-            .await
-            .map_err(|e| Error::GithubRequestFailed(e.to_string()))?;
+        let body: SearchIssuesResponse = read_json(response).await?;
         Ok(Conditional::Fresh {
             value: body.items,
             etag: new_etag,
@@ -287,10 +303,7 @@ impl GitHubClient for HttpGitHubClient {
         let url = format!("https://api.github.com/repos/{owner}/{repo}/pulls/{number}");
         let response = self.authed_get(token, &url, None).await?;
         check_rate_limit(&response)?;
-        response
-            .json()
-            .await
-            .map_err(|e| Error::GithubRequestFailed(e.to_string()))
+        read_json(response).await
     }
 
     async fn fetch_ci_state(
@@ -303,10 +316,7 @@ impl GitHubClient for HttpGitHubClient {
         let url = format!("https://api.github.com/repos/{owner}/{repo}/commits/{sha}/check-runs");
         let response = self.authed_get(token, &url, None).await?;
         check_rate_limit(&response)?;
-        let body: CheckRunsResponse = response
-            .json()
-            .await
-            .map_err(|e| Error::GithubRequestFailed(e.to_string()))?;
+        let body: CheckRunsResponse = read_json(response).await?;
         Ok(overall_ci_state(&body.check_runs))
     }
 }
@@ -490,5 +500,61 @@ mod tests {
             urlencode("is:pr involves:octocat"),
             "is%3Apr+involves%3Aoctocat"
         );
+    }
+
+    #[test]
+    fn truncate_leaves_short_bodies_untouched() {
+        assert_eq!(truncate("short", 200), "short");
+    }
+
+    #[test]
+    fn truncate_marks_a_cut_body_with_an_ellipsis() {
+        let long = "a".repeat(300);
+        let truncated = truncate(&long, 200);
+        assert_eq!(truncated.chars().count(), 201);
+        assert!(truncated.ends_with('…'));
+    }
+
+    fn http_response(status: u16, body: &str) -> reqwest::Response {
+        http::Response::builder()
+            .status(status)
+            .body(body.as_bytes().to_vec())
+            .unwrap()
+            .into()
+    }
+
+    #[derive(Debug, Deserialize, PartialEq, Eq)]
+    struct Ok200 {
+        value: u32,
+    }
+
+    #[tokio::test]
+    async fn read_json_parses_a_matching_body() {
+        let response = http_response(200, r#"{"value":42}"#);
+        let parsed: Ok200 = read_json(response).await.unwrap();
+        assert_eq!(parsed, Ok200 { value: 42 });
+    }
+
+    #[tokio::test]
+    async fn read_json_reports_the_status_and_body_on_a_shape_mismatch() {
+        // What an invalid or unregistered OAuth client id actually produces:
+        // a 200 whose body has none of the fields `DeviceCodeResponse` needs.
+        let response = http_response(200, r#"{"error":"unauthorized_client"}"#);
+        let result: Result<Ok200> = read_json(response).await;
+        let message = result.unwrap_err().to_string();
+        assert!(message.contains("200"), "message was: {message}");
+        assert!(
+            message.contains("unauthorized_client"),
+            "message was: {message}"
+        );
+    }
+
+    #[tokio::test]
+    async fn read_json_reports_a_non_json_body_instead_of_a_bare_decode_error() {
+        let response = http_response(502, "<html>Bad Gateway</html>");
+        let result: Result<Ok200> = read_json(response).await;
+        let message = result.unwrap_err().to_string();
+        assert!(message.contains("502"), "message was: {message}");
+        assert!(message.contains("Bad Gateway"), "message was: {message}");
     }
 }
