@@ -19,6 +19,7 @@ use tauri::AppHandle;
 
 use crate::error::Result;
 use crate::events::{AppEvent, EventSink};
+use crate::github::{self, client::HttpGitHubClient, oauth::DeviceAuthorization, GithubStatus};
 use crate::jobs::{JobId, JobRegistry};
 use crate::overlay;
 use crate::vault::{
@@ -67,6 +68,7 @@ pub enum CoreCommand {
     OpenMain,
     HideHud,
     OpenVault,
+    OpenGithub,
     Quit,
 }
 
@@ -83,6 +85,11 @@ pub fn run_core_command(app: AppHandle, command: CoreCommand) -> Result<()> {
         CoreCommand::OpenVault => {
             overlay::show_main(&app)?;
             app.emit(AppEvent::OpenVaultRequested);
+            Ok(())
+        }
+        CoreCommand::OpenGithub => {
+            overlay::show_main(&app)?;
+            app.emit(AppEvent::OpenGithubRequested);
             Ok(())
         }
         CoreCommand::Quit => {
@@ -196,6 +203,32 @@ pub fn vault_delete_entry(
 #[tauri::command]
 pub fn vault_export(app: AppHandle, vault: tauri::State<VaultState>) -> Result<String> {
     vault::export(&app, &vault)
+}
+
+/// Whether a GitHub account is connected. Only reads the keychain — never
+/// calls GitHub.
+#[tauri::command]
+pub fn github_status() -> Result<GithubStatus> {
+    github::status()
+}
+
+/// Starts a Device Flow login and returns the code to show the user. The
+/// wait for their approval continues in a background job — see
+/// `github::connect_start`.
+#[tauri::command]
+pub fn github_connect_start(
+    app: AppHandle,
+    client: tauri::State<HttpGitHubClient>,
+    jobs: tauri::State<JobRegistry>,
+) -> Result<DeviceAuthorization> {
+    github::connect_start(app, client.inner().clone(), jobs.inner().clone())
+}
+
+/// Disconnects the GitHub account: stops the poll job, if running, and
+/// removes the token from the keychain.
+#[tauri::command]
+pub fn github_disconnect(app: AppHandle, jobs: tauri::State<JobRegistry>) -> Result<()> {
+    github::disconnect(&app, &jobs)
 }
 
 #[cfg(test)]

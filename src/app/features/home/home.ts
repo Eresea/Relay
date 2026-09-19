@@ -1,7 +1,15 @@
-import { ChangeDetectionStrategy, Component, DestroyRef, inject, signal } from '@angular/core';
+import {
+  ChangeDetectionStrategy,
+  Component,
+  DestroyRef,
+  computed,
+  inject,
+  signal,
+} from '@angular/core';
 
 import { TauriBridge } from '@core/tauri';
 import { ThemeService } from '@core/theme';
+import { Github } from '@features/github/github';
 import { Settings } from '@features/settings/settings';
 import { Vault } from '@features/vault/vault';
 import { Icon } from '@shared/icon';
@@ -17,13 +25,13 @@ import { Kbd } from '@shared/kbd';
 @Component({
   selector: 'rl-home',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [Icon, Kbd, Settings, Vault],
+  imports: [Icon, Kbd, Settings, Vault, Github],
   template: `
     <header class="titlebar u-chrome" data-tauri-drag-region>
-      @if (view() === 'settings' || view() === 'vault') {
+      @if (view() !== 'home') {
         <button type="button" class="back" (click)="view.set('home')" aria-label="Back">
           <rl-icon name="arrow-left" [size]="16" />
-          <span>{{ view() === 'settings' ? 'Settings' : 'Password vault' }}</span>
+          <span>{{ viewTitle() }}</span>
         </button>
       } @else {
         <span class="wordmark">Relay</span>
@@ -53,6 +61,8 @@ import { Kbd } from '@shared/kbd';
       <rl-settings />
     } @else if (view() === 'vault') {
       <rl-vault />
+    } @else if (view() === 'github') {
+      <rl-github />
     } @else {
       <main>
         <div class="cold-start">
@@ -160,7 +170,19 @@ import { Kbd } from '@shared/kbd';
 export class Home {
   protected readonly theme = inject(ThemeService);
   protected readonly paletteKeys = ['Ctrl', 'Space'] as const;
-  protected readonly view = signal<'home' | 'settings' | 'vault'>('home');
+  protected readonly view = signal<'home' | 'settings' | 'vault' | 'github'>('home');
+  protected readonly viewTitle = computed(() => {
+    switch (this.view()) {
+      case 'settings':
+        return 'Settings';
+      case 'vault':
+        return 'Password vault';
+      case 'github':
+        return 'GitHub';
+      default:
+        return '';
+    }
+  });
 
   private readonly tauri = inject(TauriBridge);
   protected readonly maximized = signal(false);
@@ -183,6 +205,7 @@ export class Home {
       .onEvent((event) => {
         if (event.type === 'openSettingsRequested') this.view.set('settings');
         if (event.type === 'openVaultRequested') this.view.set('vault');
+        if (event.type === 'openGithubRequested') this.view.set('github');
       })
       .then((unlisten) => destroyRef.onDestroy(unlisten));
   }

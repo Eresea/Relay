@@ -34,6 +34,11 @@ pub enum AppEvent {
     /// main window that must switch views are separate webviews.
     OpenVaultRequested,
 
+    /// The "GitHub" command was run. Mirrors `OpenVaultRequested` for the
+    /// same reason: the palette that dispatched the command and the main
+    /// window that must switch views are separate webviews.
+    OpenGithubRequested,
+
     /// A notification to show in the HUD. `hue_source` names the long-lived
     /// object this is about (a job id today, an agent id once agents exist)
     /// — the HUD hashes it to a colour, never the notification's own id,
@@ -66,11 +71,16 @@ pub enum AppEvent {
 
 #[derive(Debug, Clone, Copy, Serialize)]
 #[serde(rename_all = "camelCase")]
-#[allow(
-    dead_code,
-    reason = "constructed only by AppEvent::Notification, which has no producer right now"
-)]
 pub enum NotificationStatus {
+    /// No current producer reports this mid-flight: the GitHub connector's
+    /// device-flow wait is `Waiting` (blocked on the user, not doing work),
+    /// and its poll cycles report a single `Done` per notification rather
+    /// than a visible in-progress phase, since popping the HUD open every
+    /// poll tick even when nothing changed would be exactly the kind of
+    /// noise Umbra's "state what is true and what it costs" rule warns
+    /// against. Kept for the producer that actually has visible progress to
+    /// report — a file transfer, a multi-step build.
+    #[allow(dead_code, reason = "no current producer reports mid-flight progress")]
     Running,
     Waiting,
     Blocked,
@@ -141,6 +151,12 @@ mod tests {
     fn open_vault_requested_is_a_bare_tag() {
         let json = serde_json::to_string(&AppEvent::OpenVaultRequested).unwrap();
         assert_eq!(json, r#"{"type":"openVaultRequested"}"#);
+    }
+
+    #[test]
+    fn open_github_requested_is_a_bare_tag() {
+        let json = serde_json::to_string(&AppEvent::OpenGithubRequested).unwrap();
+        assert_eq!(json, r#"{"type":"openGithubRequested"}"#);
     }
 
     #[test]

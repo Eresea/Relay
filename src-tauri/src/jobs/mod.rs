@@ -20,14 +20,9 @@
 //! tests, with no running Tauri app required. See the tests at the bottom —
 //! they run real concurrent work on a real multi-thread runtime.
 //!
-//! `spawn` and `JobContext` have no caller right now — `jobs::scan`, the one
-//! real job that used them, was removed once it had proven the pipeline out
-//! (see docs/ARCHITECTURE.md's "Not built yet"). `JobRegistry` stays fully
-//! live: `cancel_job` and `is_job_running` are real commands today.
-#![allow(
-    dead_code,
-    reason = "no job producer currently calls spawn — see docs/ARCHITECTURE.md"
-)]
+//! `github::poll` is the pipeline's first lasting producer: one long-running
+//! job polls GitHub on an interval, and spawns one short-lived job per
+//! notification it decides to surface.
 
 use std::collections::HashMap;
 use std::future::Future;
@@ -211,21 +206,48 @@ where
     id
 }
 
+/// Test fixtures shared with other modules' tests (`github::poll`, notably) —
+/// the same in-memory `EventSink` and a way to build a `JobContext` directly,
+/// without going through `spawn`, for exercising a long-running job body in
+/// isolation.
 #[cfg(test)]
-mod tests {
-    use std::sync::Mutex as StdMutex;
-    use std::time::Duration;
+pub(crate) mod fake {
+    use std::sync::atomic::AtomicBool;
+    use std::sync::{Arc, Mutex as StdMutex};
 
     use super::*;
 
     #[derive(Clone, Default)]
-    struct FakeSink(Arc<StdMutex<Vec<AppEvent>>>);
+    pub struct FakeSink(Arc<StdMutex<Vec<AppEvent>>>);
+
+    impl FakeSink {
+        pub fn events(&self) -> Vec<AppEvent> {
+            self.0.lock().unwrap().clone()
+        }
+    }
 
     impl EventSink for FakeSink {
         fn emit(&self, event: AppEvent) {
             self.0.lock().unwrap().push(event);
         }
     }
+
+    pub fn context<S: EventSink>(sink: S, cancelled: Arc<AtomicBool>) -> JobContext<S> {
+        JobContext {
+            id: JobId::from("test-job".to_string()),
+            hue_source: "test".to_string(),
+            sink,
+            cancelled,
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::time::Duration;
+
+    use super::fake::FakeSink;
+    use super::*;
 
     async fn wait_until_finished(registry: &JobRegistry, id: &JobId) {
         for _ in 0..200 {
@@ -249,7 +271,7 @@ mod tests {
 
         wait_until_finished(&registry, &id).await;
 
-        let events = sink.0.lock().unwrap();
+        let events = sink.events();
         assert!(matches!(
             &events[0],
             AppEvent::Notification {
@@ -278,7 +300,7 @@ mod tests {
         registry.cancel(&id).expect("job is running");
         wait_until_finished(&registry, &id).await;
 
-        let events = sink.0.lock().unwrap();
+        let events = sink.events();
         assert!(matches!(
             events.last(),
             Some(AppEvent::NotificationDone { ok: false, .. })

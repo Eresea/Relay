@@ -101,6 +101,13 @@ export class TauriBridge {
     return listen<AppEvent>('relay://event', (message) => handler(message.payload));
   }
 
+  /** Opens a URL in the user's default browser. A no-op outside Tauri. */
+  async openUrl(url: string): Promise<void> {
+    if (!this.available) return;
+    const { openUrl } = await import('@tauri-apps/plugin-opener');
+    await openUrl(url);
+  }
+
   private settingsStore: LazyStore | null = null;
 
   /**
@@ -197,6 +204,37 @@ export class TauriBridge {
     return (await this.invoke<string>('vault_export')) ?? '';
   }
 
+  /** Whether a GitHub account is connected. Only reads the keychain. */
+  async githubStatus(): Promise<GithubStatus> {
+    return (
+      (await this.invoke<GithubStatus>('github_status')) ?? { connected: false, username: null }
+    );
+  }
+
+  /**
+   * Starts a Device Flow login and returns the code to show the user. The
+   * wait for their approval continues in a background job — `jobId` lets the
+   * caller correlate `notificationDone` for that job with this attempt.
+   */
+  async githubConnectStart(): Promise<DeviceAuthorization | null> {
+    return this.invoke<DeviceAuthorization>('github_connect_start');
+  }
+
+  /** Disconnects the GitHub account and stops the poll job, if running. */
+  async githubDisconnect(): Promise<void> {
+    await this.invoke('github_disconnect');
+  }
+
+  /** Reads the connector's rules and poll interval from `settings.json`. */
+  async githubSettings(): Promise<GithubConnectorSettings> {
+    return this.getSetting<GithubConnectorSettings>('github.settings', DEFAULT_GITHUB_SETTINGS);
+  }
+
+  /** Persists the connector's rules and poll interval to `settings.json`. */
+  async setGithubSettings(settings: GithubConnectorSettings): Promise<void> {
+    await this.setSetting('github.settings', settings);
+  }
+
   private async invoke<T>(command: string, args: Record<string, unknown> = {}): Promise<T | null> {
     if (!this.available) {
       console.info(`[relay] invoke(${command}) skipped — not running under Tauri`, args);
@@ -213,6 +251,7 @@ export type CoreCommand =
   | { readonly id: 'open_main' }
   | { readonly id: 'hide_hud' }
   | { readonly id: 'open_vault' }
+  | { readonly id: 'open_github' }
   | { readonly id: 'quit' };
 
 /** What the palette displays for a core-contributed row. Mirrors `CoreCommandMeta`. */
@@ -258,3 +297,54 @@ export interface PasswordOptions {
   readonly digits: boolean;
   readonly symbols: boolean;
 }
+
+/** Mirrors `github::GithubStatus`. */
+export interface GithubStatus {
+  readonly connected: boolean;
+  readonly username: string | null;
+}
+
+/** Mirrors `github::oauth::DeviceAuthorization`. */
+export interface DeviceAuthorization {
+  readonly userCode: string;
+  readonly verificationUri: string;
+  readonly expiresIn: number;
+  readonly jobId: string;
+}
+
+/** Mirrors `github::rules::PrEventKind`. */
+export type PrEventKind =
+  'opened' | 'closed' | 'merged' | 'review_requested' | 'ci_failed' | 'ci_passed';
+
+/** Mirrors `github::rules::NotificationRule`. */
+export interface NotificationRule {
+  readonly id: string;
+  readonly enabled: boolean;
+  readonly repoPattern: string;
+  readonly branchInclude: readonly string[];
+  readonly branchExclude: readonly string[];
+  readonly statuses: readonly PrEventKind[];
+}
+
+/** Mirrors `github::rules::GithubConnectorSettings`. */
+export interface GithubConnectorSettings {
+  readonly pollIntervalSecs: number;
+  readonly rules: readonly NotificationRule[];
+  readonly muted: readonly string[];
+}
+
+/** Mirrors `GithubConnectorSettings::default()` in `github::rules`. */
+export const DEFAULT_GITHUB_SETTINGS: GithubConnectorSettings = {
+  pollIntervalSecs: 300,
+  rules: [
+    {
+      id: 'default',
+      enabled: true,
+      repoPattern: '*',
+      branchInclude: [],
+      branchExclude: [],
+      statuses: ['opened', 'merged', 'review_requested', 'ci_failed'],
+    },
+  ],
+  muted: [],
+};

@@ -41,6 +41,15 @@ export function registerDefaultCommands(): () => void {
       run: () => tauri.runCoreCommand({ id: 'open_vault' }),
     },
     {
+      id: 'relay.github.open',
+      title: 'GitHub',
+      hint: 'Connect an account and manage notification rules',
+      group: 'Relay',
+      icon: 'inbox',
+      keywords: ['github', 'pull request', 'pr', 'ci', 'notifications', 'connector'],
+      run: () => tauri.runCoreCommand({ id: 'open_github' }),
+    },
+    {
       id: 'relay.app.reload',
       title: 'Reload interface',
       hint: 'Rebuild the webview without restarting Relay',

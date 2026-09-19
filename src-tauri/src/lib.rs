@@ -1,6 +1,7 @@
 mod commands;
 mod error;
 mod events;
+mod github;
 mod jobs;
 mod overlay;
 #[cfg(desktop)]
@@ -9,8 +10,10 @@ mod shortcuts;
 mod tray;
 mod vault;
 
-use tauri::WindowEvent;
+use tauri::{Manager, WindowEvent};
 
+use github::client::HttpGitHubClient;
+use github::GithubState;
 use jobs::JobRegistry;
 use vault::VaultState;
 
@@ -38,6 +41,8 @@ pub fn run() {
     builder
         .manage(JobRegistry::default())
         .manage(VaultState::default())
+        .manage(GithubState::default())
+        .manage(HttpGitHubClient::default())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_store::Builder::default().build())
         .plugin(
@@ -62,6 +67,9 @@ pub fn run() {
             commands::vault_reveal_password,
             commands::vault_delete_entry,
             commands::vault_export,
+            commands::github_status,
+            commands::github_connect_start,
+            commands::github_disconnect,
         ])
         .on_window_event(|window, event| {
             // The palette is a spotlight, not a window: losing focus dismisses
@@ -114,6 +122,10 @@ pub fn run() {
             if std::env::args().any(|arg| arg == "--show") {
                 let _ = overlay::show_main(app.handle());
             }
+
+            let github_client = app.state::<HttpGitHubClient>().inner().clone();
+            let job_registry = app.state::<JobRegistry>().inner().clone();
+            github::resume_polling_if_connected(app.handle(), github_client, &job_registry);
 
             Ok(())
         })
