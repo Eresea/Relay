@@ -83,12 +83,31 @@ constructor is the one place that subscribes, routing everything into
 done, with a short grace period before a finished notification is dropped)
 that `HudSurface` renders.
 
+Showing the HUD is split across the two halves, because each owns half of
+the question. The core shows it — `EventSink for AppHandle` calls
+`overlay::show_hud` before emitting any `Notification`, since only the core
+knows a notification is about to exist. The frontend hides it — `HudSurface`
+calls `hide_hud` when its queue empties, since only the frontend knows when
+the grace period has run out. Nothing else shows the HUD, and rendering into
+it does not make it visible: the window is created hidden, so a notification
+emitted without that `show_hud` draws into a window nobody can see. That was
+a real bug, and one that reproduced only off Linux — `visible: false` is not
+honoured identically across platforms (the GTK build maps both the HUD and
+the palette at startup anyway, Windows keeps both hidden), which is why
+`setup` now hides each explicitly rather than trusting the window config to
+give every platform the same starting state.
+
 Background work itself lives in `src-tauri/src/jobs/mod.rs`. `jobs::spawn`
-takes an `async` closure and runs it on `tokio::spawn` — not
-`tauri::async_runtime::spawn`, since Tauri v2's own async commands already run
-inside a Tokio context, so there is no reason to go through Tauri's
-indirection. Two jobs spawned this way run genuinely concurrently, on
-whichever worker threads Tokio's multi-threaded runtime has free; this is
+takes an `async` closure and runs it on `tauri::async_runtime::spawn`, not
+plain `tokio::spawn` — every command in `commands.rs` is a synchronous
+`#[tauri::command]`, which Tauri's codegen runs directly on the native IPC
+callback thread with no Tokio runtime entered, so `tokio::spawn`'s
+`Handle::current()` panics there; because that panic crosses a WebView2 FFI
+boundary, it aborts the whole process instead of unwinding.
+`async_runtime::spawn` owns a lazily initialized runtime handle and enters it
+before spawning, so it works no matter which thread calls it. Two jobs
+spawned this way still run genuinely concurrently, on whichever worker
+threads Tokio's multi-threaded runtime has free; this is
 covered by a test that spawns two 30ms jobs and asserts they finish in ~30ms
 together, not ~60ms in sequence.
 
@@ -111,12 +130,11 @@ implements for production and which tests implement with an in-memory
 `FakeSink`. That makes the whole job pipeline — including the concurrency
 proof above — testable with `cargo test` and no live Tauri app.
 
-`src-tauri/src/jobs/scan.rs` is the first real producer: it walks the user's
-home directory with `tokio::fs`, counting files and folders and reporting
-progress every 200 entries, wired to the "Scan home folder" palette command
-(`CoreCommand::ScanHome`). It is deliberately simple — a count, not an index —
-because its job is exercising checkpointing and progress reporting against
-real, unpredictable I/O, not building the eventual project-scan feature.
+A home-directory scan (`jobs::scan`) exercised this pipeline end to end for a
+while — real, unpredictable I/O rather than a sleep loop — and served its
+purpose: it is what caught both the `tokio::spawn`-without-a-runtime crash and
+the HUD never being shown. It has since been removed; the pipeline itself is
+built and tested, waiting on its first lasting producer.
 
 One caveat worth carrying forward: the release Cargo profile sets
 `panic = "abort"`. A job spawned with `tokio::spawn` that panics currently
@@ -147,5 +165,5 @@ a worse launcher.
 Project and task models, agent orchestration, external service connectors,
 settings persistence beyond the store plugin, and the context layer that lets
 commands know what you are working on. The events/jobs pipeline above is
-built and wired end to end, with a home-directory scan as its first real
-producer — an agent run and a file watcher still need to be written.
+built and tested end to end but currently has no producer — an agent run, a
+project scan, a file watcher all still need to be written.

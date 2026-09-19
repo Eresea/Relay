@@ -23,6 +23,12 @@ pub enum AppEvent {
     #[allow(dead_code, reason = "wire-format variant with no producer yet")]
     CommandsChanged,
 
+    /// The "Open settings" command was run. `Home` listens for this to switch
+    /// its own view — a plain `show_main` cannot do that by itself, since the
+    /// palette that dispatched the command and the main window that must
+    /// react to it are separate webviews with no shared JS state.
+    OpenSettingsRequested,
+
     /// A notification to show in the HUD. `hue_source` names the long-lived
     /// object this is about (a job id today, an agent id once agents exist)
     /// — the HUD hashes it to a colour, never the notification's own id,
@@ -55,11 +61,13 @@ pub enum AppEvent {
 
 #[derive(Debug, Clone, Copy, Serialize)]
 #[serde(rename_all = "camelCase")]
+#[allow(
+    dead_code,
+    reason = "constructed only by AppEvent::Notification, which has no producer right now"
+)]
 pub enum NotificationStatus {
     Running,
-    #[allow(dead_code, reason = "wire-format variant with no producer yet")]
     Waiting,
-    #[allow(dead_code, reason = "wire-format variant with no producer yet")]
     Blocked,
     Done,
 }
@@ -73,6 +81,16 @@ pub trait EventSink: Clone + Send + Sync + 'static {
 
 impl EventSink for tauri::AppHandle {
     fn emit(&self, event: AppEvent) {
+        // The HUD window is created hidden and nothing else ever shows it, so
+        // without this a notification renders into a window the user never
+        // sees — the whole pipeline runs correctly and silently. Bring it on
+        // screen before emitting the event that fills it.
+        if matches!(event, AppEvent::Notification { .. }) {
+            if let Err(error) = crate::overlay::show_hud(self) {
+                log::error!("could not show the HUD: {error}");
+            }
+        }
+
         if let Err(error) = tauri::Emitter::emit(self, CHANNEL, &event) {
             log::error!("failed to emit an app event: {error}");
         }
@@ -106,6 +124,12 @@ mod tests {
     fn commands_changed_is_a_bare_tag() {
         let json = serde_json::to_string(&AppEvent::CommandsChanged).unwrap();
         assert_eq!(json, r#"{"type":"commandsChanged"}"#);
+    }
+
+    #[test]
+    fn open_settings_requested_is_a_bare_tag() {
+        let json = serde_json::to_string(&AppEvent::OpenSettingsRequested).unwrap();
+        assert_eq!(json, r#"{"type":"openSettingsRequested"}"#);
     }
 
     #[test]

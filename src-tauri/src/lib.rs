@@ -25,6 +25,12 @@ pub fn run() {
             }
         }));
         builder = builder.plugin(tauri_plugin_window_state::Builder::default().build());
+        // No `--show` arg: a login launch stays hidden, same as any other
+        // launch — the tray and the global shortcut are the entry points.
+        builder = builder.plugin(tauri_plugin_autostart::init(
+            tauri_plugin_autostart::MacosLauncher::LaunchAgent,
+            None,
+        ));
     }
 
     builder
@@ -46,13 +52,21 @@ pub fn run() {
         ])
         .on_window_event(|window, event| {
             // The palette is a spotlight, not a window: losing focus dismisses
-            // it. Closing any overlay hides it instead of destroying it, so the
+            // it. Closing any window hides it instead of destroying it, so the
             // next open is instant.
+            //
+            // This includes the main window. Destroying it would be
+            // unrecoverable: every route back — the tray's "Open Relay", the
+            // single-instance raise, `open_main`, `open_settings` — resolves
+            // the window by label through `overlay::window`, which fails with
+            // `MissingWindow` once the webview is gone. Relay lives in the
+            // tray, so closing its window means "put it away", not "quit";
+            // quitting is the tray's own Quit item.
             match event {
                 WindowEvent::Focused(false) if window.label() == overlay::PALETTE => {
                     let _ = window.hide();
                 }
-                WindowEvent::CloseRequested { api, .. } if window.label() != overlay::MAIN => {
+                WindowEvent::CloseRequested { api, .. } => {
                     api.prevent_close();
                     let _ = window.hide();
                 }
@@ -64,6 +78,21 @@ pub fn run() {
             {
                 tray::build(app)?;
                 shortcuts::register(app);
+            }
+
+            // `visible: false` in tauri.conf.json is not honoured identically
+            // on every platform — the GTK build maps both overlay windows at
+            // startup regardless, while Windows keeps them hidden — so put
+            // both in a known state here rather than trusting the window
+            // config. Without this the palette sits open over the desktop
+            // the instant Relay launches on Linux, and the HUD's behaviour
+            // differs per platform before a single notification has been
+            // emitted.
+            if let Err(error) = overlay::hide_hud(app.handle()) {
+                log::warn!("could not hide the HUD at startup: {error}");
+            }
+            if let Err(error) = overlay::hide_palette(app.handle()) {
+                log::warn!("could not hide the palette at startup: {error}");
             }
 
             // The main window is created hidden so that launching Relay at

@@ -19,5 +19,6 @@ export interface NotificationPayload {
 
 export type AppEvent =
   | { readonly type: 'commandsChanged' }
+  | { readonly type: 'openSettingsRequested' }
   | ({ readonly type: 'notification' } & NotificationPayload)
   | { readonly type: 'notificationDone'; readonly jobId: string; readonly ok: boolean };

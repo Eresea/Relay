@@ -1,5 +1,7 @@
 import { Injectable } from '@angular/core';
 
+import type { LazyStore } from '@tauri-apps/plugin-store';
+
 import type { AppEvent } from './events';
 
 /**
@@ -45,6 +47,47 @@ export class TauriBridge {
     return (await this.invoke<CoreCommandMeta[]>('core_commands')) ?? [];
   }
 
+  /** Minimizes the current window to the taskbar/dock. */
+  async minimizeWindow(): Promise<void> {
+    if (!this.available) return;
+    const { getCurrentWindow } = await import('@tauri-apps/api/window');
+    await getCurrentWindow().minimize();
+  }
+
+  /** Toggles the current window between maximized and its previous size. */
+  async toggleMaximizeWindow(): Promise<void> {
+    if (!this.available) return;
+    const { getCurrentWindow } = await import('@tauri-apps/api/window');
+    await getCurrentWindow().toggleMaximize();
+  }
+
+  /** Closes the current window. On the main window this quits Relay's visible surface, not the tray process. */
+  async closeWindow(): Promise<void> {
+    if (!this.available) return;
+    const { getCurrentWindow } = await import('@tauri-apps/api/window');
+    await getCurrentWindow().close();
+  }
+
+  /** Whether the current window is currently maximized. */
+  async isWindowMaximized(): Promise<boolean> {
+    if (!this.available) return false;
+    const { getCurrentWindow } = await import('@tauri-apps/api/window');
+    return getCurrentWindow().isMaximized();
+  }
+
+  /**
+   * Fires whenever the current window is resized, which includes every
+   * maximize/restore toggle. Callers re-check `isWindowMaximized()` on each
+   * call rather than have this report the new state itself, since Tauri's
+   * event only signals that a resize happened.
+   */
+  async onWindowResized(handler: () => void): Promise<() => void> {
+    // eslint-disable-next-line @typescript-eslint/no-empty-function -- intentional no-op: nothing to unsubscribe from when there is no live Tauri event system
+    if (!this.available) return () => {};
+    const { getCurrentWindow } = await import('@tauri-apps/api/window');
+    return getCurrentWindow().onResized(() => handler());
+  }
+
   /**
    * Subscribes to the core's single event channel. Returns the unlisten
    * function; callers dispose it on teardown. A no-op outside Tauri, so
@@ -56,6 +99,52 @@ export class TauriBridge {
     if (!this.available) return () => {};
     const { listen } = await import('@tauri-apps/api/event');
     return listen<AppEvent>('relay://event', (message) => handler(message.payload));
+  }
+
+  private settingsStore: LazyStore | null = null;
+
+  /**
+   * Reads a persisted setting from `settings.json` in the OS app-data
+   * directory — the one real, on-disk settings store, as opposed to a
+   * per-window UI preference like theme. `fallback` covers both "never set"
+   * and running outside Tauri.
+   */
+  async getSetting<T>(key: string, fallback: T): Promise<T> {
+    if (!this.available) return fallback;
+    const store = await this.getSettingsStore();
+    const value = await store.get<T>(key);
+    return value ?? fallback;
+  }
+
+  /** Persists a setting to `settings.json`. */
+  async setSetting(key: string, value: unknown): Promise<void> {
+    if (!this.available) return;
+    const store = await this.getSettingsStore();
+    await store.set(key, value);
+  }
+
+  private async getSettingsStore(): Promise<LazyStore> {
+    // A `LazyStore` only touches the filesystem on first get/set, so
+    // constructing it here rather than at module load keeps this a no-op
+    // outside Tauri, matching every other method on this bridge.
+    this.settingsStore ??= new (await import('@tauri-apps/plugin-store')).LazyStore(
+      'settings.json',
+    );
+    return this.settingsStore;
+  }
+
+  /** Whether Relay is registered to launch automatically at login. */
+  async isAutostartEnabled(): Promise<boolean> {
+    if (!this.available) return false;
+    const { isEnabled } = await import('@tauri-apps/plugin-autostart');
+    return isEnabled();
+  }
+
+  /** Enables or disables launching Relay automatically at login, hidden — the same as any other launch. */
+  async setAutostart(enabled: boolean): Promise<void> {
+    if (!this.available) return;
+    const { enable, disable } = await import('@tauri-apps/plugin-autostart');
+    await (enabled ? enable() : disable());
   }
 
   private async invoke<T>(command: string, args: Record<string, unknown> = {}): Promise<T | null> {
@@ -73,8 +162,7 @@ export type CoreCommand =
   | { readonly id: 'open_settings' }
   | { readonly id: 'open_main' }
   | { readonly id: 'hide_hud' }
-  | { readonly id: 'quit' }
-  | { readonly id: 'scan_home' };
+  | { readonly id: 'quit' };
 
 /** What the palette displays for a core-contributed row. Mirrors `CoreCommandMeta`. */
 export interface CoreCommandMeta {

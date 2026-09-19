@@ -2,16 +2,32 @@
 //!
 //! A job is any core-side work that outlives a single IPC round trip — an
 //! agent run, a directory scan, eventually a build watcher. It runs on
-//! Tokio's thread pool via `tokio::spawn`, never blocks the command that
-//! started it, and reports progress as `AppEvent::Notification`s rather than
-//! a single response at the end.
+//! Tokio's thread pool via `tauri::async_runtime::spawn`, never blocks the
+//! command that started it, and reports progress as `AppEvent::Notification`s
+//! rather than a single response at the end.
+//!
+//! `tauri::async_runtime::spawn`, not plain `tokio::spawn`, is required here:
+//! a synchronous `#[tauri::command]` (every command in `commands.rs` is one)
+//! runs directly on the native IPC callback thread, which has no Tokio
+//! runtime entered, so `tokio::spawn`'s `Handle::current()` panics — and
+//! since that panic crosses a WebView2 FFI boundary, it aborts the whole
+//! process rather than unwinding. `async_runtime::spawn` owns a lazily
+//! initialized runtime handle and enters it before spawning, so it works
+//! regardless of which thread calls it.
 //!
 //! The registry and `spawn` below take an `EventSink` rather than an
 //! `AppHandle` directly, so job logic can be exercised with a fake sink in
 //! tests, with no running Tauri app required. See the tests at the bottom —
 //! they run real concurrent work on a real multi-thread runtime.
-
-pub mod scan;
+//!
+//! `spawn` and `JobContext` have no caller right now — `jobs::scan`, the one
+//! real job that used them, was removed once it had proven the pipeline out
+//! (see docs/ARCHITECTURE.md's "Not built yet"). `JobRegistry` stays fully
+//! live: `cancel_job` and `is_job_running` are real commands today.
+#![allow(
+    dead_code,
+    reason = "no job producer currently calls spawn — see docs/ARCHITECTURE.md"
+)]
 
 use std::collections::HashMap;
 use std::future::Future;
@@ -183,7 +199,7 @@ where
     let done_registry = registry.clone();
     let done_sink = sink.clone();
 
-    tokio::spawn(async move {
+    tauri::async_runtime::spawn(async move {
         let ok = work(context).await.is_ok();
         done_registry.finish(&done_id);
         done_sink.emit(AppEvent::NotificationDone {
@@ -198,7 +214,7 @@ where
 #[cfg(test)]
 mod tests {
     use std::sync::Mutex as StdMutex;
-    use std::time::{Duration, Instant};
+    use std::time::Duration;
 
     use super::*;
 
@@ -277,26 +293,51 @@ mod tests {
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
     async fn two_jobs_make_progress_concurrently() {
-        // If these ran one after another this would take ~60ms; run on
-        // separate worker threads it takes about 30ms. This is what proves
-        // `spawn` uses the thread pool rather than an interleaved single task.
+        // Proves concurrency with a rendezvous rather than wall-clock timing.
+        // `spawn` hands off to `tauri::async_runtime`'s shared global runtime,
+        // which every other test in this module also dispatches onto — a
+        // fixed wall-clock budget (e.g. "both done in under 55ms") flakes
+        // under that cross-test contention regardless of how generous the
+        // margin is, since it depends on how much *other* work the shared
+        // runtime happens to be doing at the same moment.
+        //
+        // A two-party barrier sidesteps that: each job only completes once
+        // both have reached it, which is only possible if they were actually
+        // running at the same time, however long that takes. If `spawn` ever
+        // regresses to running jobs one after another, the first job blocks
+        // on the barrier forever since the second never starts — caught by
+        // the timeout below instead of hanging the test suite.
         let sink = FakeSink::default();
         let registry = JobRegistry::default();
-        let started = Instant::now();
+        let barrier = Arc::new(tokio::sync::Barrier::new(2));
 
-        let a = spawn(sink.clone(), registry.clone(), "a", |_ctx| async move {
-            tokio::time::sleep(Duration::from_millis(30)).await;
-            Ok(())
-        });
-        let b = spawn(sink.clone(), registry.clone(), "b", |_ctx| async move {
-            tokio::time::sleep(Duration::from_millis(30)).await;
-            Ok(())
-        });
+        let barrier_a = barrier.clone();
+        let a = spawn(
+            sink.clone(),
+            registry.clone(),
+            "a",
+            move |_ctx| async move {
+                barrier_a.wait().await;
+                Ok(())
+            },
+        );
+        let barrier_b = barrier.clone();
+        let b = spawn(
+            sink.clone(),
+            registry.clone(),
+            "b",
+            move |_ctx| async move {
+                barrier_b.wait().await;
+                Ok(())
+            },
+        );
 
-        wait_until_finished(&registry, &a).await;
-        wait_until_finished(&registry, &b).await;
-
-        assert!(started.elapsed() < Duration::from_millis(55));
+        tokio::time::timeout(Duration::from_secs(5), async {
+            wait_until_finished(&registry, &a).await;
+            wait_until_finished(&registry, &b).await;
+        })
+        .await
+        .expect("both jobs should reach the barrier concurrently and finish");
     }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
