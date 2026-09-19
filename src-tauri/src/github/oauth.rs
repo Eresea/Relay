@@ -15,12 +15,6 @@
 
 use serde::{Deserialize, Serialize};
 
-/// Relay's own GitHub OAuth App, Device Flow enabled. Device flow has no
-/// client secret to protect, so this id alone is not sensitive. This is a
-/// placeholder client id — swap it for Relay's registered OAuth App before
-/// shipping; see docs/ARCHITECTURE.md's GitHub connector section.
-pub const CLIENT_ID: &str = "Iv1.relaydesktopapp0";
-
 /// Read-only-in-spirit: classic GitHub OAuth Apps have no scope that grants
 /// read access to private repositories without also granting write access —
 /// `repo` is the narrowest scope that can see private pull requests at all.

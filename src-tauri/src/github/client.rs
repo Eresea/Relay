@@ -113,9 +113,9 @@ fn overall_ci_state(check_runs: &[CheckRun]) -> Option<CiState> {
     reason = "no dyn dispatch needed — poll:: is generic over C: GitHubClient, mirroring jobs::spawn's generic S: EventSink"
 )]
 pub trait GitHubClient: Clone + Send + Sync + 'static {
-    async fn start_device_flow(&self) -> Result<DeviceCodeResponse>;
-    async fn poll_device_token(&self, device_code: &str) -> Result<TokenResponse>;
-    async fn refresh_token(&self, refresh_token: &str) -> Result<TokenResponse>;
+    async fn start_device_flow(&self, client_id: &str) -> Result<DeviceCodeResponse>;
+    async fn poll_device_token(&self, client_id: &str, device_code: &str) -> Result<TokenResponse>;
+    async fn refresh_token(&self, client_id: &str, refresh_token: &str) -> Result<TokenResponse>;
     async fn fetch_viewer_login(&self, token: &str) -> Result<String>;
     async fn search_involved_prs(
         &self,
@@ -208,28 +208,25 @@ fn truncate(body: &str, max_chars: usize) -> String {
 }
 
 impl GitHubClient for HttpGitHubClient {
-    async fn start_device_flow(&self) -> Result<DeviceCodeResponse> {
+    async fn start_device_flow(&self, client_id: &str) -> Result<DeviceCodeResponse> {
         let response = self
             .0
             .post("https://github.com/login/device/code")
             .header("Accept", "application/json")
-            .form(&[
-                ("client_id", super::oauth::CLIENT_ID),
-                ("scope", super::oauth::SCOPE),
-            ])
+            .form(&[("client_id", client_id), ("scope", super::oauth::SCOPE)])
             .send()
             .await
             .map_err(|e| Error::GithubRequestFailed(e.to_string()))?;
         read_json(response).await
     }
 
-    async fn poll_device_token(&self, device_code: &str) -> Result<TokenResponse> {
+    async fn poll_device_token(&self, client_id: &str, device_code: &str) -> Result<TokenResponse> {
         let response = self
             .0
             .post("https://github.com/login/oauth/access_token")
             .header("Accept", "application/json")
             .form(&[
-                ("client_id", super::oauth::CLIENT_ID),
+                ("client_id", client_id),
                 ("device_code", device_code),
                 ("grant_type", "urn:ietf:params:oauth:grant-type:device_code"),
             ])
@@ -239,13 +236,13 @@ impl GitHubClient for HttpGitHubClient {
         read_json(response).await
     }
 
-    async fn refresh_token(&self, refresh_token: &str) -> Result<TokenResponse> {
+    async fn refresh_token(&self, client_id: &str, refresh_token: &str) -> Result<TokenResponse> {
         let response = self
             .0
             .post("https://github.com/login/oauth/access_token")
             .header("Accept", "application/json")
             .form(&[
-                ("client_id", super::oauth::CLIENT_ID),
+                ("client_id", client_id),
                 ("refresh_token", refresh_token),
                 ("grant_type", "refresh_token"),
             ])
@@ -391,15 +388,23 @@ pub mod fake {
     }
 
     impl GitHubClient for FakeGitHubClient {
-        async fn start_device_flow(&self) -> Result<DeviceCodeResponse> {
+        async fn start_device_flow(&self, _client_id: &str) -> Result<DeviceCodeResponse> {
             take(&self.device_code)
         }
 
-        async fn poll_device_token(&self, _device_code: &str) -> Result<TokenResponse> {
+        async fn poll_device_token(
+            &self,
+            _client_id: &str,
+            _device_code: &str,
+        ) -> Result<TokenResponse> {
             take(&self.token_polls)
         }
 
-        async fn refresh_token(&self, _refresh_token: &str) -> Result<TokenResponse> {
+        async fn refresh_token(
+            &self,
+            _client_id: &str,
+            _refresh_token: &str,
+        ) -> Result<TokenResponse> {
             take(&self.refreshes)
         }
 

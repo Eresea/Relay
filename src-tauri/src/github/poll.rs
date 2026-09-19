@@ -136,6 +136,7 @@ pub async fn run_device_flow<C: GitHubClient, S: EventSink, T: TokenStore>(
     ctx: &JobContext<S>,
     client: &C,
     token_store: &T,
+    client_id: &str,
     device: DeviceCodeResponse,
 ) -> Result<StoredToken> {
     let deadline = now_millis() + device.expires_in * 1000;
@@ -156,7 +157,9 @@ pub async fn run_device_flow<C: GitHubClient, S: EventSink, T: TokenStore>(
             return Err(Error::GithubDeviceFlowExpired);
         }
 
-        let response = client.poll_device_token(&device.device_code).await?;
+        let response = client
+            .poll_device_token(client_id, &device.device_code)
+            .await?;
         match interpret_token_response(response) {
             TokenOutcome::Approved {
                 access_token,
@@ -290,12 +293,13 @@ fn now_millis() -> u64 {
 
 async fn refresh_stored_token<C: GitHubClient>(
     client: &C,
+    client_id: &str,
     stored: &StoredToken,
 ) -> Result<StoredToken> {
     let Some(refresh_token) = &stored.refresh_token else {
         return Ok(stored.clone());
     };
-    let response = client.refresh_token(refresh_token).await?;
+    let response = client.refresh_token(client_id, refresh_token).await?;
     let outcome = super::oauth::interpret_token_response(response);
     match outcome {
         super::oauth::TokenOutcome::Approved {
@@ -358,17 +362,22 @@ where
             return Ok(());
         };
 
+        let settings = read_settings();
+
         if needs_refresh(stored.expires_at, now_millis()) {
-            match refresh_stored_token(&client, &stored).await {
-                Ok(refreshed) => {
-                    token_store.set(&refreshed)?;
-                    stored = refreshed;
+            if let Some(client_id) = super::rules::effective_client_id(&settings) {
+                match refresh_stored_token(&client, client_id, &stored).await {
+                    Ok(refreshed) => {
+                        token_store.set(&refreshed)?;
+                        stored = refreshed;
+                    }
+                    Err(error) => log::warn!("could not refresh the GitHub token: {error}"),
                 }
-                Err(error) => log::warn!("could not refresh the GitHub token: {error}"),
+            } else {
+                log::warn!("GitHub token needs refreshing but no client id is configured");
             }
         }
 
-        let settings = read_settings();
         match run_poll_cycle(
             &client,
             &sink,
@@ -544,6 +553,7 @@ mod tests {
                 ],
             }],
             muted: Vec::new(),
+            client_id: None,
         };
         let mut cache = PollCache::default();
 
@@ -648,9 +658,15 @@ mod tests {
 
         let token_store = FakeTokenStore::default();
         let ctx = test_ctx(FakeSink::default());
-        let stored = run_device_flow(&ctx, &client, &token_store, device_code(900, 0))
-            .await
-            .unwrap();
+        let stored = run_device_flow(
+            &ctx,
+            &client,
+            &token_store,
+            "client-id",
+            device_code(900, 0),
+        )
+        .await
+        .unwrap();
 
         assert_eq!(stored.access_token, "gho_abc");
         assert_eq!(stored.username, "octocat");
@@ -673,7 +689,14 @@ mod tests {
         let token_store = FakeTokenStore::default();
         let ctx = test_ctx(FakeSink::default());
 
-        let result = run_device_flow(&ctx, &client, &token_store, device_code(900, 0)).await;
+        let result = run_device_flow(
+            &ctx,
+            &client,
+            &token_store,
+            "client-id",
+            device_code(900, 0),
+        )
+        .await;
         assert!(matches!(result, Err(Error::GithubDeviceFlowDenied)));
         assert_eq!(token_store.get().unwrap(), None);
     }
@@ -687,7 +710,8 @@ mod tests {
         // expires_in: 0 means the deadline is already behind us the first
         // time it's checked, so this returns without consuming a scripted
         // poll response at all.
-        let result = run_device_flow(&ctx, &client, &token_store, device_code(0, 0)).await;
+        let result =
+            run_device_flow(&ctx, &client, &token_store, "client-id", device_code(0, 0)).await;
         assert!(matches!(result, Err(Error::GithubDeviceFlowExpired)));
     }
 

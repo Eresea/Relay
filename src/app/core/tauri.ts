@@ -331,6 +331,8 @@ export interface GithubConnectorSettings {
   readonly pollIntervalSecs: number;
   readonly rules: readonly NotificationRule[];
   readonly muted: readonly string[];
+  /** A GitHub OAuth App (Device Flow enabled) client id. `null` until configured. */
+  readonly clientId: string | null;
 }
 
 /** Mirrors `GithubConnectorSettings::default()` in `github::rules`. */
@@ -347,4 +349,5 @@ export const DEFAULT_GITHUB_SETTINGS: GithubConnectorSettings = {
     },
   ],
   muted: [],
+  clientId: null,
 };

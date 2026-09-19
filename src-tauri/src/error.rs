@@ -50,6 +50,11 @@ pub enum Error {
     #[error("encryption failed")]
     Crypto,
 
+    #[error(
+        "set a GitHub OAuth App client id (Device Flow enabled) in the connector's settings before connecting"
+    )]
+    GithubClientIdNotConfigured,
+
     #[error("the GitHub sign-in was declined")]
     GithubDeviceFlowDenied,
 

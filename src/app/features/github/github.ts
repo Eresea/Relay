@@ -95,7 +95,29 @@ function connectorErrorMessage(error: unknown): string {
               Relay polls the signed-in account's pull requests and notifies you about the activity
               your rules ask for — new PRs, reviews requested, and CI results.
             </p>
-            <button type="button" class="primary" [disabled]="busy()" (click)="connect()">
+
+            <div class="client-id-setup">
+              <p class="hint">
+                Needs a GitHub OAuth App with Device Flow enabled. Create one, then paste its client
+                id below.
+              </p>
+              <button type="button" class="link" (click)="openDeveloperSettings()">
+                Open GitHub Developer Settings
+              </button>
+              <input
+                class="field"
+                placeholder="OAuth App client id"
+                [(ngModel)]="clientId"
+                (change)="save()"
+              />
+            </div>
+
+            <button
+              type="button"
+              class="primary"
+              [disabled]="busy() || !clientId().trim()"
+              (click)="connect()"
+            >
               Connect
             </button>
             @if (error()) {
@@ -390,6 +412,21 @@ function connectorErrorMessage(error: unknown): string {
       gap: var(--space-2);
     }
 
+    .client-id-setup {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: var(--space-2);
+      inline-size: 100%;
+      padding: var(--space-4);
+      background: var(--bg-sunken);
+      border-radius: var(--radius-sm);
+    }
+
+    .client-id-setup .field {
+      inline-size: 100%;
+    }
+
     .user-code {
       padding: var(--space-3) var(--space-5);
       font-size: var(--text-16);
@@ -535,6 +572,7 @@ export class Github {
   protected readonly username = signal<string | null>(null);
   protected readonly deviceAuth = signal<DeviceAuthorization | null>(null);
 
+  protected readonly clientId = signal('');
   protected readonly pollIntervalSecs = signal(DEFAULT_GITHUB_SETTINGS.pollIntervalSecs);
   protected readonly rules = signal<EditableRule[]>([]);
   protected readonly muted = signal<string[]>([]);
@@ -566,11 +604,14 @@ export class Github {
   }
 
   private async refreshStatus(): Promise<void> {
+    // Loaded regardless of connection state: the client id has to be set
+    // and saved *before* a first connection exists to configure it for.
+    await this.loadSettings();
+
     const result = await this.tauri.githubStatus();
     if (result.connected) {
       this.username.set(result.username);
       this.status.set('connected');
-      await this.loadSettings();
     } else {
       this.status.set('disconnected');
     }
@@ -578,6 +619,7 @@ export class Github {
 
   private async loadSettings(): Promise<void> {
     const settings = await this.tauri.githubSettings();
+    this.clientId.set(settings.clientId ?? '');
     this.pollIntervalSecs.set(settings.pollIntervalSecs);
     this.rules.set(settings.rules.map(toEditable));
     this.muted.set([...settings.muted]);
@@ -585,6 +627,7 @@ export class Github {
 
   private buildSettings(): GithubConnectorSettings {
     return {
+      clientId: this.clientId().trim() || null,
       pollIntervalSecs: this.pollIntervalSecs(),
       rules: this.rules().map(fromEditable),
       muted: this.muted(),
@@ -611,6 +654,10 @@ export class Github {
     } finally {
       this.busy.set(false);
     }
+  }
+
+  protected openDeveloperSettings(): void {
+    void this.tauri.openUrl('https://github.com/settings/developers');
   }
 
   protected openVerification(auth: DeviceAuthorization): void {

@@ -200,9 +200,16 @@ to test in isolation:
   redirect URI, no port to bind, no browser-launched callback to catch — the
   user types a code into a page GitHub serves, and the app only ever polls
   for the outcome. The trade-off (typing a code instead of one browser click)
-  is paid once per login, not per session. `CLIENT_ID` is a placeholder —
-  swap it for Relay's own registered OAuth App (Device Flow enabled) before
-  shipping.
+  is paid once per login, not per session. The OAuth App client id is not
+  baked into the binary: device flow has no client secret to protect, so the
+  id is exactly as sensitive as a URL, and it lives in `GithubConnectorSettings`
+  (`settings.json`, key `github.settings`) alongside the polling rules — set
+  once from the connector's "Connect GitHub" screen, which links out to
+  GitHub's OAuth App settings. `connect_start` fails fast, before any network
+  call, if none is configured (`rules::effective_client_id`), rather than
+  sending an empty or placeholder id to GitHub and surfacing whatever cryptic
+  error comes back (a 404, in practice — GitHub treats an unrecognized client
+  id as a missing resource, not an auth error).
 - `client.rs` — the `GitHubClient` trait (device-flow endpoints, search,
   pull request detail, check runs) plus `HttpGitHubClient`, its `reqwest`
   implementation. Every poll-loop and device-flow function is generic over

@@ -23,7 +23,7 @@ use serde::Serialize;
 use tauri::{AppHandle, Manager};
 use tauri_plugin_store::StoreExt;
 
-use crate::error::Result;
+use crate::error::{Error, Result};
 use crate::events::NotificationStatus;
 use crate::jobs::{self, JobId, JobRegistry};
 
@@ -71,12 +71,20 @@ pub fn status() -> Result<GithubStatus> {
 /// reach for `async_runtime::block_on` rather than becoming async
 /// themselves), then hands the wait for the user's approval to a background
 /// job so this command can return immediately with the code to display.
+/// Fails fast, with no network call at all, if no OAuth App client id has
+/// been configured — a request sent without one reaches GitHub only to come
+/// back as an opaque 404.
 pub fn connect_start(
     app: AppHandle,
     client: HttpGitHubClient,
     registry: JobRegistry,
 ) -> Result<DeviceAuthorization> {
-    let device = tauri::async_runtime::block_on(client.start_device_flow())?;
+    let settings = read_settings(&app);
+    let client_id = rules::effective_client_id(&settings)
+        .ok_or(Error::GithubClientIdNotConfigured)?
+        .to_string();
+
+    let device = tauri::async_runtime::block_on(client.start_device_flow(&client_id))?;
     let user_code = device.user_code.clone();
     let verification_uri = device.verification_uri.clone();
     let expires_in = device.expires_in;
@@ -96,7 +104,8 @@ pub fn connect_start(
             None,
         );
         let token_store = KeyringTokenStore;
-        let stored = poll::run_device_flow(&ctx, &job_client, &token_store, device).await?;
+        let stored =
+            poll::run_device_flow(&ctx, &job_client, &token_store, &client_id, device).await?;
         ctx.report(
             NotificationStatus::Done,
             format!("Connected to GitHub as {}", stored.username),

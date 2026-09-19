@@ -58,6 +58,14 @@ pub struct GithubConnectorSettings {
     /// Exact-match exceptions, checked before any rule — see `mute_keys`.
     #[serde(default)]
     pub muted: Vec<String>,
+    /// The GitHub OAuth App (Device Flow enabled) to sign in with. Not a
+    /// secret — device flow authenticates the app by this id alone, with no
+    /// client secret involved — so it lives here rather than in the token
+    /// store, and a user who wants to point Relay at their own OAuth App
+    /// only ever has to paste an id, never rebuild anything. `None`/empty
+    /// means connecting is not configured yet.
+    #[serde(default)]
+    pub client_id: Option<String>,
 }
 
 impl Default for GithubConnectorSettings {
@@ -83,8 +91,19 @@ impl Default for GithubConnectorSettings {
                 ],
             }],
             muted: Vec::new(),
+            client_id: None,
         }
     }
+}
+
+/// A configured, non-blank client id, or `None` if connecting has not been
+/// set up yet.
+pub fn effective_client_id(settings: &GithubConnectorSettings) -> Option<&str> {
+    settings
+        .client_id
+        .as_deref()
+        .map(str::trim)
+        .filter(|id| !id.is_empty())
 }
 
 /// The minimum interval the poll loop will honor, regardless of what
@@ -170,6 +189,15 @@ mod tests {
         }
     }
 
+    fn settings(rules: Vec<NotificationRule>, muted: Vec<String>) -> GithubConnectorSettings {
+        GithubConnectorSettings {
+            poll_interval_secs: 300,
+            rules,
+            muted,
+            client_id: None,
+        }
+    }
+
     #[test]
     fn glob_star_matches_any_run_of_characters() {
         assert!(glob_match("*", "anything"));
@@ -181,11 +209,7 @@ mod tests {
 
     #[test]
     fn disabled_rule_never_matches() {
-        let mut settings = GithubConnectorSettings {
-            poll_interval_secs: 300,
-            rules: vec![rule("*", &[PrEventKind::Opened])],
-            muted: Vec::new(),
-        };
+        let mut settings = settings(vec![rule("*", &[PrEventKind::Opened])], Vec::new());
         settings.rules[0].enabled = false;
         assert!(!should_notify(
             &settings,
@@ -198,11 +222,10 @@ mod tests {
 
     #[test]
     fn repo_mute_silences_every_status_and_branch() {
-        let settings = GithubConnectorSettings {
-            poll_interval_secs: 300,
-            rules: vec![rule("*", &[PrEventKind::Opened, PrEventKind::CiFailed])],
-            muted: vec!["my-org/relay".to_string()],
-        };
+        let settings = settings(
+            vec![rule("*", &[PrEventKind::Opened, PrEventKind::CiFailed])],
+            vec!["my-org/relay".to_string()],
+        );
         assert!(!should_notify(
             &settings,
             "my-org/relay",
@@ -221,11 +244,10 @@ mod tests {
 
     #[test]
     fn branch_mute_only_silences_that_branch() {
-        let settings = GithubConnectorSettings {
-            poll_interval_secs: 300,
-            rules: vec![rule("*", &[PrEventKind::Opened])],
-            muted: vec!["my-org/relay@release/1.0".to_string()],
-        };
+        let settings = settings(
+            vec![rule("*", &[PrEventKind::Opened])],
+            vec!["my-org/relay@release/1.0".to_string()],
+        );
         assert!(!should_notify(
             &settings,
             "my-org/relay",
@@ -244,11 +266,10 @@ mod tests {
 
     #[test]
     fn pr_mute_only_silences_that_pr() {
-        let settings = GithubConnectorSettings {
-            poll_interval_secs: 300,
-            rules: vec![rule("*", &[PrEventKind::Opened])],
-            muted: vec!["my-org/relay#42".to_string()],
-        };
+        let settings = settings(
+            vec![rule("*", &[PrEventKind::Opened])],
+            vec!["my-org/relay#42".to_string()],
+        );
         assert!(!should_notify(
             &settings,
             "my-org/relay",
@@ -270,11 +291,7 @@ mod tests {
         let mut r = rule("*", &[PrEventKind::Opened]);
         r.branch_include = vec!["release/*".to_string()];
         r.branch_exclude = vec!["release/legacy".to_string()];
-        let settings = GithubConnectorSettings {
-            poll_interval_secs: 300,
-            rules: vec![r],
-            muted: Vec::new(),
-        };
+        let settings = settings(vec![r], Vec::new());
         assert!(should_notify(
             &settings,
             "my-org/relay",
@@ -300,11 +317,7 @@ mod tests {
 
     #[test]
     fn status_not_in_the_rule_does_not_notify() {
-        let settings = GithubConnectorSettings {
-            poll_interval_secs: 300,
-            rules: vec![rule("*", &[PrEventKind::Opened])],
-            muted: Vec::new(),
-        };
+        let settings = settings(vec![rule("*", &[PrEventKind::Opened])], Vec::new());
         assert!(!should_notify(
             &settings,
             "my-org/relay",
@@ -332,5 +345,17 @@ mod tests {
             1,
             PrEventKind::CiPassed
         ));
+    }
+
+    #[test]
+    fn effective_client_id_treats_blank_or_missing_as_unconfigured() {
+        let mut settings = GithubConnectorSettings::default();
+        assert_eq!(effective_client_id(&settings), None);
+
+        settings.client_id = Some("   ".to_string());
+        assert_eq!(effective_client_id(&settings), None);
+
+        settings.client_id = Some(" Iv1.abc123 ".to_string());
+        assert_eq!(effective_client_id(&settings), Some("Iv1.abc123"));
     }
 }
