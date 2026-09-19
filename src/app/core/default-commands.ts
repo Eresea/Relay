@@ -32,6 +32,15 @@ export function registerDefaultCommands(): () => void {
       run: () => tauri.runCoreCommand({ id: 'open_settings' }),
     },
     {
+      id: 'relay.vault.open',
+      title: 'Password vault',
+      hint: 'Generate and store passwords',
+      group: 'Relay',
+      icon: 'lock',
+      keywords: ['password', 'generate', 'vault', 'security', 'account'],
+      run: () => tauri.runCoreCommand({ id: 'open_vault' }),
+    },
+    {
       id: 'relay.app.reload',
       title: 'Reload interface',
       hint: 'Rebuild the webview without restarting Relay',

@@ -147,6 +147,56 @@ export class TauriBridge {
     await (enabled ? enable() : disable());
   }
 
+  /** Whether a vault has been created, and whether it is currently unlocked. */
+  async vaultStatus(): Promise<VaultStatus> {
+    return (await this.invoke<VaultStatus>('vault_status')) ?? { exists: false, unlocked: false };
+  }
+
+  /** Creates a new, empty vault protected by `masterPassword`. */
+  async vaultCreate(masterPassword: string): Promise<void> {
+    await this.invoke('vault_create', { masterPassword });
+  }
+
+  /** Decrypts the vault into memory; throws if the password is wrong. */
+  async vaultUnlock(masterPassword: string): Promise<void> {
+    await this.invoke('vault_unlock', { masterPassword });
+  }
+
+  /** Drops the decrypted entries from memory. The file on disk is untouched. */
+  async vaultLock(): Promise<void> {
+    await this.invoke('vault_lock');
+  }
+
+  /** Generates a password from the given character-class options. */
+  async generatePassword(options: PasswordOptions): Promise<string> {
+    return (await this.invoke<string>('generate_password', { options })) ?? '';
+  }
+
+  /** Adds a new entry to the unlocked vault and persists it immediately. */
+  async vaultAddEntry(entry: NewVaultEntry): Promise<VaultEntrySummary | null> {
+    return this.invoke<VaultEntrySummary>('vault_add_entry', { entry });
+  }
+
+  /** Lists every entry in the unlocked vault, without passwords. */
+  async vaultListEntries(): Promise<readonly VaultEntrySummary[]> {
+    return (await this.invoke<VaultEntrySummary[]>('vault_list_entries')) ?? [];
+  }
+
+  /** Reveals one entry's password by id. */
+  async vaultRevealPassword(id: string): Promise<string> {
+    return (await this.invoke<string>('vault_reveal_password', { id })) ?? '';
+  }
+
+  /** Removes an entry from the unlocked vault and persists the change. */
+  async vaultDeleteEntry(id: string): Promise<void> {
+    await this.invoke('vault_delete_entry', { id });
+  }
+
+  /** Writes an encrypted copy of the vault to disk and returns the path. */
+  async vaultExport(): Promise<string> {
+    return (await this.invoke<string>('vault_export')) ?? '';
+  }
+
   private async invoke<T>(command: string, args: Record<string, unknown> = {}): Promise<T | null> {
     if (!this.available) {
       console.info(`[relay] invoke(${command}) skipped — not running under Tauri`, args);
@@ -162,6 +212,7 @@ export type CoreCommand =
   | { readonly id: 'open_settings' }
   | { readonly id: 'open_main' }
   | { readonly id: 'hide_hud' }
+  | { readonly id: 'open_vault' }
   | { readonly id: 'quit' };
 
 /** What the palette displays for a core-contributed row. Mirrors `CoreCommandMeta`. */
@@ -171,4 +222,39 @@ export interface CoreCommandMeta {
   readonly group: string;
   readonly hint?: string;
   readonly icon?: string;
+}
+
+/** Mirrors `vault::VaultStatus`. */
+export interface VaultStatus {
+  readonly exists: boolean;
+  readonly unlocked: boolean;
+}
+
+/** Mirrors `vault::VaultEntrySummary` — every field but the password. */
+export interface VaultEntrySummary {
+  readonly id: string;
+  readonly label: string;
+  readonly username: string;
+  readonly url?: string;
+  readonly notes?: string;
+  readonly createdAt: number;
+  readonly updatedAt: number;
+}
+
+/** Mirrors `vault::NewVaultEntry`. */
+export interface NewVaultEntry {
+  readonly label: string;
+  readonly username: string;
+  readonly password: string;
+  readonly url?: string;
+  readonly notes?: string;
+}
+
+/** Mirrors `vault::PasswordOptions`. */
+export interface PasswordOptions {
+  readonly length: number;
+  readonly upper: boolean;
+  readonly lower: boolean;
+  readonly digits: boolean;
+  readonly symbols: boolean;
 }

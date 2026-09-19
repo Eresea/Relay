@@ -7,10 +7,12 @@ mod overlay;
 mod shortcuts;
 #[cfg(desktop)]
 mod tray;
+mod vault;
 
 use tauri::WindowEvent;
 
 use jobs::JobRegistry;
+use vault::VaultState;
 
 pub fn run() {
     let mut builder = tauri::Builder::default();
@@ -35,6 +37,7 @@ pub fn run() {
 
     builder
         .manage(JobRegistry::default())
+        .manage(VaultState::default())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_store::Builder::default().build())
         .plugin(
@@ -49,6 +52,16 @@ pub fn run() {
             commands::is_job_running,
             commands::dismiss_palette,
             commands::toggle_palette,
+            commands::vault_status,
+            commands::vault_create,
+            commands::vault_unlock,
+            commands::vault_lock,
+            commands::generate_password,
+            commands::vault_add_entry,
+            commands::vault_list_entries,
+            commands::vault_reveal_password,
+            commands::vault_delete_entry,
+            commands::vault_export,
         ])
         .on_window_event(|window, event| {
             // The palette is a spotlight, not a window: losing focus dismisses

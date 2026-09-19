@@ -21,6 +21,9 @@ use crate::error::Result;
 use crate::events::{AppEvent, EventSink};
 use crate::jobs::{JobId, JobRegistry};
 use crate::overlay;
+use crate::vault::{
+    self, NewVaultEntry, PasswordOptions, VaultEntrySummary, VaultState, VaultStatus,
+};
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -63,6 +66,7 @@ pub enum CoreCommand {
     OpenSettings,
     OpenMain,
     HideHud,
+    OpenVault,
     Quit,
 }
 
@@ -76,6 +80,11 @@ pub fn run_core_command(app: AppHandle, command: CoreCommand) -> Result<()> {
         }
         CoreCommand::OpenMain => overlay::show_main(&app),
         CoreCommand::HideHud => overlay::hide_hud(&app),
+        CoreCommand::OpenVault => {
+            overlay::show_main(&app)?;
+            app.emit(AppEvent::OpenVaultRequested);
+            Ok(())
+        }
         CoreCommand::Quit => {
             app.exit(0);
             Ok(())
@@ -106,6 +115,87 @@ pub fn dismiss_palette(app: AppHandle) -> Result<()> {
 #[tauri::command]
 pub fn toggle_palette(app: AppHandle) -> Result<()> {
     overlay::toggle_palette(&app)
+}
+
+/// Whether a vault has been created, and whether it is currently unlocked.
+#[tauri::command]
+pub fn vault_status(app: AppHandle, vault: tauri::State<VaultState>) -> Result<VaultStatus> {
+    vault::status(&app, &vault)
+}
+
+/// Creates a new, empty vault protected by `master_password`. Fails if a
+/// vault already exists — this is not how you change the master password.
+#[tauri::command]
+pub fn vault_create(
+    app: AppHandle,
+    vault: tauri::State<VaultState>,
+    master_password: String,
+) -> Result<()> {
+    vault::create(&app, &vault, &master_password)
+}
+
+/// Decrypts the vault into memory. Fails with `WrongMasterPassword` if the
+/// password does not match — there is no separate "check password" step.
+#[tauri::command]
+pub fn vault_unlock(
+    app: AppHandle,
+    vault: tauri::State<VaultState>,
+    master_password: String,
+) -> Result<()> {
+    vault::unlock(&app, &vault, &master_password)
+}
+
+/// Drops the decrypted entries from memory. The file on disk is untouched.
+#[tauri::command]
+pub fn vault_lock(vault: tauri::State<VaultState>) -> Result<()> {
+    vault::lock(&vault)
+}
+
+/// Generates a password from the given character-class options. Pure and
+/// stateless — does not touch the vault, so it works before one exists.
+#[tauri::command]
+pub fn generate_password(options: PasswordOptions) -> Result<String> {
+    vault::generate_password(&options)
+}
+
+/// Adds a new entry to the unlocked vault and persists it immediately.
+#[tauri::command]
+pub fn vault_add_entry(
+    app: AppHandle,
+    vault: tauri::State<VaultState>,
+    entry: NewVaultEntry,
+) -> Result<VaultEntrySummary> {
+    vault::add_entry(&app, &vault, entry)
+}
+
+/// Lists every entry in the unlocked vault, without passwords.
+#[tauri::command]
+pub fn vault_list_entries(vault: tauri::State<VaultState>) -> Result<Vec<VaultEntrySummary>> {
+    vault::list_entries(&vault)
+}
+
+/// Reveals one entry's password by id. The only command that returns a
+/// stored secret in plaintext.
+#[tauri::command]
+pub fn vault_reveal_password(vault: tauri::State<VaultState>, id: String) -> Result<String> {
+    vault::reveal_password(&vault, &id)
+}
+
+/// Removes an entry from the unlocked vault and persists the change.
+#[tauri::command]
+pub fn vault_delete_entry(
+    app: AppHandle,
+    vault: tauri::State<VaultState>,
+    id: String,
+) -> Result<()> {
+    vault::delete_entry(&app, &vault, &id)
+}
+
+/// Writes an encrypted copy of the vault to the user's documents folder and
+/// returns the path it was written to.
+#[tauri::command]
+pub fn vault_export(app: AppHandle, vault: tauri::State<VaultState>) -> Result<String> {
+    vault::export(&app, &vault)
 }
 
 #[cfg(test)]
