@@ -354,8 +354,14 @@ export class Gmail {
     try {
       await this.tauri.gmailConnect();
       await this.refresh();
-    } catch {
-      this.error.set('Could not connect to Gmail.');
+    } catch (error) {
+      // The core's `Error` enum serializes to a plain string (see
+      // src-tauri/src/error.rs), so `error` here is already a message worth
+      // showing directly — e.g. "the Gmail connector needs
+      // RELAY_GMAIL_CLIENT_ID set before it can connect" — rather than a
+      // generic one that hides why a fast-failing case (no client id
+      // configured) looks identical to a real connection failure.
+      this.error.set(typeof error === 'string' ? error : 'Could not connect to Gmail.');
       await this.refresh();
     } finally {
       this.busy.set(false);
