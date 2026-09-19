@@ -62,6 +62,18 @@ function splitList(value: string): string[] {
 }
 
 /**
+ * `invoke` rejects with whatever `src-tauri/src/error.rs`'s `Error` serializes
+ * to — a plain string, per its `Serialize` impl — so a command failure (a
+ * placeholder OAuth client id, no network, GitHub down) surfaces here as a
+ * string rather than an `Error` instance.
+ */
+function connectorErrorMessage(error: unknown): string {
+  if (typeof error === 'string') return error;
+  if (error instanceof Error) return error.message;
+  return 'Could not start GitHub sign-in.';
+}
+
+/**
  * The GitHub connector: connect an account over Device Flow, then configure
  * which pull request activity is worth a notification. The poll job itself
  * lives entirely core-side (`src-tauri/src/github`); this component only
@@ -594,6 +606,8 @@ export class Github {
       }
       this.deviceAuth.set(auth);
       this.status.set('connecting');
+    } catch (error) {
+      this.error.set(connectorErrorMessage(error));
     } finally {
       this.busy.set(false);
     }
