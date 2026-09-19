@@ -2,16 +2,20 @@ import { ChangeDetectionStrategy, Component, inject, signal } from '@angular/cor
 
 import { TauriBridge } from '@core/tauri';
 import { ThemeService } from '@core/theme';
+import { Gmail } from '@features/gmail/gmail';
 
 /**
  * Relay's one settings surface, reached from the palette's "Open settings"
  * command. Everything here persists through `TauriBridge`'s settings store
  * (`settings.json` in the OS app-data directory) or, for launch-at-login,
  * through the OS's own autostart registration — never local component state.
+ * The Gmail connector is the exception: its own state lives core-side (see
+ * `src-tauri/src/gmail/mod.rs`), so `rl-gmail` only reflects and edits it.
  */
 @Component({
   selector: 'rl-settings',
   changeDetection: ChangeDetectionStrategy.OnPush,
+  imports: [Gmail],
   template: `
     <section class="group">
       <h2 class="u-caption">Appearance</h2>
@@ -45,6 +49,8 @@ import { ThemeService } from '@core/theme';
         </button>
       </div>
     </section>
+
+    <rl-gmail />
   `,
   styles: `
     :host {

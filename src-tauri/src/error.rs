@@ -53,6 +53,52 @@ pub enum Error {
 
     #[error("encryption failed")]
     Crypto,
+
+    #[error("the Gmail connector needs RELAY_GMAIL_CLIENT_ID set before it can connect")]
+    GmailClientNotConfigured,
+
+    #[error("a Gmail connect attempt is already in progress")]
+    GmailAuthInProgress,
+
+    #[error("Gmail is already connected")]
+    GmailAlreadyConnected,
+
+    #[error("no Gmail connect attempt is in progress")]
+    GmailNotConnecting,
+
+    #[error("Gmail sign-in was cancelled")]
+    GmailAuthCancelled,
+
+    #[error("Gmail sign-in timed out waiting for the browser")]
+    GmailAuthTimedOut,
+
+    #[error("Gmail sign-in state did not match — possible CSRF attempt")]
+    GmailStateMismatch,
+
+    #[error("Gmail sign-in failed: {0}")]
+    GmailAuthFailed(String),
+
+    #[error("Gmail is not connected")]
+    GmailNotConnected,
+
+    #[error("Gmail connector data is corrupt: {0}")]
+    GmailCorrupt(String),
+
+    #[error("could not reach a secure local secret store: {0}")]
+    SecretStoreUnavailable(String),
+
+    #[error("Gmail API request failed: {0}")]
+    GmailApi(String),
+
+    #[error("the stored Gmail history checkpoint has expired")]
+    #[allow(
+        dead_code,
+        reason = "handled internally by gmail::poll before crossing IPC"
+    )]
+    GmailHistoryExpired,
+
+    #[error(transparent)]
+    Http(#[from] reqwest::Error),
 }
 
 impl Serialize for Error {

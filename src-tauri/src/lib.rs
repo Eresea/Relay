@@ -1,6 +1,7 @@
 mod commands;
 mod error;
 mod events;
+mod gmail;
 mod jobs;
 mod overlay;
 #[cfg(desktop)]
@@ -9,8 +10,9 @@ mod shortcuts;
 mod tray;
 mod vault;
 
-use tauri::WindowEvent;
+use tauri::{Manager, WindowEvent};
 
+use gmail::GmailState;
 use jobs::JobRegistry;
 use vault::VaultState;
 
@@ -38,6 +40,7 @@ pub fn run() {
     builder
         .manage(JobRegistry::default())
         .manage(VaultState::default())
+        .manage(GmailState::default())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_store::Builder::default().build())
         .plugin(
@@ -62,6 +65,12 @@ pub fn run() {
             commands::vault_reveal_password,
             commands::vault_delete_entry,
             commands::vault_export,
+            commands::gmail_status,
+            commands::gmail_get_settings,
+            commands::gmail_set_settings,
+            commands::gmail_connect,
+            commands::gmail_cancel_connect,
+            commands::gmail_disconnect,
         ])
         .on_window_event(|window, event| {
             // The palette is a spotlight, not a window: losing focus dismisses
@@ -114,6 +123,26 @@ pub fn run() {
             if std::env::args().any(|arg| arg == "--show") {
                 let _ = overlay::show_main(app.handle());
             }
+
+            // A connector that stopped polling every time the window closed
+            // would be pointless — resume whatever was connected before the
+            // last exit. Spawned rather than awaited: startup must not block
+            // on network I/O, and a resume failure (no stored session, a
+            // revoked grant, an unreachable keychain) is not fatal to Relay.
+            let resume_handle = app.handle().clone();
+            let resume_registry = app.state::<JobRegistry>().inner().clone();
+            tauri::async_runtime::spawn(async move {
+                if let Err(error) = gmail::resume(
+                    resume_handle,
+                    resume_registry,
+                    gmail::HttpGoogleApi::new(),
+                    gmail::OsKeyStore,
+                )
+                .await
+                {
+                    log::warn!("could not resume the Gmail connector: {error}");
+                }
+            });
 
             Ok(())
         })
