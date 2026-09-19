@@ -46,13 +46,21 @@ pub fn run() {
         ])
         .on_window_event(|window, event| {
             // The palette is a spotlight, not a window: losing focus dismisses
-            // it. Closing any overlay hides it instead of destroying it, so the
+            // it. Closing any window hides it instead of destroying it, so the
             // next open is instant.
+            //
+            // This includes the main window. Destroying it would be
+            // unrecoverable: every route back — the tray's "Open Relay", the
+            // single-instance raise, `open_main`, `open_settings` — resolves
+            // the window by label through `overlay::window`, which fails with
+            // `MissingWindow` once the webview is gone. Relay lives in the
+            // tray, so closing its window means "put it away", not "quit";
+            // quitting is the tray's own Quit item.
             match event {
                 WindowEvent::Focused(false) if window.label() == overlay::PALETTE => {
                     let _ = window.hide();
                 }
-                WindowEvent::CloseRequested { api, .. } if window.label() != overlay::MAIN => {
+                WindowEvent::CloseRequested { api, .. } => {
                     api.prevent_close();
                     let _ = window.hide();
                 }
