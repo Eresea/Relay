@@ -74,6 +74,16 @@ pub fn run() {
                 shortcuts::register(app);
             }
 
+            // `visible: false` in tauri.conf.json is not honoured identically
+            // on every platform — the GTK build maps the HUD at startup
+            // regardless, while Windows keeps it hidden — so put it in a known
+            // state here rather than trusting the window config. Without this
+            // the overlay's behaviour differs per platform before a single
+            // notification has been emitted.
+            if let Err(error) = overlay::hide_hud(app.handle()) {
+                log::warn!("could not hide the HUD at startup: {error}");
+            }
+
             // The main window is created hidden so that launching Relay at
             // login does not throw a window in the user's face. The tray and
             // the global shortcut are the entry points.

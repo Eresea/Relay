@@ -83,6 +83,19 @@ constructor is the one place that subscribes, routing everything into
 done, with a short grace period before a finished notification is dropped)
 that `HudSurface` renders.
 
+Showing the HUD is split across the two halves, because each owns half of
+the question. The core shows it — `EventSink for AppHandle` calls
+`overlay::show_hud` before emitting any `Notification`, since only the core
+knows a notification is about to exist. The frontend hides it — `HudSurface`
+calls `hide_hud` when its queue empties, since only the frontend knows when
+the grace period has run out. Nothing else shows the HUD, and rendering into
+it does not make it visible: the window is created hidden, so a notification
+emitted without that `show_hud` draws into a window nobody can see. That was
+a real bug, and one that reproduced only off Linux — `visible: false` is not
+honoured identically across platforms (the GTK build maps the HUD at startup
+anyway), which is why `setup` now hides it explicitly rather than trusting
+the window config to give every platform the same starting state.
+
 Background work itself lives in `src-tauri/src/jobs/mod.rs`. `jobs::spawn`
 takes an `async` closure and runs it on `tauri::async_runtime::spawn`, not
 plain `tokio::spawn` — every command in `commands.rs` is a synchronous

@@ -68,6 +68,37 @@ pub fn show_main(app: &AppHandle) -> Result<()> {
     Ok(())
 }
 
+/// Brings the HUD on screen in the lower-right of the monitor holding the
+/// cursor — the corner desktop status overlays conventionally occupy — and
+/// never takes focus: the HUD reports on work, it is not somewhere to type.
+///
+/// A job reports many times over its life, so this returns early when the
+/// window is already up: repositioning under every progress update would make
+/// the overlay jitter across the screen while it counted.
+pub fn show_hud(app: &AppHandle) -> Result<()> {
+    let win = window(app, HUD)?;
+    if win.is_visible().unwrap_or(false) {
+        return Ok(());
+    }
+
+    if let Ok(Some(monitor)) = app
+        .cursor_position()
+        .and_then(|p| app.monitor_from_point(p.x, p.y))
+    {
+        const MARGIN: i32 = 24;
+        let screen = monitor.size();
+        let size = win.outer_size()?;
+        let origin = monitor.position();
+
+        let x = origin.x + screen.width as i32 - size.width as i32 - MARGIN;
+        let y = origin.y + screen.height as i32 - size.height as i32 - MARGIN;
+        win.set_position(tauri::PhysicalPosition::new(x, y))?;
+    }
+
+    win.show()?;
+    Ok(())
+}
+
 pub fn hide_hud(app: &AppHandle) -> Result<()> {
     window(app, HUD)?.hide()?;
     Ok(())

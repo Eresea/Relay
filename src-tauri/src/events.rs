@@ -73,6 +73,16 @@ pub trait EventSink: Clone + Send + Sync + 'static {
 
 impl EventSink for tauri::AppHandle {
     fn emit(&self, event: AppEvent) {
+        // The HUD window is created hidden and nothing else ever shows it, so
+        // without this a notification renders into a window the user never
+        // sees — the whole pipeline runs correctly and silently. Bring it on
+        // screen before emitting the event that fills it.
+        if matches!(event, AppEvent::Notification { .. }) {
+            if let Err(error) = crate::overlay::show_hud(self) {
+                log::error!("could not show the HUD: {error}");
+            }
+        }
+
         if let Err(error) = tauri::Emitter::emit(self, CHANNEL, &event) {
             log::error!("failed to emit an app event: {error}");
         }
