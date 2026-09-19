@@ -11,7 +11,7 @@
 //! tests, with no running Tauri app required. See the tests at the bottom —
 //! they run real concurrent work on a real multi-thread runtime.
 
-pub mod demo;
+pub mod scan;
 
 use std::collections::HashMap;
 use std::future::Future;

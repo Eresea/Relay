@@ -74,8 +74,7 @@ export type CoreCommand =
   | { readonly id: 'open_main' }
   | { readonly id: 'hide_hud' }
   | { readonly id: 'quit' }
-  // Scaffolding — see src-tauri/src/jobs/demo.rs for what removes alongside it.
-  | { readonly id: 'run_demo_job' };
+  | { readonly id: 'scan_home' };
 
 /** What the palette displays for a core-contributed row. Mirrors `CoreCommandMeta`. */
 export interface CoreCommandMeta {
