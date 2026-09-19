@@ -1,0 +1,126 @@
+/* Neutral ramp — zinc 50 to 1000. The whole non-semantic palette.
+ * Theme-independent: semantic tokens below map roles onto these.
+ */
+:root {
+  --zinc-50: #fafafa;
+  --zinc-100: #f4f4f5;
+  --zinc-200: #e4e4e7;
+  --zinc-300: #d4d4d8;
+  --zinc-400: #a1a1aa;
+  --zinc-500: #71717a;
+  --zinc-600: #52525b;
+  --zinc-700: #3f3f46;
+  --zinc-800: #27272a;
+  --zinc-900: #18181b;
+  --zinc-950: #09090b;
+  --zinc-1000: #050506;
+
+  /* One blue. Focus rings, in-progress tints, onboarding. Never a button fill. */
+  --accent: #3b82f6;
+  --accent-ink: #ffffff;
+
+  /* Interaction tints — white over any surface, so hover works everywhere. */
+  --tint-hover: rgb(255 255 255 / 0.04);
+  --tint-selected: rgb(255 255 255 / 0.06);
+  --tint-active: rgb(255 255 255 / 0.07);
+}
+
+/* ── Dark: the default theme ─────────────────────────────────────────────── */
+:root,
+:root[data-theme='dark'] {
+  color-scheme: dark;
+
+  /* Surfaces stack by value, not by shadow. */
+  --bg-sunken: #050506;
+  --bg-app: #09090b;
+  --bg-card: #0d0d10;
+  --bg-raised: #18181b;
+  --bg-overlay: #101013;
+
+  /* Four ink levels. */
+  --text-strong: #fafafa;
+  --text-body: #e4e4e7;
+  --text-muted: #a1a1aa;
+  --text-subtle: #71717a;
+
+  /* Three border weights. */
+  --border-subtle: rgb(255 255 255 / 0.06);
+  --border-default: rgb(255 255 255 / 0.1);
+  --border-strong: rgb(255 255 255 / 0.16);
+  --border-focus: var(--accent);
+
+  /* The primary action is monochrome, not blue. */
+  --primary: #fafafa;
+  --primary-ink: #09090b;
+  --primary-hover: #ffffff;
+
+  /* Status — the only place green/amber/red appear. */
+  --status-running: #3b82f6;
+  --status-waiting: #f59e0b;
+  --status-blocked: #ef4444;
+  --status-done: #10b981;
+  --status-idle: #71717a;
+
+  --success: #10b981;
+  --warning: #f59e0b;
+  --danger: #ef4444;
+  --danger-ink: #ffffff;
+
+  /* Quiet tints of the semantic colours, for alert and badge backgrounds. */
+  --success-tint: rgb(16 185 129 / 0.12);
+  --warning-tint: rgb(245 158 11 / 0.12);
+  --danger-tint: rgb(239 68 68 / 0.12);
+  --accent-tint: rgb(59 130 246 / 0.12);
+
+  /* Scrim behind dialogs and the palette. */
+  --scrim: rgb(0 0 0 / 0.66);
+  --scrim-blur: 8px;
+}
+
+/* ── Light: a complete mirror of every semantic token ────────────────────── */
+:root.light,
+:root[data-theme='light'] {
+  color-scheme: light;
+
+  --bg-sunken: #f4f4f5;
+  --bg-app: #ffffff;
+  --bg-card: #fafafa;
+  --bg-raised: #ffffff;
+  --bg-overlay: #ffffff;
+
+  --text-strong: #09090b;
+  --text-body: #27272a;
+  --text-muted: #52525b;
+  --text-subtle: #71717a;
+
+  --border-subtle: rgb(9 9 11 / 0.06);
+  --border-default: rgb(9 9 11 / 0.12);
+  --border-strong: rgb(9 9 11 / 0.2);
+  --border-focus: var(--accent);
+
+  --primary: #18181b;
+  --primary-ink: #fafafa;
+  --primary-hover: #09090b;
+
+  --status-running: #2563eb;
+  --status-waiting: #d97706;
+  --status-blocked: #dc2626;
+  --status-done: #059669;
+  --status-idle: #a1a1aa;
+
+  --success: #059669;
+  --warning: #d97706;
+  --danger: #dc2626;
+  --danger-ink: #ffffff;
+
+  --success-tint: rgb(5 150 105 / 0.1);
+  --warning-tint: rgb(217 119 6 / 0.1);
+  --danger-tint: rgb(220 38 38 / 0.1);
+  --accent-tint: rgb(59 130 246 / 0.1);
+
+  --tint-hover: rgb(9 9 11 / 0.04);
+  --tint-selected: rgb(9 9 11 / 0.06);
+  --tint-active: rgb(9 9 11 / 0.07);
+
+  --scrim: rgb(9 9 11 / 0.4);
+}

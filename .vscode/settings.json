@@ -1,0 +1,12 @@
+{
+  "editor.formatOnSave": true,
+  "editor.defaultFormatter": "esbenp.prettier-vscode",
+  "[rust]": {
+    "editor.defaultFormatter": "rust-lang.rust-analyzer"
+  },
+  "rust-analyzer.linkedProjects": ["src-tauri/Cargo.toml"],
+  "files.watcherExclude": {
+    "**/src-tauri/target/**": true,
+    "**/.angular/**": true
+  }
+}

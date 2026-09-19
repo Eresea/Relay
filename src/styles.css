@@ -1,0 +1,15 @@
+/* Relay — global stylesheet.
+ * The only file the app links. Import list, nothing else.
+ * Token layer mirrors the Umbra design system's own file structure so that
+ * updates from Umbra can be dropped in file-for-file. See docs/DESIGN.md.
+ */
+@import './styles/tokens/fonts.css';
+@import './styles/tokens/colors.css';
+@import './styles/tokens/entities.css';
+@import './styles/tokens/overlay.css';
+@import './styles/tokens/typography.css';
+@import './styles/tokens/spacing.css';
+@import './styles/tokens/radius.css';
+@import './styles/tokens/elevation.css';
+@import './styles/tokens/motion.css';
+@import './styles/tokens/base.css';

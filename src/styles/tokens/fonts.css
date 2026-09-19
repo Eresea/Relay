@@ -1,0 +1,54 @@
+/* Geist and Geist Mono, vendored.
+ *
+ * Umbra loads these from Google Fonts. Relay is a desktop application: it must
+ * render correctly with the network down, and it should not tell a third party
+ * every time the user opens a window. The binaries are committed under
+ * src/assets/fonts (SIL Open Font License; see docs/DESIGN.md).
+ *
+ * Only the weights the system actually uses are shipped: 400 regular, 500 for
+ * UI labels, 600 for display and the wordmark.
+ */
+@font-face {
+  font-family: 'Geist';
+  font-style: normal;
+  font-weight: 400;
+  font-display: block;
+  src: url('../../assets/fonts/geist-sans-latin-400-normal.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'Geist';
+  font-style: normal;
+  font-weight: 500;
+  font-display: block;
+  src: url('../../assets/fonts/geist-sans-latin-500-normal.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'Geist';
+  font-style: normal;
+  font-weight: 600;
+  font-display: block;
+  src: url('../../assets/fonts/geist-sans-latin-600-normal.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'Geist Mono';
+  font-style: normal;
+  font-weight: 400;
+  font-display: block;
+  src: url('../../assets/fonts/geist-mono-latin-400-normal.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'Geist Mono';
+  font-style: normal;
+  font-weight: 500;
+  font-display: block;
+  src: url('../../assets/fonts/geist-mono-latin-500-normal.woff2') format('woff2');
+}
+
+:root {
+  --font-sans: 'Geist', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --font-mono: 'Geist Mono', ui-monospace, 'SF Mono', 'Cascadia Mono', Menlo, monospace;
+}

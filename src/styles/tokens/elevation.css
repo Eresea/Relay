@@ -1,0 +1,22 @@
+/* Borders do the work shadows usually do. Shadows here are hairline and
+ * almost invisible. No glows, no coloured shadows, no inner shadows beyond
+ * the 4%-white top hairline on keycaps.
+ *
+ * The glass tier is the exception and carries its own shadow — see overlay.css.
+ */
+:root {
+  --shadow-xs: 0 1px 2px rgb(0 0 0 / 0.16);
+  --shadow-md: 0 4px 12px -2px rgb(0 0 0 / 0.28);
+  --shadow-lg: 0 12px 32px -8px rgb(0 0 0 / 0.42);
+
+  --focus-ring: 0 0 0 3px rgb(59 130 246 / 0.22);
+  --keycap-hairline: inset 0 1px 0 rgb(255 255 255 / 0.04);
+}
+
+:root.light,
+:root[data-theme='light'] {
+  --shadow-xs: 0 1px 2px rgb(9 9 11 / 0.06);
+  --shadow-md: 0 4px 12px -2px rgb(9 9 11 / 0.1);
+  --shadow-lg: 0 12px 32px -8px rgb(9 9 11 / 0.14);
+  --keycap-hairline: inset 0 1px 0 rgb(255 255 255 / 0.8);
+}

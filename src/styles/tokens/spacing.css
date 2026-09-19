@@ -1,0 +1,26 @@
+/* 2px base unit. Only these steps are used. */
+:root {
+  --space-1: 2px;
+  --space-2: 4px;
+  --space-3: 6px;
+  --space-4: 8px;
+  --space-5: 12px;
+  --space-6: 16px;
+  --space-7: 24px;
+  --space-8: 32px;
+  --space-9: 48px;
+  --space-10: 64px;
+
+  /* Fixed layout constants — the desktop shell grid. */
+  --sidebar-width: 248px;
+  --sidebar-width-collapsed: 56px;
+  --titlebar-height: 38px;
+  --toolbar-height: 44px;
+  --row-height: 34px;
+  --content-max: 760px;
+
+  /* Control heights. */
+  --control-sm: 28px;
+  --control-md: 32px;
+  --control-lg: 38px;
+}

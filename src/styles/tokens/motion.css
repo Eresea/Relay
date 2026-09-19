@@ -1,0 +1,28 @@
+/* Short and unshowy. Nothing bounces, nothing springs, nothing exceeds 240ms. */
+:root {
+  --dur-press: 80ms;
+  --dur-hover: 120ms;
+  --dur-panel: 160ms;
+  --dur-overlay: 240ms;
+
+  --ease-standard: cubic-bezier(0.2, 0, 0, 1);
+  --ease-overlay: cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* All durations collapse to zero under reduced motion. */
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --dur-press: 0ms;
+    --dur-hover: 0ms;
+    --dur-panel: 0ms;
+    --dur-overlay: 0ms;
+  }
+
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

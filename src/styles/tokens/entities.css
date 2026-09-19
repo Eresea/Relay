@@ -1,0 +1,62 @@
+/* Entity hues carry identity, never state.
+ *
+ * Seven hues so that every long-lived object Relay supervises — an agent, a
+ * job, a service, a watched repo — is recognisable at a glance across every
+ * surface. Assign by stable hash of the object's id, or set explicitly; the
+ * same object keeps the same hue everywhere.
+ *
+ * Three rules:
+ *   1. Hue means WHICH. Status means HOW IT IS GOING. Never colour a tile red
+ *      to mean failure — that is --status-blocked on the dot and the track.
+ *   2. Hue only appears on tiles, dots and tracks. Not on text, not on
+ *      container borders, not on backgrounds, not on section headers.
+ *   3. One hue per object, not per row. Five agents show five hues; five
+ *      files show none.
+ *
+ * The recipe is fixed: 13% fill, 30% edge, full-saturation glyph and track.
+ */
+:root {
+  --entity-indigo: #6366f1;
+  --entity-violet: #8b5cf6;
+  --entity-cyan: #06b6d4;
+  --entity-emerald: #10b981;
+  --entity-amber: #f59e0b;
+  --entity-orange: #f97316;
+  --entity-rose: #f43f5e;
+
+  --entity-fill-alpha: 0.13;
+  --entity-edge-alpha: 0.3;
+}
+
+/* Tile recipe. Set --entity-hue on the element (see hueFor() in
+ * src/app/core/entity-hue.ts) and the tile, dot and track all follow.
+ */
+.u-entity-tile {
+  --entity-hue: var(--entity-indigo);
+
+  display: grid;
+  place-items: center;
+  inline-size: var(--control-md);
+  block-size: var(--control-md);
+  border: 1px solid color-mix(in srgb, var(--entity-hue) 30%, transparent);
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--entity-hue) 13%, transparent);
+  color: var(--entity-hue);
+  flex: none;
+}
+
+.u-entity-track {
+  --entity-hue: var(--entity-indigo);
+
+  block-size: 4px;
+  border-radius: var(--radius-pill);
+  background: color-mix(in srgb, var(--entity-hue) 13%, transparent);
+  overflow: hidden;
+}
+
+.u-entity-track > .u-entity-track-fill {
+  block-size: 100%;
+  border-radius: inherit;
+  background: var(--entity-hue);
+  transition: inline-size var(--dur-panel) var(--ease-standard);
+}

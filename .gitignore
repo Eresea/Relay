@@ -1,0 +1,35 @@
+# dependencies
+node_modules/
+.pnp/
+.pnp.js
+
+# angular build output
+dist/
+.angular/
+*.tsbuildinfo
+
+# rust / tauri
+src-tauri/target/
+src-tauri/gen/
+**/*.rs.bk
+
+# tests & coverage
+coverage/
+.nyc_output/
+
+# editors
+.idea/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+
+# env & local config
+.env
+.env.*
+!.env.example
+*.local
+
+# logs
+*.log
+npm-debug.log*

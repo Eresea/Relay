@@ -1,0 +1,133 @@
+:host {
+  display: flex;
+  flex-direction: column;
+  inline-size: 100%;
+  max-block-size: 100vh;
+  overflow: hidden;
+}
+
+/* The field reads as a line, not a control: the palette window *is* the input.
+ * One surrounding indicator, owned by the wrapper — never a second inner ring.
+ */
+.field {
+  display: flex;
+  gap: var(--space-5);
+  align-items: center;
+  flex: none;
+  block-size: var(--control-lg);
+  padding: 0 var(--space-6);
+  color: var(--text-subtle);
+  border-block-end: 1px solid var(--border-subtle);
+}
+
+.field input {
+  flex: 1;
+  min-inline-size: 0;
+  font-size: var(--text-16);
+  letter-spacing: var(--tracking-body);
+  color: var(--text-strong);
+  background: none;
+  border: none;
+  outline: none;
+}
+
+.field input::placeholder {
+  color: var(--text-subtle);
+}
+
+.results {
+  flex: 1;
+  min-block-size: 0;
+  overflow-y: auto;
+  padding: var(--space-3) 0 var(--space-4);
+  scroll-padding-block: var(--space-6);
+}
+
+.heading {
+  padding: var(--space-4) var(--space-6) var(--space-2);
+}
+
+.row {
+  display: flex;
+  gap: var(--space-5);
+  align-items: center;
+  inline-size: 100%;
+  block-size: var(--row-height);
+  padding: 0 var(--space-6);
+  text-align: start;
+  color: var(--text-muted);
+  border-radius: 0;
+  transition:
+    background-color var(--dur-hover) var(--ease-standard),
+    color var(--dur-hover) var(--ease-standard);
+}
+
+/* Selection is a persistent tint plus medium weight — never an accent fill. */
+.row.is-active {
+  color: var(--text-body);
+  background: var(--tint-selected);
+}
+
+.row.is-active .label {
+  font-weight: var(--weight-medium);
+  color: var(--text-strong);
+}
+
+.tile {
+  inline-size: 20px;
+  block-size: 20px;
+  border-radius: var(--radius-sm);
+}
+
+.glyph {
+  color: var(--text-subtle);
+}
+
+.row.is-active .glyph {
+  color: var(--text-body);
+}
+
+.label {
+  font-size: var(--text-13);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.hint {
+  flex: 1;
+  font-size: var(--text-12);
+  color: var(--text-subtle);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Push the keycaps to the end when there is no hint to do it. */
+.hint:not(:last-child),
+.label:last-child {
+  margin-inline-end: auto;
+}
+
+.row:not(:has(.hint)) .label {
+  flex: 1;
+}
+
+/* Empty states are designed, not apologised for. */
+.empty {
+  padding: var(--space-8) var(--space-6);
+  text-align: center;
+}
+
+.empty .title {
+  margin: 0 0 var(--space-2);
+  font-size: var(--text-13);
+  font-weight: var(--weight-medium);
+  color: var(--text-body);
+}
+
+.empty .body {
+  margin: 0;
+  font-size: var(--text-12);
+  color: var(--text-subtle);
+}

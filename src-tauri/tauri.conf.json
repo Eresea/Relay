@@ -1,0 +1,72 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Relay",
+  "version": "0.1.0",
+  "identifier": "dev.eresea.relay",
+  "build": {
+    "beforeDevCommand": "npm run start",
+    "beforeBuildCommand": "npm run build",
+    "devUrl": "http://localhost:1420",
+    "frontendDist": "../dist/browser"
+  },
+  "app": {
+    "withGlobalTauri": false,
+    "security": {
+      "csp": "default-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self'; img-src 'self' asset: data:; connect-src 'self' ipc: http://ipc.localhost"
+    },
+    "windows": [
+      {
+        "label": "main",
+        "title": "Relay",
+        "url": "index.html?surface=main",
+        "width": 1040,
+        "height": 680,
+        "minWidth": 560,
+        "minHeight": 400,
+        "decorations": false,
+        "center": true,
+        "visible": false,
+        "theme": "Dark"
+      },
+      {
+        "label": "palette",
+        "title": "Relay command palette",
+        "url": "index.html?surface=palette",
+        "width": 640,
+        "height": 420,
+        "resizable": false,
+        "decorations": false,
+        "transparent": true,
+        "shadow": false,
+        "alwaysOnTop": true,
+        "skipTaskbar": true,
+        "center": true,
+        "visible": false,
+        "focus": false
+      },
+      {
+        "label": "hud",
+        "title": "Relay status",
+        "url": "index.html?surface=hud",
+        "width": 360,
+        "height": 132,
+        "resizable": false,
+        "decorations": false,
+        "transparent": true,
+        "shadow": false,
+        "alwaysOnTop": true,
+        "skipTaskbar": true,
+        "focus": false,
+        "visible": false
+      }
+    ]
+  },
+  "bundle": {
+    "active": true,
+    "targets": ["nsis", "deb", "appimage"],
+    "icon": ["icons/32x32.png", "icons/128x128.png", "icons/128x128@2x.png", "icons/icon.ico"],
+    "category": "Productivity",
+    "shortDescription": "A lightweight desktop control layer",
+    "longDescription": "Relay unifies projects, tasks, agents, notifications and system actions behind a fast global command interface, staying out of the way until you call it."
+  }
+}
