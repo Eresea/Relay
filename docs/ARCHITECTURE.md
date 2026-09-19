@@ -92,9 +92,10 @@ the grace period has run out. Nothing else shows the HUD, and rendering into
 it does not make it visible: the window is created hidden, so a notification
 emitted without that `show_hud` draws into a window nobody can see. That was
 a real bug, and one that reproduced only off Linux — `visible: false` is not
-honoured identically across platforms (the GTK build maps the HUD at startup
-anyway), which is why `setup` now hides it explicitly rather than trusting
-the window config to give every platform the same starting state.
+honoured identically across platforms (the GTK build maps both the HUD and
+the palette at startup anyway, Windows keeps both hidden), which is why
+`setup` now hides each explicitly rather than trusting the window config to
+give every platform the same starting state.
 
 Background work itself lives in `src-tauri/src/jobs/mod.rs`. `jobs::spawn`
 takes an `async` closure and runs it on `tauri::async_runtime::spawn`, not

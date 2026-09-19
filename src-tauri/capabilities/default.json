@@ -11,6 +11,7 @@
     "core:window:allow-close",
     "opener:default",
     "store:default",
-    "log:default"
+    "log:default",
+    "autostart:default"
   ]
 }

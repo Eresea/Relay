@@ -18,6 +18,7 @@ use serde::{Deserialize, Serialize};
 use tauri::AppHandle;
 
 use crate::error::Result;
+use crate::events::{AppEvent, EventSink};
 use crate::jobs::{JobId, JobRegistry};
 use crate::overlay;
 
@@ -68,7 +69,11 @@ pub enum CoreCommand {
 #[tauri::command]
 pub fn run_core_command(app: AppHandle, command: CoreCommand) -> Result<()> {
     match command {
-        CoreCommand::OpenSettings => overlay::show_main(&app),
+        CoreCommand::OpenSettings => {
+            overlay::show_main(&app)?;
+            app.emit(AppEvent::OpenSettingsRequested);
+            Ok(())
+        }
         CoreCommand::OpenMain => overlay::show_main(&app),
         CoreCommand::HideHud => overlay::hide_hud(&app),
         CoreCommand::Quit => {

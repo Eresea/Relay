@@ -2,6 +2,7 @@ import { ChangeDetectionStrategy, Component, DestroyRef, inject, signal } from '
 
 import { TauriBridge } from '@core/tauri';
 import { ThemeService } from '@core/theme';
+import { Settings } from '@features/settings/settings';
 import { Icon } from '@shared/icon';
 import { Kbd } from '@shared/kbd';
 
@@ -15,10 +16,17 @@ import { Kbd } from '@shared/kbd';
 @Component({
   selector: 'rl-home',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [Icon, Kbd],
+  imports: [Icon, Kbd, Settings],
   template: `
     <header class="titlebar u-chrome" data-tauri-drag-region>
-      <span class="wordmark">Relay</span>
+      @if (view() === 'settings') {
+        <button type="button" class="back" (click)="view.set('home')" aria-label="Back">
+          <rl-icon name="arrow-left" [size]="16" />
+          <span>Settings</span>
+        </button>
+      } @else {
+        <span class="wordmark">Relay</span>
+      }
       <div class="window-controls">
         <button type="button" class="theme" (click)="theme.toggle()" aria-label="Toggle theme">
           <rl-icon [name]="theme.theme() === 'dark' ? 'sun' : 'moon'" [size]="16" />
@@ -40,12 +48,16 @@ import { Kbd } from '@shared/kbd';
       </div>
     </header>
 
-    <main>
-      <div class="cold-start">
-        <p class="u-title">A quiet place to work</p>
-        <p class="body">Everything else is behind <rl-kbd [keys]="paletteKeys" />.</p>
-      </div>
-    </main>
+    @if (view() === 'settings') {
+      <rl-settings />
+    } @else {
+      <main>
+        <div class="cold-start">
+          <p class="u-title">A quiet place to work</p>
+          <p class="body">Everything else is behind <rl-kbd [keys]="paletteKeys" />.</p>
+        </div>
+      </main>
+    }
   `,
   styles: `
     :host {
@@ -70,6 +82,23 @@ import { Kbd } from '@shared/kbd';
       font-weight: var(--weight-semibold);
       letter-spacing: -0.045em;
       color: var(--text-body);
+    }
+
+    .back {
+      display: flex;
+      align-items: center;
+      gap: var(--space-3);
+      margin-inline-start: calc(var(--space-3) * -1);
+      padding: var(--space-2) var(--space-3);
+      font-size: var(--text-13);
+      font-weight: var(--weight-semibold);
+      color: var(--text-body);
+      border-radius: var(--radius-sm);
+      transition: background-color var(--dur-hover) var(--ease-standard);
+    }
+
+    .back:hover {
+      background: var(--tint-hover);
     }
 
     .window-controls {
@@ -128,6 +157,7 @@ import { Kbd } from '@shared/kbd';
 export class Home {
   protected readonly theme = inject(ThemeService);
   protected readonly paletteKeys = ['Ctrl', 'Space'] as const;
+  protected readonly view = signal<'home' | 'settings'>('home');
 
   private readonly tauri = inject(TauriBridge);
   protected readonly maximized = signal(false);
@@ -140,6 +170,16 @@ export class Home {
       .onWindowResized(
         () => void this.tauri.isWindowMaximized().then((value) => this.maximized.set(value)),
       )
+      .then((unlisten) => destroyRef.onDestroy(unlisten));
+
+    // The palette that dispatched "Open settings" and this window are
+    // separate webviews with no shared JS state, so the core tells us to
+    // switch views over the event channel rather than us reading any local
+    // signal it could have set directly.
+    void this.tauri
+      .onEvent((event) => {
+        if (event.type === 'openSettingsRequested') this.view.set('settings');
+      })
       .then((unlisten) => destroyRef.onDestroy(unlisten));
   }
 

@@ -1,5 +1,7 @@
 import { Injectable } from '@angular/core';
 
+import type { LazyStore } from '@tauri-apps/plugin-store';
+
 import type { AppEvent } from './events';
 
 /**
@@ -97,6 +99,52 @@ export class TauriBridge {
     if (!this.available) return () => {};
     const { listen } = await import('@tauri-apps/api/event');
     return listen<AppEvent>('relay://event', (message) => handler(message.payload));
+  }
+
+  private settingsStore: LazyStore | null = null;
+
+  /**
+   * Reads a persisted setting from `settings.json` in the OS app-data
+   * directory — the one real, on-disk settings store, as opposed to a
+   * per-window UI preference like theme. `fallback` covers both "never set"
+   * and running outside Tauri.
+   */
+  async getSetting<T>(key: string, fallback: T): Promise<T> {
+    if (!this.available) return fallback;
+    const store = await this.getSettingsStore();
+    const value = await store.get<T>(key);
+    return value ?? fallback;
+  }
+
+  /** Persists a setting to `settings.json`. */
+  async setSetting(key: string, value: unknown): Promise<void> {
+    if (!this.available) return;
+    const store = await this.getSettingsStore();
+    await store.set(key, value);
+  }
+
+  private async getSettingsStore(): Promise<LazyStore> {
+    // A `LazyStore` only touches the filesystem on first get/set, so
+    // constructing it here rather than at module load keeps this a no-op
+    // outside Tauri, matching every other method on this bridge.
+    this.settingsStore ??= new (await import('@tauri-apps/plugin-store')).LazyStore(
+      'settings.json',
+    );
+    return this.settingsStore;
+  }
+
+  /** Whether Relay is registered to launch automatically at login. */
+  async isAutostartEnabled(): Promise<boolean> {
+    if (!this.available) return false;
+    const { isEnabled } = await import('@tauri-apps/plugin-autostart');
+    return isEnabled();
+  }
+
+  /** Enables or disables launching Relay automatically at login, hidden — the same as any other launch. */
+  async setAutostart(enabled: boolean): Promise<void> {
+    if (!this.available) return;
+    const { enable, disable } = await import('@tauri-apps/plugin-autostart');
+    await (enabled ? enable() : disable());
   }
 
   private async invoke<T>(command: string, args: Record<string, unknown> = {}): Promise<T | null> {

@@ -5,17 +5,6 @@
 //! through a command's return value. The frontend registers exactly one
 //! listener (`core/tauri.ts`) and dispatches on `type`, so a new event never
 //! needs new frontend plumbing to arrive.
-//!
-//! Nothing in this file has a caller right now — `jobs::scan`, the pipeline's
-//! one real producer, was removed once it had proven the pipeline out (see
-//! docs/ARCHITECTURE.md's "Not built yet"). The whole module is allowed dead
-//! code as a unit for that reason, rather than item by item: every test still
-//! passes, and the next real job wires straight back into this without
-//! changes.
-#![allow(
-    dead_code,
-    reason = "the job/event pipeline has no producer right now — see docs/ARCHITECTURE.md"
-)]
 
 use serde::Serialize;
 
@@ -31,7 +20,14 @@ pub enum AppEvent {
     /// The set of core-contributed palette commands changed and should be
     /// re-fetched. Nothing emits this yet — `core_commands()` is static —
     /// but a per-project command set will need it.
+    #[allow(dead_code, reason = "wire-format variant with no producer yet")]
     CommandsChanged,
+
+    /// The "Open settings" command was run. `Home` listens for this to switch
+    /// its own view — a plain `show_main` cannot do that by itself, since the
+    /// palette that dispatched the command and the main window that must
+    /// react to it are separate webviews with no shared JS state.
+    OpenSettingsRequested,
 
     /// A notification to show in the HUD. `hue_source` names the long-lived
     /// object this is about (a job id today, an agent id once agents exist)
@@ -65,6 +61,10 @@ pub enum AppEvent {
 
 #[derive(Debug, Clone, Copy, Serialize)]
 #[serde(rename_all = "camelCase")]
+#[allow(
+    dead_code,
+    reason = "constructed only by AppEvent::Notification, which has no producer right now"
+)]
 pub enum NotificationStatus {
     Running,
     Waiting,
@@ -124,6 +124,12 @@ mod tests {
     fn commands_changed_is_a_bare_tag() {
         let json = serde_json::to_string(&AppEvent::CommandsChanged).unwrap();
         assert_eq!(json, r#"{"type":"commandsChanged"}"#);
+    }
+
+    #[test]
+    fn open_settings_requested_is_a_bare_tag() {
+        let json = serde_json::to_string(&AppEvent::OpenSettingsRequested).unwrap();
+        assert_eq!(json, r#"{"type":"openSettingsRequested"}"#);
     }
 
     #[test]

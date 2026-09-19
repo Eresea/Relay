@@ -75,10 +75,6 @@ pub fn show_main(app: &AppHandle) -> Result<()> {
 /// A job reports many times over its life, so this returns early when the
 /// window is already up: repositioning under every progress update would make
 /// the overlay jitter across the screen while it counted.
-#[allow(
-    dead_code,
-    reason = "called from EventSink::emit, itself unreachable with no job producer right now"
-)]
 pub fn show_hud(app: &AppHandle) -> Result<()> {
     let win = window(app, HUD)?;
     if win.is_visible().unwrap_or(false) {

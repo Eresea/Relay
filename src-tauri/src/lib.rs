@@ -25,6 +25,12 @@ pub fn run() {
             }
         }));
         builder = builder.plugin(tauri_plugin_window_state::Builder::default().build());
+        // No `--show` arg: a login launch stays hidden, same as any other
+        // launch — the tray and the global shortcut are the entry points.
+        builder = builder.plugin(tauri_plugin_autostart::init(
+            tauri_plugin_autostart::MacosLauncher::LaunchAgent,
+            None,
+        ));
     }
 
     builder
@@ -75,13 +81,18 @@ pub fn run() {
             }
 
             // `visible: false` in tauri.conf.json is not honoured identically
-            // on every platform — the GTK build maps the HUD at startup
-            // regardless, while Windows keeps it hidden — so put it in a known
-            // state here rather than trusting the window config. Without this
-            // the overlay's behaviour differs per platform before a single
-            // notification has been emitted.
+            // on every platform — the GTK build maps both overlay windows at
+            // startup regardless, while Windows keeps them hidden — so put
+            // both in a known state here rather than trusting the window
+            // config. Without this the palette sits open over the desktop
+            // the instant Relay launches on Linux, and the HUD's behaviour
+            // differs per platform before a single notification has been
+            // emitted.
             if let Err(error) = overlay::hide_hud(app.handle()) {
                 log::warn!("could not hide the HUD at startup: {error}");
+            }
+            if let Err(error) = overlay::hide_palette(app.handle()) {
+                log::warn!("could not hide the palette at startup: {error}");
             }
 
             // The main window is created hidden so that launching Relay at
