@@ -50,13 +50,7 @@ pub fn core_commands() -> Vec<CoreCommandMeta> {
     vec![
         CoreCommandMeta::new("open_main", "Open Relay window", "Relay", "panel-left"),
         CoreCommandMeta::new("hide_hud", "Dismiss status overlay", "Relay", "eye"),
-        // Scaffolding — see jobs/demo.rs for what removes alongside this.
-        CoreCommandMeta::new(
-            "run_demo_job",
-            "Run demo notification",
-            "Developer",
-            "loader-circle",
-        ),
+        CoreCommandMeta::new("scan_home", "Scan home folder", "Relay", "folder"),
     ]
 }
 
@@ -70,10 +64,9 @@ pub enum CoreCommand {
     OpenMain,
     HideHud,
     Quit,
-    /// Exercises the notification pipeline without a real producer. Remove
-    /// once agents or another background job give the HUD something real to
-    /// show — see jobs/demo.rs.
-    RunDemoJob,
+    /// Walks the home directory in the background, reporting progress
+    /// through the job/event pipeline. See `jobs::scan`.
+    ScanHome,
 }
 
 #[tauri::command]
@@ -90,10 +83,7 @@ pub fn run_core_command(
             app.exit(0);
             Ok(())
         }
-        CoreCommand::RunDemoJob => {
-            jobs::demo::start(app, jobs.inner().clone());
-            Ok(())
-        }
+        CoreCommand::ScanHome => jobs::scan::start(app, jobs.inner().clone()),
     }
 }
 
