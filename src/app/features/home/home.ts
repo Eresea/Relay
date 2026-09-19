@@ -1,12 +1,16 @@
-import { ChangeDetectionStrategy, Component, inject } from '@angular/core';
+import { ChangeDetectionStrategy, Component, DestroyRef, inject, signal } from '@angular/core';
 
+import { TauriBridge } from '@core/tauri';
 import { ThemeService } from '@core/theme';
 import { Icon } from '@shared/icon';
 import { Kbd } from '@shared/kbd';
 
 /**
  * The main window. Deliberately almost empty: Relay's job is to stay out of the
- * way, and everything that matters is behind the palette.
+ * way, and everything that matters is behind the palette. `decorations: false`
+ * in tauri.conf.json means the OS draws no title bar of its own, so the
+ * minimize/maximize/close buttons here are the only way to work the window —
+ * without them the window could only be closed from the tray.
  */
 @Component({
   selector: 'rl-home',
@@ -15,9 +19,25 @@ import { Kbd } from '@shared/kbd';
   template: `
     <header class="titlebar u-chrome" data-tauri-drag-region>
       <span class="wordmark">Relay</span>
-      <button type="button" class="theme" (click)="theme.toggle()" aria-label="Toggle theme">
-        <rl-icon [name]="theme.theme() === 'dark' ? 'sun' : 'moon'" [size]="16" />
-      </button>
+      <div class="window-controls">
+        <button type="button" class="theme" (click)="theme.toggle()" aria-label="Toggle theme">
+          <rl-icon [name]="theme.theme() === 'dark' ? 'sun' : 'moon'" [size]="16" />
+        </button>
+        <button type="button" class="window-btn" (click)="minimize()" aria-label="Minimize">
+          <rl-icon name="minus" [size]="14" />
+        </button>
+        <button
+          type="button"
+          class="window-btn"
+          (click)="toggleMaximize()"
+          [attr.aria-label]="maximized() ? 'Restore' : 'Maximize'"
+        >
+          <rl-icon [name]="maximized() ? 'copy' : 'square'" [size]="14" />
+        </button>
+        <button type="button" class="window-btn close" (click)="close()" aria-label="Close">
+          <rl-icon name="x" [size]="14" />
+        </button>
+      </div>
     </header>
 
     <main>
@@ -52,7 +72,14 @@ import { Kbd } from '@shared/kbd';
       color: var(--text-body);
     }
 
-    .theme {
+    .window-controls {
+      display: flex;
+      align-items: center;
+      gap: var(--space-1);
+    }
+
+    .theme,
+    .window-btn {
       display: grid;
       place-items: center;
       inline-size: var(--control-sm);
@@ -64,9 +91,15 @@ import { Kbd } from '@shared/kbd';
         color var(--dur-hover) var(--ease-standard);
     }
 
-    .theme:hover {
+    .theme:hover,
+    .window-btn:hover {
       color: var(--text-body);
       background: var(--tint-hover);
+    }
+
+    .window-btn.close:hover {
+      color: var(--danger-ink);
+      background: var(--danger);
     }
 
     main {
@@ -95,4 +128,30 @@ import { Kbd } from '@shared/kbd';
 export class Home {
   protected readonly theme = inject(ThemeService);
   protected readonly paletteKeys = ['Ctrl', 'Space'] as const;
+
+  private readonly tauri = inject(TauriBridge);
+  protected readonly maximized = signal(false);
+
+  constructor() {
+    void this.tauri.isWindowMaximized().then((value) => this.maximized.set(value));
+
+    const destroyRef = inject(DestroyRef);
+    void this.tauri
+      .onWindowResized(
+        () => void this.tauri.isWindowMaximized().then((value) => this.maximized.set(value)),
+      )
+      .then((unlisten) => destroyRef.onDestroy(unlisten));
+  }
+
+  protected minimize(): void {
+    void this.tauri.minimizeWindow();
+  }
+
+  protected toggleMaximize(): void {
+    void this.tauri.toggleMaximizeWindow();
+  }
+
+  protected close(): void {
+    void this.tauri.closeWindow();
+  }
 }

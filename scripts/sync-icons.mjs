@@ -32,16 +32,19 @@ const ICONS = [
   'info',
   'library',
   'loader-circle',
+  'minus',
   'moon',
   'panel-left',
   'pencil',
   'plus',
   'search',
   'settings',
+  'square',
   'star',
   'sun',
   'trash-2',
   'triangle-alert',
+  'x',
 ];
 
 await mkdir(OUT, { recursive: true });

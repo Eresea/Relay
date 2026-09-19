@@ -45,6 +45,47 @@ export class TauriBridge {
     return (await this.invoke<CoreCommandMeta[]>('core_commands')) ?? [];
   }
 
+  /** Minimizes the current window to the taskbar/dock. */
+  async minimizeWindow(): Promise<void> {
+    if (!this.available) return;
+    const { getCurrentWindow } = await import('@tauri-apps/api/window');
+    await getCurrentWindow().minimize();
+  }
+
+  /** Toggles the current window between maximized and its previous size. */
+  async toggleMaximizeWindow(): Promise<void> {
+    if (!this.available) return;
+    const { getCurrentWindow } = await import('@tauri-apps/api/window');
+    await getCurrentWindow().toggleMaximize();
+  }
+
+  /** Closes the current window. On the main window this quits Relay's visible surface, not the tray process. */
+  async closeWindow(): Promise<void> {
+    if (!this.available) return;
+    const { getCurrentWindow } = await import('@tauri-apps/api/window');
+    await getCurrentWindow().close();
+  }
+
+  /** Whether the current window is currently maximized. */
+  async isWindowMaximized(): Promise<boolean> {
+    if (!this.available) return false;
+    const { getCurrentWindow } = await import('@tauri-apps/api/window');
+    return getCurrentWindow().isMaximized();
+  }
+
+  /**
+   * Fires whenever the current window is resized, which includes every
+   * maximize/restore toggle. Callers re-check `isWindowMaximized()` on each
+   * call rather than have this report the new state itself, since Tauri's
+   * event only signals that a resize happened.
+   */
+  async onWindowResized(handler: () => void): Promise<() => void> {
+    // eslint-disable-next-line @typescript-eslint/no-empty-function -- intentional no-op: nothing to unsubscribe from when there is no live Tauri event system
+    if (!this.available) return () => {};
+    const { getCurrentWindow } = await import('@tauri-apps/api/window');
+    return getCurrentWindow().onResized(() => handler());
+  }
+
   /**
    * Subscribes to the core's single event channel. Returns the unlisten
    * function; callers dispose it on teardown. A no-op outside Tauri, so
