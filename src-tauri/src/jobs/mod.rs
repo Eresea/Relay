@@ -19,8 +19,15 @@
 //! `AppHandle` directly, so job logic can be exercised with a fake sink in
 //! tests, with no running Tauri app required. See the tests at the bottom —
 //! they run real concurrent work on a real multi-thread runtime.
-
-pub mod scan;
+//!
+//! `spawn` and `JobContext` have no caller right now — `jobs::scan`, the one
+//! real job that used them, was removed once it had proven the pipeline out
+//! (see docs/ARCHITECTURE.md's "Not built yet"). `JobRegistry` stays fully
+//! live: `cancel_job` and `is_job_running` are real commands today.
+#![allow(
+    dead_code,
+    reason = "no job producer currently calls spawn — see docs/ARCHITECTURE.md"
+)]
 
 use std::collections::HashMap;
 use std::future::Future;

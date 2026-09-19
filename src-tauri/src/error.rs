@@ -15,6 +15,10 @@ pub enum Error {
     UnknownJob(JobId),
 
     #[error("job `{0}` was cancelled")]
+    #[allow(
+        dead_code,
+        reason = "returned only by JobContext::checkpoint, which has no caller right now"
+    )]
     JobCancelled(JobId),
 
     #[error(transparent)]

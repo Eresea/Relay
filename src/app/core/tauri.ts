@@ -114,8 +114,7 @@ export type CoreCommand =
   | { readonly id: 'open_settings' }
   | { readonly id: 'open_main' }
   | { readonly id: 'hide_hud' }
-  | { readonly id: 'quit' }
-  | { readonly id: 'scan_home' };
+  | { readonly id: 'quit' };
 
 /** What the palette displays for a core-contributed row. Mirrors `CoreCommandMeta`. */
 export interface CoreCommandMeta {

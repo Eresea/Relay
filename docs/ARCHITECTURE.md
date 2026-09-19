@@ -129,12 +129,11 @@ implements for production and which tests implement with an in-memory
 `FakeSink`. That makes the whole job pipeline — including the concurrency
 proof above — testable with `cargo test` and no live Tauri app.
 
-`src-tauri/src/jobs/scan.rs` is the first real producer: it walks the user's
-home directory with `tokio::fs`, counting files and folders and reporting
-progress every 200 entries, wired to the "Scan home folder" palette command
-(`CoreCommand::ScanHome`). It is deliberately simple — a count, not an index —
-because its job is exercising checkpointing and progress reporting against
-real, unpredictable I/O, not building the eventual project-scan feature.
+A home-directory scan (`jobs::scan`) exercised this pipeline end to end for a
+while — real, unpredictable I/O rather than a sleep loop — and served its
+purpose: it is what caught both the `tokio::spawn`-without-a-runtime crash and
+the HUD never being shown. It has since been removed; the pipeline itself is
+built and tested, waiting on its first lasting producer.
 
 One caveat worth carrying forward: the release Cargo profile sets
 `panic = "abort"`. A job spawned with `tokio::spawn` that panics currently
@@ -165,5 +164,5 @@ a worse launcher.
 Project and task models, agent orchestration, external service connectors,
 settings persistence beyond the store plugin, and the context layer that lets
 commands know what you are working on. The events/jobs pipeline above is
-built and wired end to end, with a home-directory scan as its first real
-producer — an agent run and a file watcher still need to be written.
+built and tested end to end but currently has no producer — an agent run, a
+project scan, a file watcher all still need to be written.

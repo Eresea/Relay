@@ -18,7 +18,7 @@ use serde::{Deserialize, Serialize};
 use tauri::AppHandle;
 
 use crate::error::Result;
-use crate::jobs::{self, JobId, JobRegistry};
+use crate::jobs::{JobId, JobRegistry};
 use crate::overlay;
 
 #[derive(Debug, Clone, Serialize)]
@@ -50,7 +50,6 @@ pub fn core_commands() -> Vec<CoreCommandMeta> {
     vec![
         CoreCommandMeta::new("open_main", "Open Relay window", "Relay", "panel-left"),
         CoreCommandMeta::new("hide_hud", "Dismiss status overlay", "Relay", "eye"),
-        CoreCommandMeta::new("scan_home", "Scan home folder", "Relay", "folder"),
     ]
 }
 
@@ -64,17 +63,10 @@ pub enum CoreCommand {
     OpenMain,
     HideHud,
     Quit,
-    /// Walks the home directory in the background, reporting progress
-    /// through the job/event pipeline. See `jobs::scan`.
-    ScanHome,
 }
 
 #[tauri::command]
-pub fn run_core_command(
-    app: AppHandle,
-    jobs: tauri::State<JobRegistry>,
-    command: CoreCommand,
-) -> Result<()> {
+pub fn run_core_command(app: AppHandle, command: CoreCommand) -> Result<()> {
     match command {
         CoreCommand::OpenSettings => overlay::show_main(&app),
         CoreCommand::OpenMain => overlay::show_main(&app),
@@ -83,7 +75,6 @@ pub fn run_core_command(
             app.exit(0);
             Ok(())
         }
-        CoreCommand::ScanHome => jobs::scan::start(app, jobs.inner().clone()),
     }
 }
 

@@ -5,6 +5,17 @@
 //! through a command's return value. The frontend registers exactly one
 //! listener (`core/tauri.ts`) and dispatches on `type`, so a new event never
 //! needs new frontend plumbing to arrive.
+//!
+//! Nothing in this file has a caller right now — `jobs::scan`, the pipeline's
+//! one real producer, was removed once it had proven the pipeline out (see
+//! docs/ARCHITECTURE.md's "Not built yet"). The whole module is allowed dead
+//! code as a unit for that reason, rather than item by item: every test still
+//! passes, and the next real job wires straight back into this without
+//! changes.
+#![allow(
+    dead_code,
+    reason = "the job/event pipeline has no producer right now — see docs/ARCHITECTURE.md"
+)]
 
 use serde::Serialize;
 
@@ -20,7 +31,6 @@ pub enum AppEvent {
     /// The set of core-contributed palette commands changed and should be
     /// re-fetched. Nothing emits this yet — `core_commands()` is static —
     /// but a per-project command set will need it.
-    #[allow(dead_code, reason = "wire-format variant with no producer yet")]
     CommandsChanged,
 
     /// A notification to show in the HUD. `hue_source` names the long-lived
@@ -57,9 +67,7 @@ pub enum AppEvent {
 #[serde(rename_all = "camelCase")]
 pub enum NotificationStatus {
     Running,
-    #[allow(dead_code, reason = "wire-format variant with no producer yet")]
     Waiting,
-    #[allow(dead_code, reason = "wire-format variant with no producer yet")]
     Blocked,
     Done,
 }
