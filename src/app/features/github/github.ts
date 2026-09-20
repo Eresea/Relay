@@ -8,6 +8,7 @@ import {
   ruleFor,
   type DeviceAuthorization,
   type GithubConnectorSettings,
+  type GithubStatus,
   type NotificationSettings,
   type NotificationTypeRule,
   type PrEventKind,
@@ -633,6 +634,7 @@ export class Github {
 
   private startConnectFallbackPoll(jobId: string): void {
     this.stopConnectFallbackPoll();
+    this.notConnectedAfterJobEndedStreak = 0;
     this.connectFallbackPoll = setInterval(() => void this.pollConnectFallback(jobId), 3000);
   }
 
@@ -642,18 +644,47 @@ export class Github {
     this.connectFallbackPoll = null;
   }
 
+  /**
+   * Consecutive fallback ticks that found the job no longer running and the
+   * account still not connected. Not declared a failure on the first such
+   * tick: `isJobRunning` and `githubStatus` are two separate IPC round
+   * trips, so a tick landing in the brief window between the connect job
+   * finishing and its keychain write becoming visible would otherwise read
+   * as "the job ended without connecting" for a job that, a moment later,
+   * plainly had.
+   */
+  private notConnectedAfterJobEndedStreak = 0;
+
   private async pollConnectFallback(jobId: string): Promise<void> {
     if (this.status() !== 'connecting') {
       this.stopConnectFallbackPoll();
       return;
     }
-    const result = await this.tauri.githubStatus();
+    let stillRunning: boolean;
+    let result: GithubStatus;
+    try {
+      stillRunning = await this.tauri.isJobRunning(jobId);
+      result = await this.tauri.githubStatus();
+    } catch (error) {
+      // A transient IPC/keychain error should not, by itself, declare the
+      // connection failed — leave the streak alone and let the next tick
+      // (or the push-based `notificationDone` event) resolve it instead.
+      console.error('[github] fallback poll failed', error);
+      return;
+    }
+    console.debug('[github] fallback poll', { jobId, stillRunning, result });
+
     if (result.connected) {
       this.stopConnectFallbackPoll();
       void this.refreshStatus();
       return;
     }
-    if (!(await this.tauri.isJobRunning(jobId))) {
+    if (stillRunning) {
+      this.notConnectedAfterJobEndedStreak = 0;
+      return;
+    }
+    this.notConnectedAfterJobEndedStreak++;
+    if (this.notConnectedAfterJobEndedStreak >= 2) {
       this.stopConnectFallbackPoll();
       this.error.set(this.blockedMessage || 'Could not connect to GitHub.');
       this.status.set('disconnected');
