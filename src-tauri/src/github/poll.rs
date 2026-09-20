@@ -387,6 +387,7 @@ where
         ctx.checkpoint()?;
 
         let Some(mut stored) = token_store.get()? else {
+            log::info!("github: poll loop found no token, stopping");
             return Ok(());
         };
 

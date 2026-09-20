@@ -53,19 +53,31 @@ impl KeyringTokenStore {
 impl TokenStore for KeyringTokenStore {
     fn get(&self) -> Result<Option<StoredToken>> {
         match self.entry()?.get_password() {
-            Ok(raw) => serde_json::from_str(&raw)
-                .map(Some)
-                .map_err(|e| Error::TokenStore(e.to_string())),
-            Err(keyring::Error::NoEntry) => Ok(None),
-            Err(e) => Err(Error::TokenStore(e.to_string())),
+            Ok(raw) => {
+                log::info!("github: keychain get found an entry ({} bytes)", raw.len());
+                serde_json::from_str(&raw)
+                    .map(Some)
+                    .map_err(|e| Error::TokenStore(e.to_string()))
+            }
+            Err(keyring::Error::NoEntry) => {
+                log::info!("github: keychain get found no entry");
+                Ok(None)
+            }
+            Err(e) => {
+                log::warn!("github: keychain get failed: {e}");
+                Err(Error::TokenStore(e.to_string()))
+            }
         }
     }
 
     fn set(&self, token: &StoredToken) -> Result<()> {
         let raw = serde_json::to_string(token).map_err(|e| Error::TokenStore(e.to_string()))?;
-        self.entry()?
+        let result = self
+            .entry()?
             .set_password(&raw)
-            .map_err(|e| Error::TokenStore(e.to_string()))
+            .map_err(|e| Error::TokenStore(e.to_string()));
+        log::info!("github: keychain set result: {}", result.is_ok());
+        result
     }
 
     fn clear(&self) -> Result<()> {

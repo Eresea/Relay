@@ -54,6 +54,7 @@ pub struct GithubStatus {
 /// Whether an account is connected. Cheap and synchronous — it only reads
 /// the keychain, never calls GitHub.
 pub fn status() -> Result<GithubStatus> {
+    log::info!("github: status() called");
     match KeyringTokenStore.get()? {
         Some(token) => Ok(GithubStatus {
             connected: true,
