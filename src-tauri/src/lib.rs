@@ -1,6 +1,7 @@
 mod commands;
 mod error;
 mod events;
+mod github;
 mod gmail;
 mod jobs;
 mod overlay;
@@ -12,6 +13,8 @@ mod vault;
 
 use tauri::{Manager, WindowEvent};
 
+use github::client::HttpGitHubClient;
+use github::GithubState;
 use gmail::GmailState;
 use jobs::JobRegistry;
 use vault::VaultState;
@@ -40,6 +43,8 @@ pub fn run() {
     builder
         .manage(JobRegistry::default())
         .manage(VaultState::default())
+        .manage(GithubState::default())
+        .manage(HttpGitHubClient::default())
         .manage(GmailState::default())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_store::Builder::default().build())
@@ -65,6 +70,9 @@ pub fn run() {
             commands::vault_reveal_password,
             commands::vault_delete_entry,
             commands::vault_export,
+            commands::github_status,
+            commands::github_connect_start,
+            commands::github_disconnect,
             commands::gmail_status,
             commands::gmail_get_settings,
             commands::gmail_set_settings,
@@ -123,6 +131,10 @@ pub fn run() {
             if std::env::args().any(|arg| arg == "--show") {
                 let _ = overlay::show_main(app.handle());
             }
+
+            let github_client = app.state::<HttpGitHubClient>().inner().clone();
+            let job_registry = app.state::<JobRegistry>().inner().clone();
+            github::resume_polling_if_connected(app.handle(), github_client, &job_registry);
 
             // A connector that stopped polling every time the window closed
             // would be pointless — resume whatever was connected before the

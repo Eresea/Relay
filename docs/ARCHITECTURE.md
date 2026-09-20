@@ -133,8 +133,9 @@ proof above — testable with `cargo test` and no live Tauri app.
 A home-directory scan (`jobs::scan`) exercised this pipeline end to end for a
 while — real, unpredictable I/O rather than a sleep loop — and served its
 purpose: it is what caught both the `tokio::spawn`-without-a-runtime crash and
-the HUD never being shown. It has since been removed; the pipeline itself is
-built and tested, waiting on its first lasting producer.
+the HUD never being shown. It has since been removed; its replacements as
+the pipeline's first lasting producers are the GitHub and Gmail connectors'
+poll jobs (below).
 
 One caveat worth carrying forward: the release Cargo profile sets
 `panic = "abort"`. A job spawned with `tokio::spawn` that panics currently
@@ -185,12 +186,127 @@ shows the main window and emits `AppEvent::OpenVaultRequested` for `Home` to
 switch views to, since the palette and the main window are separate webviews
 with no shared JS state.
 
+## GitHub connector
+
+`src-tauri/src/github/` is one of Relay's first two external service
+connectors, alongside Gmail (below). It is split by concern rather than
+kept in one file, the way `vault.rs` is, because there is more surface area
+to test in isolation:
+
+- `oauth.rs` — the OAuth **Device Flow** (RFC 8628) request/response shapes
+  and the pure decision function (`interpret_token_response`) that turns one
+  poll response into `Approved` / `Pending` / `SlowDown` / `Denied` /
+  `Expired` / `Failed`. Device flow was chosen over a loopback-server
+  authorization-code flow because it needs nothing for Relay to host: no
+  redirect URI, no port to bind, no browser-launched callback to catch — the
+  user types a code into a page GitHub serves, and the app only ever polls
+  for the outcome. The trade-off (typing a code instead of one browser click)
+  is paid once per login, not per session. The OAuth App client id is not
+  baked into the binary: device flow has no client secret to protect, so the
+  id is exactly as sensitive as a URL, and it lives in `GithubConnectorSettings`
+  (`settings.json`, key `github.settings`) alongside the polling rules — set
+  once from the connector's "Connect GitHub" screen, which links out to
+  GitHub's OAuth App settings. `connect_start` fails fast, before any network
+  call, if none is configured (`rules::effective_client_id`), rather than
+  sending an empty or placeholder id to GitHub and surfacing whatever cryptic
+  error comes back (a 404, in practice — GitHub treats an unrecognized client
+  id as a missing resource, not an auth error).
+- `client.rs` — the `GitHubClient` trait (device-flow endpoints, search,
+  pull request detail, check runs) plus `HttpGitHubClient`, its `reqwest`
+  implementation. Every poll-loop and device-flow function is generic over
+  this trait, exactly the way `jobs::spawn` is generic over `EventSink`, so
+  `FakeGitHubClient` (canned, ownership-consumed responses) exercises the
+  whole pipeline in `cargo test` with no network and no live GitHub.
+- `token_store.rs` — where the access/refresh token lives at rest. This is
+  the one place the connector deliberately does **not** follow `vault.rs`'s
+  pattern: a password-derived key would gate every read behind a master
+  password prompt, which a background poll job running with no window open
+  cannot supply. Instead the token goes into the OS's own secret store
+  (Keychain / Credential Manager / Secret Service) through the `keyring`
+  crate — the same place a browser or a git credential helper keeps a saved
+  login, already access-controlled per-OS-user without Relay reimplementing
+  that. `TokenStore` is a trait for the same reason `EventSink` is: tests run
+  against an in-memory fake rather than a real keychain.
+- `rules.rs` — `GithubConnectorSettings`: a poll interval, `NotificationSettings`
+  (one `NotificationTypeRule` per `PrEventKind` — an on/off switch plus a
+  `*`-glob repo pattern and optional branch include/exclude globs), and a
+  flat `muted` list of exact exceptions (`"owner/repo"`, `"owner/repo@branch"`,
+  or `"owner/repo#123"`, checked before any rule). `NotificationSettings` is
+  named fields rather than a list of freeform rules or a map keyed by kind —
+  there are exactly six kinds, so `rule_for(kind)` is a `match`, and the
+  settings UI can show one row per kind without an "add rule" step. This is
+  not secret, so unlike the token it lives in the same `settings.json` every
+  other preference does, under the key `github.settings` — the frontend
+  settings page and the Rust poll loop both read it through
+  `tauri-plugin-store`, so there is one copy instead of two that can drift.
+  The default settings notify on opened, merged, review-requested and a
+  failed build, but not a passing one or a plain close — the one status that
+  mostly confirms nothing is wrong, which gets noisy fast if it fires on
+  every PR you touch.
+- `poll.rs` — the recurring job. Each cycle runs one GitHub Search API query
+  (`is:pr involves:<username>`, the broadest reading of "the signed-in user's
+  PRs" that still fits one call) sent with the previous cycle's ETag; a 304
+  costs nothing against the rate limit and skips the rest of the cycle
+  entirely. For anything the search returns, it fetches the pull request and
+  its check runs, diffs the result against an on-disk cache
+  (`github-poll-cache.json`, plain JSON — nothing in it is secret) keyed by
+  `"owner/repo#number"`, and for every real change it spawns a short-lived
+  job via `jobs::spawn` that reports one `AppEvent::Notification` and
+  finishes — the same job/event pipeline any other producer uses, one
+  ephemeral job per notification rather than the long-running poll job
+  reporting through its own id. `MIN_POLL_INTERVAL_SECS` (60s) is enforced
+  regardless of what settings.json says, since GitHub's Search API allows 30
+  authenticated requests/minute and one cycle costs one search call plus one
+  pair of calls per changed PR.
+
+Known simplifications, acceptable at personal-PR-list scale: CI state comes
+from the Checks API only (GitHub Actions and anything else reporting check
+runs), not the older separate Statuses API; the search query is not
+paginated, so an account with more than 100 relevant open items at once
+would not see all of them; and the on-disk PR cache means a very old,
+low-activity PR could in principle scroll off the search API's relevance
+ranking and later reappear as a fresh "opened" notification.
+
+Connecting is a command (`github_connect_start`) that makes one blocking
+call (`tauri::async_runtime::block_on`, the same tool `jobs` reaches for
+when sync code needs one async result — see the note on why commands stay
+synchronous, above) to fetch the device code, then hands the wait for the
+user's approval to a background job and returns immediately with the code to
+display. That job reports `Waiting` while it polls, and on success stores
+the token and starts the recurring poll job itself — `github::GithubState`
+only ever tracks that one job's id, so `github_disconnect` can cancel it and
+clear the keychain entry. Resuming polling after a restart is one call in
+`lib.rs`'s `setup()`: if a token is already in the keychain, start the poll
+job without asking the user to reconnect.
+
+Every failure path in that job — denied, expired, a malformed response, a
+network error, a keychain write that fails — is funneled through one
+`ctx.report(Blocked, error.to_string(), ...)` before the job returns the
+error (`run_device_flow`'s inner function does the actual work; the outer
+one exists only to wrap it in that single report point). The alternative —
+reporting only the handful of outcomes the function itself distinguishes by
+name — silently swallowed anything else into a bare
+`NotificationDone { ok: false }` with no way to say why, which is exactly
+what made an early version of this feature look like clicking "Connect" did
+nothing at all.
+
+The frontend surface is `src/app/features/github/github.ts`, rendered inside
+a "GitHub" tab on the Settings page (`src/app/features/settings/settings.ts`)
+rather than as its own top-level view. `CoreCommand::OpenGithub` still shows
+the main window and emits `AppEvent::OpenGithubRequested`, exactly as
+`OpenVaultRequested` does for the vault; `Home` now treats it as "open
+Settings, and select the GitHub tab" rather than switching to a dedicated
+view. Settings hides its inactive tab's content with `[hidden]` rather than
+an `@if` — an `@if` would destroy and recreate the GitHub tab's component on
+every switch away from it, and a Device Flow wait (anywhere from a few
+seconds to a couple of minutes, how ever long the user takes to approve it
+on GitHub) needs its listener to survive being backgrounded like that.
+
 ## Gmail connector
 
-`src-tauri/src/gmail/` is the first thing in Relay that talks to an external
-service, and the first real producer for the events/jobs pipeline above. It
-is a directory module rather than one file, the way `jobs/` is, because it
-has four fairly separate jobs of its own:
+`src-tauri/src/gmail/` is Relay's other external service connector,
+alongside GitHub (above). It is a directory module rather than one file, the
+way `jobs/` is, because it has four fairly separate jobs of its own:
 
 - `oauth.rs` — the Google OAuth "installed application" handshake: PKCE
   (RFC 7636), a one-shot HTTP listener on an OS-assigned loopback port, and a
@@ -231,10 +347,11 @@ has four fairly separate jobs of its own:
   sender/subject/label rules), deliberately flatter than a per-repo rule
   matrix would be: Gmail has no directory structure to match against.
 
-The polling job itself is `jobs::spawn`'s first real caller: a loop that
-checkpoints, polls, reports each match as `AppEvent::Notification` (sender in
-the title, subject in the detail, never a body), sleeps, and repeats —
-cancelled the same cooperative way any other job is, on disconnect.
+The polling job itself is one of `jobs::spawn`'s first real callers: a loop
+that checkpoints, polls, reports each match as `AppEvent::Notification`
+(sender in the title, subject in the detail, never a body), sleeps, and
+repeats — cancelled the same cooperative way any other job is, on
+disconnect.
 
 **Token storage** follows vault.rs's AES-256-GCM construction but not its key
 derivation. A background mail poller cannot prompt for a master password on
@@ -248,13 +365,14 @@ settings. `KeyStore` is a trait for the same reason `EventSink` is: most test
 environments have no keychain daemon at all, so the test suite runs against
 an in-memory `FakeKeyStore`.
 
-The frontend surface, `src/app/features/gmail/gmail.ts`, is embedded directly
-in `Settings` as another group (`<rl-gmail />`) rather than a top-level view
-of its own — unlike the vault, there is no separate workspace here, just a
-panel of connector settings, so it needs neither a palette command nor a
-`CoreCommand`/`AppEvent` pair to switch `Home` to it.
+The frontend surface, `src/app/features/gmail/gmail.ts`, is a "Gmail" tab on
+the Settings page (`<rl-gmail />`) alongside GitHub's, rather than a
+top-level view of its own — unlike the vault, there is no separate workspace
+here, just a panel of connector settings, so it needs neither a palette
+command nor a `CoreCommand`/`AppEvent` pair to switch `Home` to it; a user
+already on the Settings page reaches it by clicking the tab.
 
 ## Not built yet
 
-Project and task models, agent orchestration, a GitHub connector, and the
-context layer that lets commands know what you are working on.
+Project and task models, agent orchestration, and the context layer that
+lets commands know what you are working on.

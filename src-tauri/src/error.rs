@@ -15,10 +15,6 @@ pub enum Error {
     UnknownJob(JobId),
 
     #[error("job `{0}` was cancelled")]
-    #[allow(
-        dead_code,
-        reason = "returned only by JobContext::checkpoint, which has no caller right now"
-    )]
     JobCancelled(JobId),
 
     #[error(transparent)]
@@ -53,6 +49,26 @@ pub enum Error {
 
     #[error("encryption failed")]
     Crypto,
+
+    #[error(
+        "set a GitHub OAuth App client id (Device Flow enabled) in the connector's settings before connecting"
+    )]
+    GithubClientIdNotConfigured,
+
+    #[error("the GitHub sign-in was declined")]
+    GithubDeviceFlowDenied,
+
+    #[error("the GitHub sign-in code expired before it was approved")]
+    GithubDeviceFlowExpired,
+
+    #[error("GitHub request failed: {0}")]
+    GithubRequestFailed(String),
+
+    #[error("GitHub rate limit reached; will retry on the next poll")]
+    GithubRateLimited,
+
+    #[error("could not access the system keychain: {0}")]
+    TokenStore(String),
 
     #[error("the Gmail connector needs RELAY_GMAIL_CLIENT_ID set before it can connect")]
     GmailClientNotConfigured,

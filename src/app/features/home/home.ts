@@ -59,7 +59,7 @@ import { Kbd } from '@shared/kbd';
           type="button"
           class="rail-item"
           [class.active]="view() === 'settings'"
-          (click)="view.set('settings')"
+          (click)="openSettings()"
           aria-label="Settings"
         >
           <rl-icon name="settings" [size]="16" />
@@ -69,7 +69,7 @@ import { Kbd } from '@shared/kbd';
 
       <main class="content">
         @if (view() === 'settings') {
-          <rl-settings />
+          <rl-settings [initialTab]="settingsTab()" />
         } @else if (view() === 'vault') {
           <rl-vault />
         } @else {
@@ -251,6 +251,7 @@ export class Home {
   protected readonly paletteKeys = ['Ctrl', 'Space'] as const;
   protected readonly view = signal<'home' | 'settings' | 'vault'>('home');
   protected readonly railExpanded = signal(true);
+  protected readonly settingsTab = signal<'general' | 'github'>('general');
 
   private readonly tauri = inject(TauriBridge);
   protected readonly maximized = signal(false);
@@ -271,10 +272,22 @@ export class Home {
     // signal it could have set directly.
     void this.tauri
       .onEvent((event) => {
-        if (event.type === 'openSettingsRequested') this.view.set('settings');
+        if (event.type === 'openSettingsRequested') {
+          this.view.set('settings');
+          this.settingsTab.set('general');
+        }
         if (event.type === 'openVaultRequested') this.view.set('vault');
+        if (event.type === 'openGithubRequested') {
+          this.view.set('settings');
+          this.settingsTab.set('github');
+        }
       })
       .then((unlisten) => destroyRef.onDestroy(unlisten));
+  }
+
+  protected openSettings(): void {
+    this.view.set('settings');
+    this.settingsTab.set('general');
   }
 
   protected minimize(): void {
