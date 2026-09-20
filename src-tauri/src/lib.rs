@@ -2,6 +2,7 @@ mod commands;
 mod error;
 mod events;
 mod github;
+mod gmail;
 mod jobs;
 mod overlay;
 #[cfg(desktop)]
@@ -14,6 +15,7 @@ use tauri::{Manager, WindowEvent};
 
 use github::client::HttpGitHubClient;
 use github::GithubState;
+use gmail::GmailState;
 use jobs::JobRegistry;
 use vault::VaultState;
 
@@ -43,6 +45,7 @@ pub fn run() {
         .manage(VaultState::default())
         .manage(GithubState::default())
         .manage(HttpGitHubClient::default())
+        .manage(GmailState::default())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_store::Builder::default().build())
         .plugin(
@@ -70,6 +73,12 @@ pub fn run() {
             commands::github_status,
             commands::github_connect_start,
             commands::github_disconnect,
+            commands::gmail_status,
+            commands::gmail_get_settings,
+            commands::gmail_set_settings,
+            commands::gmail_connect,
+            commands::gmail_cancel_connect,
+            commands::gmail_disconnect,
         ])
         .on_window_event(|window, event| {
             // The palette is a spotlight, not a window: losing focus dismisses
@@ -126,6 +135,26 @@ pub fn run() {
             let github_client = app.state::<HttpGitHubClient>().inner().clone();
             let job_registry = app.state::<JobRegistry>().inner().clone();
             github::resume_polling_if_connected(app.handle(), github_client, &job_registry);
+
+            // A connector that stopped polling every time the window closed
+            // would be pointless — resume whatever was connected before the
+            // last exit. Spawned rather than awaited: startup must not block
+            // on network I/O, and a resume failure (no stored session, a
+            // revoked grant, an unreachable keychain) is not fatal to Relay.
+            let resume_handle = app.handle().clone();
+            let resume_registry = app.state::<JobRegistry>().inner().clone();
+            tauri::async_runtime::spawn(async move {
+                if let Err(error) = gmail::resume(
+                    resume_handle,
+                    resume_registry,
+                    gmail::HttpGoogleApi::new(),
+                    gmail::OsKeyStore,
+                )
+                .await
+                {
+                    log::warn!("could not resume the Gmail connector: {error}");
+                }
+            });
 
             Ok(())
         })

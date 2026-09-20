@@ -3,6 +3,7 @@ import { ChangeDetectionStrategy, Component, effect, inject, input, signal } fro
 import { TauriBridge } from '@core/tauri';
 import { ThemeService } from '@core/theme';
 import { Github } from '@features/github/github';
+import { Gmail } from '@features/gmail/gmail';
 
 /**
  * Relay's one settings surface, reached from the palette's "Open settings"
@@ -10,7 +11,9 @@ import { Github } from '@features/github/github';
  * `initialTab`). Everything here persists through `TauriBridge`'s settings
  * store (`settings.json` in the OS app-data directory) or, for
  * launch-at-login, through the OS's own autostart registration — never
- * local component state.
+ * local component state. The Gmail connector is the exception: its own
+ * state lives core-side (see `src-tauri/src/gmail/mod.rs`), so `rl-gmail`
+ * only reflects and edits it.
  *
  * Tab content is hidden with `[hidden]` rather than an `@if`, which would
  * destroy and recreate `rl-github` on every switch away from its tab. A
@@ -22,7 +25,7 @@ import { Github } from '@features/github/github';
 @Component({
   selector: 'rl-settings',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [Github],
+  imports: [Github, Gmail],
   template: `
     <nav class="tabs">
       <button
@@ -40,6 +43,14 @@ import { Github } from '@features/github/github';
         (click)="tab.set('github')"
       >
         GitHub
+      </button>
+      <button
+        type="button"
+        class="tab"
+        [class.active]="tab() === 'gmail'"
+        (click)="tab.set('gmail')"
+      >
+        Gmail
       </button>
     </nav>
 
@@ -80,6 +91,10 @@ import { Github } from '@features/github/github';
 
     <div [hidden]="tab() !== 'github'">
       <rl-github />
+    </div>
+
+    <div [hidden]="tab() !== 'gmail'">
+      <rl-gmail />
     </div>
   `,
   styles: `
@@ -201,12 +216,12 @@ import { Github } from '@features/github/github';
 })
 export class Settings {
   /** Which tab to select right now. Home sets this from which palette command opened Settings. */
-  readonly initialTab = input<'general' | 'github'>('general');
+  readonly initialTab = input<'general' | 'github' | 'gmail'>('general');
 
   private readonly tauri = inject(TauriBridge);
   protected readonly theme = inject(ThemeService);
 
-  protected readonly tab = signal<'general' | 'github'>('general');
+  protected readonly tab = signal<'general' | 'github' | 'gmail'>('general');
   protected readonly launchAtLogin = signal(false);
   protected readonly launchAtLoginPending = signal(true);
 

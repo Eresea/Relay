@@ -20,6 +20,7 @@ use tauri::AppHandle;
 use crate::error::Result;
 use crate::events::{AppEvent, EventSink};
 use crate::github::{self, client::HttpGitHubClient, oauth::DeviceAuthorization, GithubStatus};
+use crate::gmail::{self, GmailSettings, GmailState, GmailStatus, HttpGoogleApi, OsKeyStore};
 use crate::jobs::{JobId, JobRegistry};
 use crate::overlay;
 use crate::vault::{
@@ -229,6 +230,73 @@ pub fn github_connect_start(
 #[tauri::command]
 pub fn github_disconnect(app: AppHandle, jobs: tauri::State<JobRegistry>) -> Result<()> {
     github::disconnect(&app, &jobs)
+}
+
+/// Whether Gmail is connected, mid-handshake, or neither.
+#[tauri::command]
+pub fn gmail_status(gmail: tauri::State<GmailState>) -> GmailStatus {
+    gmail::status(&gmail)
+}
+
+#[tauri::command]
+pub fn gmail_get_settings(gmail: tauri::State<GmailState>) -> GmailSettings {
+    gmail::get_settings(&gmail)
+}
+
+#[tauri::command]
+pub fn gmail_set_settings(
+    app: AppHandle,
+    gmail: tauri::State<GmailState>,
+    settings: GmailSettings,
+) -> Result<()> {
+    gmail::set_settings(&app, &gmail, settings)
+}
+
+/// Opens the system browser to Google's consent screen and waits for the
+/// loopback redirect; resolves once the account is connected and the polling
+/// job has started, or rejects on cancellation, timeout, or a sign-in error.
+#[tauri::command]
+pub async fn gmail_connect(
+    app: AppHandle,
+    gmail: tauri::State<'_, GmailState>,
+    jobs: tauri::State<'_, JobRegistry>,
+) -> Result<String> {
+    let registry = jobs.inner().clone();
+    gmail::connect(
+        app,
+        gmail.inner(),
+        registry,
+        HttpGoogleApi::new(),
+        OsKeyStore,
+    )
+    .await
+}
+
+/// Cancels an in-flight `gmail_connect` call — its still-pending `invoke`
+/// promise rejects with `GmailAuthCancelled` once the loopback listener
+/// notices.
+#[tauri::command]
+pub fn gmail_cancel_connect(gmail: tauri::State<GmailState>) -> Result<()> {
+    gmail::cancel_connect(&gmail)
+}
+
+/// Stops the polling job, best-effort revokes the token with Google, and
+/// deletes both the on-disk connector state and its OS keychain key.
+#[tauri::command]
+pub async fn gmail_disconnect(
+    app: AppHandle,
+    gmail: tauri::State<'_, GmailState>,
+    jobs: tauri::State<'_, JobRegistry>,
+) -> Result<()> {
+    let registry = jobs.inner().clone();
+    gmail::disconnect(
+        &app,
+        gmail.inner(),
+        &registry,
+        &HttpGoogleApi::new(),
+        &OsKeyStore,
+    )
+    .await
 }
 
 #[cfg(test)]

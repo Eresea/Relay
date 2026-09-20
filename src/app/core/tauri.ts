@@ -140,6 +140,50 @@ export class TauriBridge {
     return this.settingsStore;
   }
 
+  /** Whether Gmail is connected, mid-handshake, or neither. */
+  async gmailStatus(): Promise<GmailStatus> {
+    return (
+      (await this.invoke<GmailStatus>('gmail_status')) ?? {
+        connected: false,
+        connecting: false,
+        accountEmail: null,
+      }
+    );
+  }
+
+  async gmailGetSettings(): Promise<GmailSettings> {
+    return (
+      (await this.invoke<GmailSettings>('gmail_get_settings')) ?? {
+        rules: { notifyAll: false, notifyImportant: true, custom: [] },
+        pollIntervalSecs: 60,
+      }
+    );
+  }
+
+  async gmailSetSettings(settings: GmailSettings): Promise<void> {
+    await this.invoke('gmail_set_settings', { settings });
+  }
+
+  /**
+   * Opens the system browser to Google's consent screen and resolves once
+   * the loopback redirect completes the handshake — or rejects on
+   * cancellation, timeout, or a sign-in error. Long-running by design; the
+   * caller shows a "waiting for the browser" state until it settles.
+   */
+  async gmailConnect(): Promise<string> {
+    const email = await this.invoke<string>('gmail_connect');
+    if (email === null) throw new Error('Gmail connect is unavailable outside Tauri');
+    return email;
+  }
+
+  async gmailCancelConnect(): Promise<void> {
+    await this.invoke('gmail_cancel_connect');
+  }
+
+  async gmailDisconnect(): Promise<void> {
+    await this.invoke('gmail_disconnect');
+  }
+
   /** Whether Relay is registered to launch automatically at login. */
   async isAutostartEnabled(): Promise<boolean> {
     if (!this.available) return false;
@@ -436,4 +480,39 @@ function mergeGithubSettings(
       ciPassed: notifications?.ciPassed ?? defaults.notifications.ciPassed,
     },
   };
+}
+
+/** Mirrors `gmail::GmailStatus`. */
+export interface GmailStatus {
+  readonly connected: boolean;
+  readonly connecting: boolean;
+  readonly accountEmail: string | null;
+}
+
+/** Mirrors `gmail::rules::RuleKind`, one enabled row of `GmailSettings.rules.custom`. */
+export type RuleKind =
+  | { readonly kind: 'fromContains'; readonly text: string }
+  | { readonly kind: 'subjectContains'; readonly text: string }
+  | { readonly kind: 'label'; readonly label: string };
+
+/** Mirrors `gmail::rules::Rule`. */
+export interface Rule {
+  readonly id: string;
+  readonly enabled: boolean;
+  readonly kind: RuleKind['kind'];
+  readonly text?: string;
+  readonly label?: string;
+}
+
+/** Mirrors `gmail::rules::NotificationRules`. */
+export interface NotificationRules {
+  readonly notifyAll: boolean;
+  readonly notifyImportant: boolean;
+  readonly custom: readonly Rule[];
+}
+
+/** Mirrors `gmail::GmailSettings`. */
+export interface GmailSettings {
+  readonly rules: NotificationRules;
+  readonly pollIntervalSecs: number;
 }
