@@ -185,11 +185,76 @@ shows the main window and emits `AppEvent::OpenVaultRequested` for `Home` to
 switch views to, since the palette and the main window are separate webviews
 with no shared JS state.
 
+## Gmail connector
+
+`src-tauri/src/gmail/` is the first thing in Relay that talks to an external
+service, and the first real producer for the events/jobs pipeline above. It
+is a directory module rather than one file, the way `jobs/` is, because it
+has four fairly separate jobs of its own:
+
+- `oauth.rs` — the Google OAuth "installed application" handshake: PKCE
+  (RFC 7636), a one-shot HTTP listener on an OS-assigned loopback port, and a
+  `state` parameter checked for CSRF. There is no way to embed a client
+  secret confidentially in a distributed desktop binary, so the client id is
+  treated as public and PKCE carries the actual proof that whoever completes
+  the token exchange is the same process that started it — Google's
+  documented flow for desktop apps, and the reason a "Desktop app" OAuth
+  client accepts a loopback redirect at any port without pre-registering it.
+  The client id/secret for Relay's own Google Cloud project are committed in
+  `src-tauri/gmail.config.toml` and compiled in via `include_str!` —
+  deliberately, not an oversight: per the paragraph above, this OAuth client
+  type does not treat the secret as confidential in the first place, so
+  shipping it the way any other installed application ships its client id
+  costs nothing a distributed binary would not already expose. `RELAY_GMAIL_CLIENT_ID`
+  / `RELAY_GMAIL_CLIENT_SECRET` env vars override the compiled-in pair when
+  set, for developing against a different Google Cloud project without
+  editing the tracked file.
+- `api.rs` — the Gmail/OAuth HTTP surface behind a `GoogleApi` trait, real
+  (`HttpGoogleApi`, `reqwest`) and fake implementations, the same seam
+  `jobs.rs` uses `EventSink`/`FakeSink` for. The connector requests
+  `gmail.metadata` — not the broader `gmail.readonly` — which is enough to
+  read headers and labels for every method it calls (including
+  `history.list`) while making a message body or attachment impossible to
+  fetch even by a bug: the least-privilege scope that can still show a real
+  sender and subject.
+- `poll.rs` — turns a stored `historyId` plus one `history.list` call into
+  the small list of messages worth notifying about. The first poll after
+  connecting has no `historyId` yet, so it only establishes a baseline
+  (`users.getProfile`) and notifies about nothing; every poll after that
+  walks forward from the last checkpoint, so a poll costs what changed, not
+  a full mailbox scan, and stays comfortably under Gmail's per-second quota
+  even at the connector's default 60-second interval. A `historyId` that has
+  aged out of Gmail's retention window (a 404) re-baselines the same way a
+  fresh connection does, rather than guessing at what was missed.
+- `rules.rs` — pure, independently enable-able notification rules (Gmail's
+  own `IMPORTANT` label by default, plus optional "notify on everything" and
+  sender/subject/label rules), deliberately flatter than a per-repo rule
+  matrix would be: Gmail has no directory structure to match against.
+
+The polling job itself is `jobs::spawn`'s first real caller: a loop that
+checkpoints, polls, reports each match as `AppEvent::Notification` (sender in
+the title, subject in the detail, never a body), sleeps, and repeats —
+cancelled the same cooperative way any other job is, on disconnect.
+
+**Token storage** follows vault.rs's AES-256-GCM construction but not its key
+derivation. A background mail poller cannot prompt for a master password on
+every launch — that would defeat the point of running unattended — so
+`secret.rs` generates a random 32-byte key once and hands it to the OS's own
+secret store (Keychain, Credential Manager, or Secret Service/libsecret, via
+the `keyring` crate) instead of deriving it from something the user types.
+Only that key touches the keychain; the refresh token itself stays out of
+plaintext in `gmail.json`, encrypted next to the rest of the connector's
+settings. `KeyStore` is a trait for the same reason `EventSink` is: most test
+environments have no keychain daemon at all, so the test suite runs against
+an in-memory `FakeKeyStore`.
+
+The frontend surface, `src/app/features/gmail/gmail.ts`, is embedded directly
+in `Settings` as another group (`<rl-gmail />`) rather than a top-level view
+of its own — unlike the vault, there is no separate workspace here, just a
+panel of connector settings, so it needs neither a palette command nor a
+`CoreCommand`/`AppEvent` pair to switch `Home` to it.
+
 ## Not built yet
 
-Project and task models, agent orchestration, external service connectors
-(a GitHub connector and a Gmail connector are the next two planned), and the
-context layer that lets commands know what you are working on. The
-events/jobs pipeline above is built and tested end to end but currently has
-no producer — an agent run, a project scan, a file watcher all still need to
-be written.
+Project and task models, agent orchestration, a GitHub connector, and the
+context layer that lets commands know what you are working on.
