@@ -24,13 +24,14 @@ import { Kbd } from '@shared/kbd';
       <div class="titlebar-start">
         <button
           type="button"
-          class="rail-toggle"
-          (click)="railExpanded.set(!railExpanded())"
-          [attr.aria-label]="railExpanded() ? 'Collapse sidebar' : 'Expand sidebar'"
+          class="home-btn"
+          [class.active]="view() === 'home'"
+          (click)="view.set('home')"
+          aria-label="Home"
         >
-          <rl-icon name="panel-left" [size]="16" />
+          <rl-icon name="house" [size]="16" />
         </button>
-        <button type="button" class="wordmark" (click)="view.set('home')">Relay</button>
+        <span class="wordmark">Relay</span>
       </div>
       <div class="window-controls">
         <button type="button" class="window-btn" (click)="theme.toggle()" aria-label="Toggle theme">
@@ -55,16 +56,29 @@ import { Kbd } from '@shared/kbd';
 
     <div class="body">
       <nav class="rail u-chrome" [class.expanded]="railExpanded()">
-        <button
-          type="button"
-          class="rail-item"
-          [class.active]="view() === 'settings'"
-          (click)="openSettings()"
-          aria-label="Settings"
-        >
-          <rl-icon name="settings" [size]="16" />
-          <span class="rail-label">Settings</span>
-        </button>
+        <div class="rail-top">
+          <button
+            type="button"
+            class="rail-toggle"
+            (click)="railExpanded.set(!railExpanded())"
+            [attr.aria-label]="railExpanded() ? 'Collapse sidebar' : 'Expand sidebar'"
+          >
+            <rl-icon name="panel-left" [size]="16" />
+          </button>
+        </div>
+
+        <div class="rail-bottom">
+          <button
+            type="button"
+            class="rail-item"
+            [class.active]="view() === 'settings'"
+            (click)="openSettings()"
+            aria-label="Settings"
+          >
+            <rl-icon name="settings" [size]="16" />
+            <span class="rail-label">Settings</span>
+          </button>
+        </div>
       </nav>
 
       <main class="content">
@@ -111,7 +125,7 @@ import { Kbd } from '@shared/kbd';
       gap: var(--space-4);
     }
 
-    .rail-toggle {
+    .home-btn {
       display: grid;
       place-items: center;
       inline-size: var(--control-sm);
@@ -123,9 +137,13 @@ import { Kbd } from '@shared/kbd';
         color var(--dur-hover) var(--ease-standard);
     }
 
-    .rail-toggle:hover {
+    .home-btn:hover {
       color: var(--text-body);
       background: var(--tint-hover);
+    }
+
+    .home-btn.active {
+      color: var(--text-strong);
     }
 
     .wordmark {
@@ -172,7 +190,6 @@ import { Kbd } from '@shared/kbd';
       display: flex;
       flex-direction: column;
       flex: none;
-      gap: var(--space-2);
       inline-size: var(--sidebar-width-collapsed);
       padding: var(--space-3);
       border-inline-end: 1px solid var(--border-subtle);
@@ -183,6 +200,42 @@ import { Kbd } from '@shared/kbd';
 
     .rail.expanded {
       inline-size: var(--sidebar-width);
+    }
+
+    /* Future page buttons stack here, growing downward from the top. */
+    .rail-top {
+      display: flex;
+      flex-direction: column;
+      gap: var(--space-2);
+      flex: 1;
+      min-block-size: 0;
+    }
+
+    /* Settings stays pinned to the rail's bottom edge, apart from the rest. */
+    .rail-bottom {
+      display: flex;
+      flex-direction: column;
+      gap: var(--space-2);
+      flex: none;
+    }
+
+    .rail-toggle {
+      display: flex;
+      align-items: center;
+      gap: var(--space-4);
+      inline-size: 100%;
+      block-size: var(--control-md);
+      padding-inline: var(--space-3);
+      color: var(--text-subtle);
+      border-radius: var(--radius-sm);
+      transition:
+        background-color var(--dur-hover) var(--ease-standard),
+        color var(--dur-hover) var(--ease-standard);
+    }
+
+    .rail-toggle:hover {
+      color: var(--text-body);
+      background: var(--tint-hover);
     }
 
     .rail-item {
@@ -215,6 +268,20 @@ import { Kbd } from '@shared/kbd';
       text-overflow: ellipsis;
       font-size: var(--text-13);
       font-weight: var(--weight-medium);
+    }
+
+    /* Collapsed: only the icon should show, centred in the narrow rail —
+     * the label is removed from layout rather than just clipped, so it
+     * can't skew the icon off-centre or leave stray reserved space. */
+    .rail:not(.expanded) .rail-toggle,
+    .rail:not(.expanded) .rail-item {
+      justify-content: center;
+      padding-inline: 0;
+      gap: 0;
+    }
+
+    .rail:not(.expanded) .rail-label {
+      display: none;
     }
 
     .content {
