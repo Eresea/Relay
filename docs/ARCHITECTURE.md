@@ -226,18 +226,22 @@ to test in isolation:
   login, already access-controlled per-OS-user without Relay reimplementing
   that. `TokenStore` is a trait for the same reason `EventSink` is: tests run
   against an in-memory fake rather than a real keychain.
-- `rules.rs` — `GithubConnectorSettings`: a poll interval, a list of
-  `NotificationRule`s (a `*`-glob over `"owner/repo"`, optional branch
-  include/exclude globs, and which `PrEventKind`s to notify on), and a flat
-  `muted` list of exact exceptions (`"owner/repo"`, `"owner/repo@branch"`, or
-  `"owner/repo#123"`, checked before any rule). This is not secret, so unlike
-  the token it lives in the same `settings.json` every other preference
-  does, under the key `github.settings` — the frontend settings page and the
-  Rust poll loop both read it through `tauri-plugin-store`, so there is one
-  copy instead of two that can drift. The default settings notify on opened,
-  merged, review-requested and a failed build, but not a passing one — the
-  one status that mostly confirms nothing is wrong, which gets noisy fast if
-  it fires on every PR you touch.
+- `rules.rs` — `GithubConnectorSettings`: a poll interval, `NotificationSettings`
+  (one `NotificationTypeRule` per `PrEventKind` — an on/off switch plus a
+  `*`-glob repo pattern and optional branch include/exclude globs), and a
+  flat `muted` list of exact exceptions (`"owner/repo"`, `"owner/repo@branch"`,
+  or `"owner/repo#123"`, checked before any rule). `NotificationSettings` is
+  named fields rather than a list of freeform rules or a map keyed by kind —
+  there are exactly six kinds, so `rule_for(kind)` is a `match`, and the
+  settings UI can show one row per kind without an "add rule" step. This is
+  not secret, so unlike the token it lives in the same `settings.json` every
+  other preference does, under the key `github.settings` — the frontend
+  settings page and the Rust poll loop both read it through
+  `tauri-plugin-store`, so there is one copy instead of two that can drift.
+  The default settings notify on opened, merged, review-requested and a
+  failed build, but not a passing one or a plain close — the one status that
+  mostly confirms nothing is wrong, which gets noisy fast if it fires on
+  every PR you touch.
 - `poll.rs` — the recurring job. Each cycle runs one GitHub Search API query
   (`is:pr involves:<username>`, the broadest reading of "the signed-in user's
   PRs" that still fits one call) sent with the previous cycle's ETag; a 304
@@ -274,10 +278,28 @@ clear the keychain entry. Resuming polling after a restart is one call in
 `lib.rs`'s `setup()`: if a token is already in the keychain, start the poll
 job without asking the user to reconnect.
 
-The frontend surface is `src/app/features/github/github.ts`, reached the
-same way Settings and the vault are: a palette command dispatches
-`CoreCommand::OpenGithub`, which shows the main window and emits
-`AppEvent::OpenGithubRequested` for `Home` to switch views to.
+Every failure path in that job — denied, expired, a malformed response, a
+network error, a keychain write that fails — is funneled through one
+`ctx.report(Blocked, error.to_string(), ...)` before the job returns the
+error (`run_device_flow`'s inner function does the actual work; the outer
+one exists only to wrap it in that single report point). The alternative —
+reporting only the handful of outcomes the function itself distinguishes by
+name — silently swallowed anything else into a bare
+`NotificationDone { ok: false }` with no way to say why, which is exactly
+what made an early version of this feature look like clicking "Connect" did
+nothing at all.
+
+The frontend surface is `src/app/features/github/github.ts`, rendered inside
+a "GitHub" tab on the Settings page (`src/app/features/settings/settings.ts`)
+rather than as its own top-level view. `CoreCommand::OpenGithub` still shows
+the main window and emits `AppEvent::OpenGithubRequested`, exactly as
+`OpenVaultRequested` does for the vault; `Home` now treats it as "open
+Settings, and select the GitHub tab" rather than switching to a dedicated
+view. Settings hides its inactive tab's content with `[hidden]` rather than
+an `@if` — an `@if` would destroy and recreate the GitHub tab's component on
+every switch away from it, and a Device Flow wait (anywhere from a few
+seconds to a couple of minutes, how ever long the user takes to approve it
+on GitHub) needs its listener to survive being backgrounded like that.
 
 ## Not built yet
 

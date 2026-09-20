@@ -5,6 +5,16 @@
 //! token store — both the frontend settings page and the Rust-side poll loop
 //! read it from the same file, through `tauri_plugin_store`, so there is one
 //! source of truth instead of two copies that can drift.
+//!
+//! Settings are organized per notification type rather than as a list of
+//! freeform rules: one `NotificationTypeRule` per `PrEventKind`, each with
+//! its own on/off switch and repo/branch scope. A list-of-rules model is
+//! more expressive in principle, but nobody actually wants to compose
+//! multiple overlapping rules to say "tell me about CI failures on
+//! `my-org/*`" — they want one on/off switch per kind of event, scoped to
+//! the repos and branches they care about, which is exactly what this shape
+//! gives them for free from `should_notify`'s point of view: a direct lookup
+//! by kind instead of a scan over a list.
 
 use serde::{Deserialize, Serialize};
 
@@ -21,9 +31,7 @@ pub enum PrEventKind {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct NotificationRule {
-    pub id: String,
-    #[serde(default = "default_true")]
+pub struct NotificationTypeRule {
     pub enabled: bool,
     /// A glob against `"owner/repo"` — `"*"` for everything, `"my-org/*"`
     /// for one owner, or an exact `"my-org/my-repo"`.
@@ -37,15 +45,81 @@ pub struct NotificationRule {
     /// the branch even if `branch_include` matched it.
     #[serde(default)]
     pub branch_exclude: Vec<String>,
-    pub statuses: Vec<PrEventKind>,
 }
 
-fn default_true() -> bool {
-    true
+impl NotificationTypeRule {
+    fn enabled(repo_pattern: &str) -> Self {
+        Self {
+            enabled: true,
+            repo_pattern: repo_pattern.to_string(),
+            branch_include: Vec::new(),
+            branch_exclude: Vec::new(),
+        }
+    }
+
+    fn disabled() -> Self {
+        Self {
+            enabled: false,
+            repo_pattern: "*".to_string(),
+            branch_include: Vec::new(),
+            branch_exclude: Vec::new(),
+        }
+    }
 }
 
 fn default_poll_interval_secs() -> u64 {
     300
+}
+
+/// One `NotificationTypeRule` per `PrEventKind`, named fields rather than a
+/// map — six known kinds, so a lookup is a `match`, not a runtime `HashMap`
+/// access that needs a "missing key" fallback to reason about.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct NotificationSettings {
+    #[serde(default = "NotificationTypeRule::disabled")]
+    pub opened: NotificationTypeRule,
+    #[serde(default = "NotificationTypeRule::disabled")]
+    pub closed: NotificationTypeRule,
+    #[serde(default = "NotificationTypeRule::disabled")]
+    pub merged: NotificationTypeRule,
+    #[serde(default = "NotificationTypeRule::disabled")]
+    pub review_requested: NotificationTypeRule,
+    #[serde(default = "NotificationTypeRule::disabled")]
+    pub ci_failed: NotificationTypeRule,
+    #[serde(default = "NotificationTypeRule::disabled")]
+    pub ci_passed: NotificationTypeRule,
+}
+
+impl NotificationSettings {
+    pub fn rule_for(&self, kind: PrEventKind) -> &NotificationTypeRule {
+        match kind {
+            PrEventKind::Opened => &self.opened,
+            PrEventKind::Closed => &self.closed,
+            PrEventKind::Merged => &self.merged,
+            PrEventKind::ReviewRequested => &self.review_requested,
+            PrEventKind::CiFailed => &self.ci_failed,
+            PrEventKind::CiPassed => &self.ci_passed,
+        }
+    }
+}
+
+impl Default for NotificationSettings {
+    /// A fresh connection should not be silent, but it also should not spam:
+    /// the statuses that call for a look (opened, merged, a review request,
+    /// a red build) default on across every repo, and the one status that
+    /// mostly confirms nothing is wrong (a green build) — and a plain
+    /// "closed without merging", which is rarely actionable — default off.
+    fn default() -> Self {
+        Self {
+            opened: NotificationTypeRule::enabled("*"),
+            closed: NotificationTypeRule::disabled(),
+            merged: NotificationTypeRule::enabled("*"),
+            review_requested: NotificationTypeRule::enabled("*"),
+            ci_failed: NotificationTypeRule::enabled("*"),
+            ci_passed: NotificationTypeRule::disabled(),
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -54,7 +128,7 @@ pub struct GithubConnectorSettings {
     #[serde(default = "default_poll_interval_secs")]
     pub poll_interval_secs: u64,
     #[serde(default)]
-    pub rules: Vec<NotificationRule>,
+    pub notifications: NotificationSettings,
     /// Exact-match exceptions, checked before any rule — see `mute_keys`.
     #[serde(default)]
     pub muted: Vec<String>,
@@ -69,27 +143,10 @@ pub struct GithubConnectorSettings {
 }
 
 impl Default for GithubConnectorSettings {
-    /// A fresh connection should not be silent, but it also should not spam:
-    /// every repo, every branch, the statuses that call for a look (opened,
-    /// merged, a review request, a red build) and not the one that mostly
-    /// confirms nothing is wrong (a green build) — that one is opt-in per
-    /// rule since a passing check on every PR you touch gets old fast.
     fn default() -> Self {
         Self {
             poll_interval_secs: default_poll_interval_secs(),
-            rules: vec![NotificationRule {
-                id: "default".to_string(),
-                enabled: true,
-                repo_pattern: "*".to_string(),
-                branch_include: Vec::new(),
-                branch_exclude: Vec::new(),
-                statuses: vec![
-                    PrEventKind::Opened,
-                    PrEventKind::Merged,
-                    PrEventKind::ReviewRequested,
-                    PrEventKind::CiFailed,
-                ],
-            }],
+            notifications: NotificationSettings::default(),
             muted: Vec::new(),
             client_id: None,
         }
@@ -146,16 +203,15 @@ pub fn glob_match(pattern: &str, value: &str) -> bool {
     matches(pattern.as_bytes(), value.as_bytes())
 }
 
-fn branch_matches(rule: &NotificationRule, branch: &str) -> bool {
+fn branch_matches(rule: &NotificationTypeRule, branch: &str) -> bool {
     let included =
         rule.branch_include.is_empty() || rule.branch_include.iter().any(|p| glob_match(p, branch));
     included && !rule.branch_exclude.iter().any(|p| glob_match(p, branch))
 }
 
 /// Whether `kind` on this pull request should reach the user, per their
-/// rules and exceptions. Mutes always win; among rules, any enabled match is
-/// enough — there is no "most specific rule wins" precedence to reason
-/// about, since a user who wants an exception writes it as a mute instead.
+/// settings and exceptions. Mutes always win; otherwise it is exactly the
+/// rule for this one kind — enabled, and matching the repo and branch.
 pub fn should_notify(
     settings: &GithubConnectorSettings,
     repo: &str,
@@ -166,36 +222,44 @@ pub fn should_notify(
     if is_muted(settings, repo, branch, pr_number) {
         return false;
     }
-    settings.rules.iter().any(|rule| {
-        rule.enabled
-            && glob_match(&rule.repo_pattern, repo)
-            && branch_matches(rule, branch)
-            && rule.statuses.contains(&kind)
-    })
+    let rule = settings.notifications.rule_for(kind);
+    rule.enabled && glob_match(&rule.repo_pattern, repo) && branch_matches(rule, branch)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    fn rule(repo_pattern: &str, statuses: &[PrEventKind]) -> NotificationRule {
-        NotificationRule {
-            id: "r".to_string(),
-            enabled: true,
-            repo_pattern: repo_pattern.to_string(),
-            branch_include: Vec::new(),
-            branch_exclude: Vec::new(),
-            statuses: statuses.to_vec(),
-        }
-    }
-
-    fn settings(rules: Vec<NotificationRule>, muted: Vec<String>) -> GithubConnectorSettings {
+    fn settings(
+        notifications: NotificationSettings,
+        muted: Vec<String>,
+    ) -> GithubConnectorSettings {
         GithubConnectorSettings {
             poll_interval_secs: 300,
-            rules,
+            notifications,
             muted,
             client_id: None,
         }
+    }
+
+    fn only(kind: PrEventKind, rule: NotificationTypeRule) -> NotificationSettings {
+        let mut notifications = NotificationSettings {
+            opened: NotificationTypeRule::disabled(),
+            closed: NotificationTypeRule::disabled(),
+            merged: NotificationTypeRule::disabled(),
+            review_requested: NotificationTypeRule::disabled(),
+            ci_failed: NotificationTypeRule::disabled(),
+            ci_passed: NotificationTypeRule::disabled(),
+        };
+        match kind {
+            PrEventKind::Opened => notifications.opened = rule,
+            PrEventKind::Closed => notifications.closed = rule,
+            PrEventKind::Merged => notifications.merged = rule,
+            PrEventKind::ReviewRequested => notifications.review_requested = rule,
+            PrEventKind::CiFailed => notifications.ci_failed = rule,
+            PrEventKind::CiPassed => notifications.ci_passed = rule,
+        }
+        notifications
     }
 
     #[test]
@@ -209,8 +273,10 @@ mod tests {
 
     #[test]
     fn disabled_rule_never_matches() {
-        let mut settings = settings(vec![rule("*", &[PrEventKind::Opened])], Vec::new());
-        settings.rules[0].enabled = false;
+        let settings = settings(
+            only(PrEventKind::Opened, NotificationTypeRule::disabled()),
+            Vec::new(),
+        );
         assert!(!should_notify(
             &settings,
             "my-org/relay",
@@ -221,11 +287,25 @@ mod tests {
     }
 
     #[test]
-    fn repo_mute_silences_every_status_and_branch() {
+    fn a_kind_with_no_rule_of_its_own_is_unaffected_by_another_kinds_rule() {
         let settings = settings(
-            vec![rule("*", &[PrEventKind::Opened, PrEventKind::CiFailed])],
-            vec!["my-org/relay".to_string()],
+            only(PrEventKind::Opened, NotificationTypeRule::enabled("*")),
+            Vec::new(),
         );
+        assert!(!should_notify(
+            &settings,
+            "my-org/relay",
+            "main",
+            1,
+            PrEventKind::CiFailed
+        ));
+    }
+
+    #[test]
+    fn repo_mute_silences_every_status_and_branch() {
+        let mut notifications = only(PrEventKind::Opened, NotificationTypeRule::enabled("*"));
+        notifications.ci_failed = NotificationTypeRule::enabled("*");
+        let settings = settings(notifications, vec!["my-org/relay".to_string()]);
         assert!(!should_notify(
             &settings,
             "my-org/relay",
@@ -245,7 +325,7 @@ mod tests {
     #[test]
     fn branch_mute_only_silences_that_branch() {
         let settings = settings(
-            vec![rule("*", &[PrEventKind::Opened])],
+            only(PrEventKind::Opened, NotificationTypeRule::enabled("*")),
             vec!["my-org/relay@release/1.0".to_string()],
         );
         assert!(!should_notify(
@@ -267,7 +347,7 @@ mod tests {
     #[test]
     fn pr_mute_only_silences_that_pr() {
         let settings = settings(
-            vec![rule("*", &[PrEventKind::Opened])],
+            only(PrEventKind::Opened, NotificationTypeRule::enabled("*")),
             vec!["my-org/relay#42".to_string()],
         );
         assert!(!should_notify(
@@ -288,10 +368,10 @@ mod tests {
 
     #[test]
     fn branch_include_and_exclude_narrow_the_rule() {
-        let mut r = rule("*", &[PrEventKind::Opened]);
-        r.branch_include = vec!["release/*".to_string()];
-        r.branch_exclude = vec!["release/legacy".to_string()];
-        let settings = settings(vec![r], Vec::new());
+        let mut rule = NotificationTypeRule::enabled("*");
+        rule.branch_include = vec!["release/*".to_string()];
+        rule.branch_exclude = vec!["release/legacy".to_string()];
+        let settings = settings(only(PrEventKind::Opened, rule), Vec::new());
         assert!(should_notify(
             &settings,
             "my-org/relay",
@@ -316,19 +396,7 @@ mod tests {
     }
 
     #[test]
-    fn status_not_in_the_rule_does_not_notify() {
-        let settings = settings(vec![rule("*", &[PrEventKind::Opened])], Vec::new());
-        assert!(!should_notify(
-            &settings,
-            "my-org/relay",
-            "main",
-            1,
-            PrEventKind::CiFailed
-        ));
-    }
-
-    #[test]
-    fn default_settings_cover_the_actionable_statuses_but_not_a_green_build() {
+    fn default_settings_cover_the_actionable_statuses_but_not_a_green_build_or_a_plain_close() {
         let settings = GithubConnectorSettings::default();
         for kind in [
             PrEventKind::Opened,
@@ -338,13 +406,9 @@ mod tests {
         ] {
             assert!(should_notify(&settings, "any/repo", "main", 1, kind));
         }
-        assert!(!should_notify(
-            &settings,
-            "any/repo",
-            "main",
-            1,
-            PrEventKind::CiPassed
-        ));
+        for kind in [PrEventKind::CiPassed, PrEventKind::Closed] {
+            assert!(!should_notify(&settings, "any/repo", "main", 1, kind));
+        }
     }
 
     #[test]
@@ -357,5 +421,30 @@ mod tests {
 
         settings.client_id = Some(" Iv1.abc123 ".to_string());
         assert_eq!(effective_client_id(&settings), Some("Iv1.abc123"));
+    }
+
+    #[test]
+    fn a_wholly_missing_settings_object_deserializes_to_the_friendly_defaults() {
+        let settings: GithubConnectorSettings = serde_json::from_str("{}").unwrap();
+        assert_eq!(settings, GithubConnectorSettings::default());
+    }
+
+    #[test]
+    fn a_notification_kind_missing_from_an_otherwise_present_object_defaults_to_disabled() {
+        // Distinct from the whole-object-missing case above: this is what a
+        // hand-edited or older settings.json with one key removed decodes
+        // to, and "silently off" is the safe direction to fail in.
+        let settings: GithubConnectorSettings =
+            serde_json::from_str(r#"{"notifications":{}}"#).unwrap();
+        for kind in [
+            PrEventKind::Opened,
+            PrEventKind::Closed,
+            PrEventKind::Merged,
+            PrEventKind::ReviewRequested,
+            PrEventKind::CiFailed,
+            PrEventKind::CiPassed,
+        ] {
+            assert!(!settings.notifications.rule_for(kind).enabled);
+        }
     }
 }

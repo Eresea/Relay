@@ -1,50 +1,86 @@
-import { ChangeDetectionStrategy, Component, inject, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, effect, inject, input, signal } from '@angular/core';
 
 import { TauriBridge } from '@core/tauri';
 import { ThemeService } from '@core/theme';
+import { Github } from '@features/github/github';
 
 /**
  * Relay's one settings surface, reached from the palette's "Open settings"
- * command. Everything here persists through `TauriBridge`'s settings store
- * (`settings.json` in the OS app-data directory) or, for launch-at-login,
- * through the OS's own autostart registration — never local component state.
+ * command (and, for the GitHub tab specifically, "GitHub" — see
+ * `initialTab`). Everything here persists through `TauriBridge`'s settings
+ * store (`settings.json` in the OS app-data directory) or, for
+ * launch-at-login, through the OS's own autostart registration — never
+ * local component state.
+ *
+ * Tab content is hidden with `[hidden]` rather than an `@if`, which would
+ * destroy and recreate `rl-github` on every switch away from its tab. A
+ * Device Flow connection attempt can take anywhere from a few seconds to a
+ * couple of minutes (however long the user takes to approve it on GitHub);
+ * destroying that component mid-wait would drop its event listener and
+ * silently lose the transition to "connected".
  */
 @Component({
   selector: 'rl-settings',
   changeDetection: ChangeDetectionStrategy.OnPush,
+  imports: [Github],
   template: `
-    <section class="group">
-      <h2 class="u-caption">Appearance</h2>
-      <div class="row">
-        <div>
-          <p class="label">Theme</p>
-          <p class="hint">{{ theme.theme() === 'dark' ? 'Dark' : 'Light' }} is active.</p>
-        </div>
-        <button type="button" class="link" (click)="theme.toggle()">
-          Switch to {{ theme.theme() === 'dark' ? 'light' : 'dark' }}
-        </button>
-      </div>
-    </section>
+    <nav class="tabs">
+      <button
+        type="button"
+        class="tab"
+        [class.active]="tab() === 'general'"
+        (click)="tab.set('general')"
+      >
+        General
+      </button>
+      <button
+        type="button"
+        class="tab"
+        [class.active]="tab() === 'github'"
+        (click)="tab.set('github')"
+      >
+        GitHub
+      </button>
+    </nav>
 
-    <section class="group">
-      <h2 class="u-caption">Startup</h2>
-      <div class="row">
-        <div>
-          <p class="label">Launch at login</p>
-          <p class="hint">Starts hidden in the tray, the same as any other launch.</p>
+    <div [hidden]="tab() !== 'general'">
+      <section class="group">
+        <h2 class="u-caption">Appearance</h2>
+        <div class="row">
+          <div>
+            <p class="label">Theme</p>
+            <p class="hint">{{ theme.theme() === 'dark' ? 'Dark' : 'Light' }} is active.</p>
+          </div>
+          <button type="button" class="link" (click)="theme.toggle()">
+            Switch to {{ theme.theme() === 'dark' ? 'light' : 'dark' }}
+          </button>
         </div>
-        <button
-          type="button"
-          role="switch"
-          class="switch"
-          [attr.aria-checked]="launchAtLogin()"
-          [disabled]="launchAtLoginPending()"
-          (click)="toggleLaunchAtLogin()"
-        >
-          <span class="switch-thumb"></span>
-        </button>
-      </div>
-    </section>
+      </section>
+
+      <section class="group">
+        <h2 class="u-caption">Startup</h2>
+        <div class="row">
+          <div>
+            <p class="label">Launch at login</p>
+            <p class="hint">Starts hidden in the tray, the same as any other launch.</p>
+          </div>
+          <button
+            type="button"
+            role="switch"
+            class="switch"
+            [attr.aria-checked]="launchAtLogin()"
+            [disabled]="launchAtLoginPending()"
+            (click)="toggleLaunchAtLogin()"
+          >
+            <span class="switch-thumb"></span>
+          </button>
+        </div>
+      </section>
+    </div>
+
+    <div [hidden]="tab() !== 'github'">
+      <rl-github />
+    </div>
   `,
   styles: `
     :host {
@@ -53,6 +89,34 @@ import { ThemeService } from '@core/theme';
       max-inline-size: var(--content-max);
       margin-inline: auto;
       padding: var(--space-8);
+    }
+
+    .tabs {
+      display: flex;
+      gap: var(--space-2);
+      margin-block-end: var(--space-6);
+      border-block-end: 1px solid var(--border-subtle);
+    }
+
+    .tab {
+      padding: var(--space-3) var(--space-2);
+      margin-block-end: -1px;
+      font-size: var(--text-13);
+      font-weight: var(--weight-medium);
+      color: var(--text-muted);
+      border-block-end: 2px solid transparent;
+      transition:
+        color var(--dur-hover) var(--ease-standard),
+        border-color var(--dur-hover) var(--ease-standard);
+    }
+
+    .tab:hover {
+      color: var(--text-body);
+    }
+
+    .tab.active {
+      color: var(--text-body);
+      border-block-end-color: var(--accent);
     }
 
     .group + .group {
@@ -136,13 +200,19 @@ import { ThemeService } from '@core/theme';
   `,
 })
 export class Settings {
+  /** Which tab to select right now. Home sets this from which palette command opened Settings. */
+  readonly initialTab = input<'general' | 'github'>('general');
+
   private readonly tauri = inject(TauriBridge);
   protected readonly theme = inject(ThemeService);
 
+  protected readonly tab = signal<'general' | 'github'>('general');
   protected readonly launchAtLogin = signal(false);
   protected readonly launchAtLoginPending = signal(true);
 
   constructor() {
+    effect(() => this.tab.set(this.initialTab()));
+
     void this.tauri.isAutostartEnabled().then((enabled) => {
       this.launchAtLogin.set(enabled);
       this.launchAtLoginPending.set(false);

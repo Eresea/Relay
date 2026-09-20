@@ -9,7 +9,6 @@ import {
 
 import { TauriBridge } from '@core/tauri';
 import { ThemeService } from '@core/theme';
-import { Github } from '@features/github/github';
 import { Settings } from '@features/settings/settings';
 import { Vault } from '@features/vault/vault';
 import { Icon } from '@shared/icon';
@@ -25,7 +24,7 @@ import { Kbd } from '@shared/kbd';
 @Component({
   selector: 'rl-home',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [Icon, Kbd, Settings, Vault, Github],
+  imports: [Icon, Kbd, Settings, Vault],
   template: `
     <header class="titlebar u-chrome" data-tauri-drag-region>
       @if (view() !== 'home') {
@@ -58,11 +57,9 @@ import { Kbd } from '@shared/kbd';
     </header>
 
     @if (view() === 'settings') {
-      <rl-settings />
+      <rl-settings [initialTab]="settingsTab()" />
     } @else if (view() === 'vault') {
       <rl-vault />
-    } @else if (view() === 'github') {
-      <rl-github />
     } @else {
       <main>
         <div class="cold-start">
@@ -170,15 +167,14 @@ import { Kbd } from '@shared/kbd';
 export class Home {
   protected readonly theme = inject(ThemeService);
   protected readonly paletteKeys = ['Ctrl', 'Space'] as const;
-  protected readonly view = signal<'home' | 'settings' | 'vault' | 'github'>('home');
+  protected readonly view = signal<'home' | 'settings' | 'vault'>('home');
+  protected readonly settingsTab = signal<'general' | 'github'>('general');
   protected readonly viewTitle = computed(() => {
     switch (this.view()) {
       case 'settings':
         return 'Settings';
       case 'vault':
         return 'Password vault';
-      case 'github':
-        return 'GitHub';
       default:
         return '';
     }
@@ -203,9 +199,15 @@ export class Home {
     // signal it could have set directly.
     void this.tauri
       .onEvent((event) => {
-        if (event.type === 'openSettingsRequested') this.view.set('settings');
+        if (event.type === 'openSettingsRequested') {
+          this.view.set('settings');
+          this.settingsTab.set('general');
+        }
         if (event.type === 'openVaultRequested') this.view.set('vault');
-        if (event.type === 'openGithubRequested') this.view.set('github');
+        if (event.type === 'openGithubRequested') {
+          this.view.set('settings');
+          this.settingsTab.set('github');
+        }
       })
       .then((unlisten) => destroyRef.onDestroy(unlisten));
   }

@@ -132,7 +132,35 @@ fn notify_pr_event<S: EventSink>(
 /// the code expires. `ctx.checkpoint()` between waits means cancelling the
 /// job — Relay quitting, or the user backing out mid-flow — stops the
 /// polling immediately rather than leaking it until expiry.
+///
+/// Every failure path — denied, expired, a bad response from GitHub, a
+/// network error, a keychain write that fails — is funneled through one
+/// `ctx.report(Blocked, ...)` carrying the real error text before returning
+/// it, rather than reporting only the handful of outcomes this function
+/// itself distinguishes. Without that, a failure past the point GitHub
+/// approves the code (fetching the username, writing to the keychain) would
+/// reach the frontend as a bare `NotificationDone { ok: false }` with no way
+/// to say why.
 pub async fn run_device_flow<C: GitHubClient, S: EventSink, T: TokenStore>(
+    ctx: &JobContext<S>,
+    client: &C,
+    token_store: &T,
+    client_id: &str,
+    device: DeviceCodeResponse,
+) -> Result<StoredToken> {
+    let result = run_device_flow_inner(ctx, client, token_store, client_id, device).await;
+    // A cancelled job is an intentional, user-initiated outcome (backing out
+    // of the flow) rather than a failure needing an explanation — the
+    // frontend already updates its own state the moment it asks to cancel.
+    if let Err(error) = &result {
+        if !matches!(error, Error::JobCancelled(_)) {
+            ctx.report(NotificationStatus::Blocked, error.to_string(), None, None);
+        }
+    }
+    result
+}
+
+async fn run_device_flow_inner<C: GitHubClient, S: EventSink, T: TokenStore>(
     ctx: &JobContext<S>,
     client: &C,
     token_store: &T,
@@ -148,12 +176,6 @@ pub async fn run_device_flow<C: GitHubClient, S: EventSink, T: TokenStore>(
         ctx.checkpoint()?;
 
         if now_millis() >= deadline {
-            ctx.report(
-                NotificationStatus::Blocked,
-                "GitHub sign-in code expired",
-                None,
-                None,
-            );
             return Err(Error::GithubDeviceFlowExpired);
         }
 
@@ -181,33 +203,9 @@ pub async fn run_device_flow<C: GitHubClient, S: EventSink, T: TokenStore>(
                 wait_secs += 5;
                 continue;
             }
-            TokenOutcome::Denied => {
-                ctx.report(
-                    NotificationStatus::Blocked,
-                    "GitHub sign-in declined",
-                    None,
-                    None,
-                );
-                return Err(Error::GithubDeviceFlowDenied);
-            }
-            TokenOutcome::Expired => {
-                ctx.report(
-                    NotificationStatus::Blocked,
-                    "GitHub sign-in code expired",
-                    None,
-                    None,
-                );
-                return Err(Error::GithubDeviceFlowExpired);
-            }
-            TokenOutcome::Failed(reason) => {
-                ctx.report(
-                    NotificationStatus::Blocked,
-                    "GitHub sign-in failed",
-                    Some(reason.clone()),
-                    None,
-                );
-                return Err(Error::GithubRequestFailed(reason));
-            }
+            TokenOutcome::Denied => return Err(Error::GithubDeviceFlowDenied),
+            TokenOutcome::Expired => return Err(Error::GithubDeviceFlowExpired),
+            TokenOutcome::Failed(reason) => return Err(Error::GithubRequestFailed(reason)),
         }
     }
 }
@@ -405,7 +403,6 @@ mod tests {
     use super::super::client::{
         PullRequestDetail, PullRequestRef, PullRequestUser, SearchIssueItem,
     };
-    use super::super::rules::NotificationRule;
     use super::super::token_store::fake::FakeTokenStore;
     use super::*;
     use crate::jobs::fake::FakeSink;
@@ -538,23 +535,9 @@ mod tests {
 
         let sink = FakeSink::default();
         let registry = JobRegistry::default();
-        let settings = GithubConnectorSettings {
-            poll_interval_secs: 300,
-            rules: vec![NotificationRule {
-                id: "r".to_string(),
-                enabled: true,
-                repo_pattern: "*".to_string(),
-                branch_include: Vec::new(),
-                branch_exclude: Vec::new(),
-                statuses: vec![
-                    PrEventKind::Opened,
-                    PrEventKind::CiFailed,
-                    PrEventKind::ReviewRequested,
-                ],
-            }],
-            muted: Vec::new(),
-            client_id: None,
-        };
+        // Opened, CI-failed and review-requested are all on by default —
+        // exactly the three events this newly-seen PR fires.
+        let settings = GithubConnectorSettings::default();
         let mut cache = PollCache::default();
 
         run_poll_cycle(
@@ -627,6 +610,22 @@ mod tests {
         crate::jobs::fake::context(sink, Arc::new(std::sync::atomic::AtomicBool::new(false)))
     }
 
+    struct FailingTokenStore;
+
+    impl TokenStore for FailingTokenStore {
+        fn get(&self) -> Result<Option<StoredToken>> {
+            Ok(None)
+        }
+
+        fn set(&self, _token: &StoredToken) -> Result<()> {
+            Err(Error::TokenStore("simulated keychain failure".to_string()))
+        }
+
+        fn clear(&self) -> Result<()> {
+            Ok(())
+        }
+    }
+
     #[tokio::test]
     async fn run_device_flow_stores_the_token_once_approved() {
         let client = FakeGitHubClient::default();
@@ -673,6 +672,20 @@ mod tests {
         assert_eq!(token_store.get().unwrap(), Some(stored));
     }
 
+    fn blocked_titles(sink: &FakeSink) -> Vec<String> {
+        sink.events()
+            .iter()
+            .filter_map(|event| match event {
+                crate::events::AppEvent::Notification {
+                    status: NotificationStatus::Blocked,
+                    title,
+                    ..
+                } => Some(title.clone()),
+                _ => None,
+            })
+            .collect()
+    }
+
     #[tokio::test]
     async fn run_device_flow_fails_when_the_user_denies_it() {
         let client = FakeGitHubClient::default();
@@ -687,7 +700,8 @@ mod tests {
                 error: Some("access_denied".to_string()),
             }));
         let token_store = FakeTokenStore::default();
-        let ctx = test_ctx(FakeSink::default());
+        let sink = FakeSink::default();
+        let ctx = test_ctx(sink.clone());
 
         let result = run_device_flow(
             &ctx,
@@ -699,13 +713,18 @@ mod tests {
         .await;
         assert!(matches!(result, Err(Error::GithubDeviceFlowDenied)));
         assert_eq!(token_store.get().unwrap(), None);
+        assert_eq!(
+            blocked_titles(&sink),
+            vec![Error::GithubDeviceFlowDenied.to_string()]
+        );
     }
 
     #[tokio::test]
     async fn run_device_flow_expires_once_the_deadline_has_passed() {
         let client = FakeGitHubClient::default();
         let token_store = FakeTokenStore::default();
-        let ctx = test_ctx(FakeSink::default());
+        let sink = FakeSink::default();
+        let ctx = test_ctx(sink.clone());
 
         // expires_in: 0 means the deadline is already behind us the first
         // time it's checked, so this returns without consuming a scripted
@@ -713,6 +732,75 @@ mod tests {
         let result =
             run_device_flow(&ctx, &client, &token_store, "client-id", device_code(0, 0)).await;
         assert!(matches!(result, Err(Error::GithubDeviceFlowExpired)));
+        assert_eq!(
+            blocked_titles(&sink),
+            vec![Error::GithubDeviceFlowExpired.to_string()]
+        );
+    }
+
+    #[tokio::test]
+    async fn a_failure_after_approval_is_reported_with_its_real_reason_not_silently() {
+        // Approval can still be followed by a failure Relay didn't
+        // specifically anticipate — a keychain write that fails, here. That
+        // must not vanish into a bare `NotificationDone { ok: false }`.
+        let client = FakeGitHubClient::default();
+        client
+            .token_polls
+            .lock()
+            .unwrap()
+            .push(Ok(super::super::oauth::TokenResponse {
+                access_token: Some("gho_abc".to_string()),
+                refresh_token: None,
+                expires_in: None,
+                error: None,
+            }));
+        client
+            .viewer_login
+            .lock()
+            .unwrap()
+            .push(Ok("octocat".to_string()));
+        let token_store = FailingTokenStore;
+        let sink = FakeSink::default();
+        let ctx = test_ctx(sink.clone());
+
+        let result = run_device_flow(
+            &ctx,
+            &client,
+            &token_store,
+            "client-id",
+            device_code(900, 0),
+        )
+        .await;
+
+        assert!(matches!(result, Err(Error::TokenStore(_))));
+        let titles = blocked_titles(&sink);
+        assert_eq!(titles.len(), 1);
+        assert!(
+            titles[0].contains("simulated keychain failure"),
+            "title was: {}",
+            titles[0]
+        );
+    }
+
+    #[tokio::test]
+    async fn cancelling_mid_flow_reports_nothing_blocked() {
+        let client = FakeGitHubClient::default();
+        let token_store = FakeTokenStore::default();
+        let sink = FakeSink::default();
+        let cancelled = Arc::new(std::sync::atomic::AtomicBool::new(true));
+        let ctx = crate::jobs::fake::context(sink.clone(), cancelled);
+
+        let result = run_device_flow(
+            &ctx,
+            &client,
+            &token_store,
+            "client-id",
+            device_code(900, 0),
+        )
+        .await;
+
+        assert!(matches!(result, Err(Error::JobCancelled(_))));
+        assert!(blocked_titles(&sink).is_empty());
     }
 
     #[tokio::test]

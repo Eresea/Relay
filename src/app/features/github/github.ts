@@ -3,54 +3,68 @@ import { FormsModule } from '@angular/forms';
 
 import {
   DEFAULT_GITHUB_SETTINGS,
+  PR_EVENT_KINDS,
   TauriBridge,
+  ruleFor,
   type DeviceAuthorization,
   type GithubConnectorSettings,
-  type NotificationRule,
+  type NotificationSettings,
+  type NotificationTypeRule,
   type PrEventKind,
 } from '@core/tauri';
 import { Icon } from '@shared/icon';
 
-const STATUS_LABELS: readonly (readonly [PrEventKind, string])[] = [
-  ['opened', 'Opened'],
-  ['merged', 'Merged'],
-  ['closed', 'Closed'],
-  ['review_requested', 'Review requested'],
-  ['ci_failed', 'CI failed'],
-  ['ci_passed', 'CI passed'],
-];
+const KIND_LABELS: Readonly<Record<PrEventKind, string>> = {
+  opened: 'Opened',
+  closed: 'Closed',
+  merged: 'Merged',
+  review_requested: 'Review requested',
+  ci_failed: 'CI failed',
+  ci_passed: 'CI passed',
+};
 
-let nextRuleId = 0;
-
-/** A `NotificationRule` with its glob lists as comma-separated text, for binding to a single field. */
-interface EditableRule {
-  id: string;
+/** A `NotificationTypeRule` with its glob lists as comma-separated text, for binding to a single field. */
+interface EditableTypeRule {
   enabled: boolean;
   repoPattern: string;
   branchInclude: string;
   branchExclude: string;
-  statuses: Set<PrEventKind>;
 }
 
-function toEditable(rule: NotificationRule): EditableRule {
+type EditableNotifications = Record<PrEventKind, EditableTypeRule>;
+
+function toEditableRule(rule: NotificationTypeRule): EditableTypeRule {
   return {
-    id: rule.id,
     enabled: rule.enabled,
     repoPattern: rule.repoPattern,
     branchInclude: rule.branchInclude.join(', '),
     branchExclude: rule.branchExclude.join(', '),
-    statuses: new Set(rule.statuses),
   };
 }
 
-function fromEditable(rule: EditableRule): NotificationRule {
+function fromEditableRule(rule: EditableTypeRule): NotificationTypeRule {
   return {
-    id: rule.id,
     enabled: rule.enabled,
     repoPattern: rule.repoPattern.trim() || '*',
     branchInclude: splitList(rule.branchInclude),
     branchExclude: splitList(rule.branchExclude),
-    statuses: [...rule.statuses],
+  };
+}
+
+function toEditableNotifications(notifications: NotificationSettings): EditableNotifications {
+  return Object.fromEntries(
+    PR_EVENT_KINDS.map((kind) => [kind, toEditableRule(ruleFor(notifications, kind))]),
+  ) as EditableNotifications;
+}
+
+function fromEditableNotifications(notifications: EditableNotifications): NotificationSettings {
+  return {
+    opened: fromEditableRule(notifications.opened),
+    closed: fromEditableRule(notifications.closed),
+    merged: fromEditableRule(notifications.merged),
+    reviewRequested: fromEditableRule(notifications.review_requested),
+    ciFailed: fromEditableRule(notifications.ci_failed),
+    ciPassed: fromEditableRule(notifications.ci_passed),
   };
 }
 
@@ -75,10 +89,16 @@ function connectorErrorMessage(error: unknown): string {
 
 /**
  * The GitHub connector: connect an account over Device Flow, then configure
- * which pull request activity is worth a notification. The poll job itself
- * lives entirely core-side (`src-tauri/src/github`); this component only
- * ever shows connection status and edits `settings.json` — it never talks to
- * GitHub directly.
+ * which pull request activity is worth a notification, one switch per kind
+ * of event. The poll job itself lives entirely core-side
+ * (`src-tauri/src/github`); this component only ever shows connection
+ * status and edits `settings.json` — it never talks to GitHub directly.
+ *
+ * Rendered inside the Settings page's "GitHub" tab (`settings.ts`), which
+ * keeps this component mounted rather than destroying it when another tab
+ * is selected — the Device Flow wait spans several seconds to minutes, and
+ * losing this component's listener mid-wait would lose the transition to
+ * "connected" along with it.
  */
 @Component({
   selector: 'rl-github',
@@ -93,7 +113,7 @@ function connectorErrorMessage(error: unknown): string {
             <p class="u-title">Connect GitHub</p>
             <p class="hint">
               Relay polls the signed-in account's pull requests and notifies you about the activity
-              your rules ask for — new PRs, reviews requested, and CI results.
+              your settings ask for — new PRs, reviews requested, and CI results.
             </p>
 
             <div class="client-id-setup">
@@ -152,7 +172,12 @@ function connectorErrorMessage(error: unknown): string {
               <button type="button" class="link" (click)="disconnect()">Disconnect</button>
             </div>
             <div class="row">
-              <p class="label">Connected as {{ username() }}</p>
+              <div class="account-status">
+                <span class="status-dot"></span>
+                <p class="label">
+                  Connected as <strong>{{ username() }}</strong>
+                </p>
+              </div>
             </div>
           </section>
 
@@ -176,44 +201,35 @@ function connectorErrorMessage(error: unknown): string {
           </section>
 
           <section class="group">
-            <div class="row-header">
-              <h2 class="u-caption">Rules</h2>
-              <button type="button" class="link" (click)="addRule()">Add rule</button>
-            </div>
+            <h2 class="u-caption">Notifications</h2>
+            <p class="hint notifications-hint">
+              One switch per kind of activity. Scope any of them to specific repos or branches —
+              empty branch fields mean every branch.
+            </p>
 
-            @if (rules().length === 0) {
-              <p class="hint">No rules — nothing will notify you yet.</p>
-            }
-
-            @for (rule of rules(); track rule.id) {
-              <div class="rule">
+            @for (kind of kinds; track kind) {
+              @let rule = notifications()[kind];
+              <div class="rule" [class.rule-disabled]="!rule.enabled">
                 <div class="rule-header">
                   <button
                     type="button"
                     role="switch"
                     class="switch"
                     [attr.aria-checked]="rule.enabled"
-                    (click)="toggleEnabled(rule)"
+                    (click)="toggleKind(kind)"
                   >
                     <span class="switch-thumb"></span>
                   </button>
+                  <p class="label kind-label">{{ kindLabel(kind) }}</p>
+                </div>
+
+                <div class="rule-fields">
                   <input
-                    class="field repo-field"
+                    class="field"
                     placeholder="Repo pattern, e.g. my-org/*"
                     [(ngModel)]="rule.repoPattern"
                     (change)="save()"
                   />
-                  <button
-                    type="button"
-                    class="icon-btn danger"
-                    (click)="removeRule(rule.id)"
-                    aria-label="Delete rule"
-                  >
-                    <rl-icon name="trash-2" [size]="16" />
-                  </button>
-                </div>
-
-                <div class="rule-branches">
                   <input
                     class="field"
                     placeholder="Branches to include (comma-separated globs, empty = all)"
@@ -226,19 +242,6 @@ function connectorErrorMessage(error: unknown): string {
                     [(ngModel)]="rule.branchExclude"
                     (change)="save()"
                   />
-                </div>
-
-                <div class="statuses">
-                  @for (status of statusLabels; track status[0]) {
-                    <label class="check">
-                      <input
-                        type="checkbox"
-                        [checked]="rule.statuses.has(status[0])"
-                        (change)="toggleStatus(rule, status[0])"
-                      />
-                      <span>{{ status[1] }}</span>
-                    </label>
-                  }
                 </div>
               </div>
             }
@@ -288,7 +291,7 @@ function connectorErrorMessage(error: unknown): string {
       inline-size: 100%;
       max-inline-size: var(--content-max);
       margin-inline: auto;
-      padding: var(--space-8);
+      padding-block-start: var(--space-6);
     }
 
     .loading {
@@ -302,6 +305,11 @@ function connectorErrorMessage(error: unknown): string {
 
     .group h2 {
       margin: 0 0 var(--space-4);
+    }
+
+    .notifications-hint {
+      margin-block-start: calc(var(--space-4) * -1);
+      margin-block-end: var(--space-4);
     }
 
     .row-header {
@@ -326,6 +334,19 @@ function connectorErrorMessage(error: unknown): string {
 
     .row:last-child {
       border-block-end: none;
+    }
+
+    .account-status {
+      display: flex;
+      align-items: center;
+      gap: var(--space-3);
+    }
+
+    .status-dot {
+      inline-size: 8px;
+      block-size: 8px;
+      border-radius: var(--radius-pill);
+      background: var(--status-done);
     }
 
     .label {
@@ -444,6 +465,11 @@ function connectorErrorMessage(error: unknown): string {
     .rule {
       padding: var(--space-4) 0;
       border-block-end: 1px solid var(--border-subtle);
+      transition: opacity var(--dur-hover) var(--ease-standard);
+    }
+
+    .rule.rule-disabled {
+      opacity: 0.6;
     }
 
     .rule:last-child {
@@ -457,32 +483,17 @@ function connectorErrorMessage(error: unknown): string {
       margin-block-end: var(--space-3);
     }
 
-    .repo-field {
-      flex: 1;
+    .kind-label {
+      font-weight: var(--weight-semibold);
     }
 
-    .rule-branches {
+    .rule-fields {
       display: flex;
       gap: var(--space-3);
-      margin-block-end: var(--space-3);
     }
 
-    .rule-branches .field {
+    .rule-fields .field {
       flex: 1;
-    }
-
-    .statuses {
-      display: flex;
-      flex-wrap: wrap;
-      gap: var(--space-4);
-      font-size: var(--text-13);
-      color: var(--text-muted);
-    }
-
-    .check {
-      display: flex;
-      align-items: center;
-      gap: var(--space-1);
     }
 
     .switch {
@@ -562,7 +573,7 @@ export class Github {
   private readonly tauri = inject(TauriBridge);
   private readonly destroyRef = inject(DestroyRef);
 
-  protected readonly statusLabels = STATUS_LABELS;
+  protected readonly kinds = PR_EVENT_KINDS;
 
   protected readonly status = signal<'loading' | 'disconnected' | 'connecting' | 'connected'>(
     'loading',
@@ -571,10 +582,15 @@ export class Github {
   protected readonly error = signal('');
   protected readonly username = signal<string | null>(null);
   protected readonly deviceAuth = signal<DeviceAuthorization | null>(null);
+  /** The most recent "blocked" detail reported for the in-flight connect job, if any — the real
+   * reason a connection attempt failed, shown in place of a generic message when it is available. */
+  private blockedMessage = '';
 
   protected readonly clientId = signal('');
   protected readonly pollIntervalSecs = signal(DEFAULT_GITHUB_SETTINGS.pollIntervalSecs);
-  protected readonly rules = signal<EditableRule[]>([]);
+  protected readonly notifications = signal<EditableNotifications>(
+    toEditableNotifications(DEFAULT_GITHUB_SETTINGS.notifications),
+  );
   protected readonly muted = signal<string[]>([]);
   protected readonly newMuteKey = signal('');
 
@@ -583,24 +599,27 @@ export class Github {
 
     void this.tauri
       .onEvent((event) => {
-        if (event.type === 'openGithubRequested') void this.refreshStatus();
-        if (
-          event.type === 'notificationDone' &&
-          event.jobId === this.deviceAuth()?.jobId &&
-          this.status() === 'connecting'
-        ) {
+        const jobId = this.deviceAuth()?.jobId;
+        if (!jobId || this.status() !== 'connecting') return;
+
+        if (event.type === 'notification' && event.jobId === jobId && event.status === 'blocked') {
+          this.blockedMessage = event.detail ? `${event.title}: ${event.detail}` : event.title;
+        }
+        if (event.type === 'notificationDone' && event.jobId === jobId) {
           if (event.ok) {
             void this.refreshStatus();
           } else {
-            this.error.set(
-              'Could not connect to GitHub. The code may have expired or been declined.',
-            );
+            this.error.set(this.blockedMessage || 'Could not connect to GitHub.');
             this.status.set('disconnected');
             this.deviceAuth.set(null);
           }
         }
       })
       .then((unlisten) => this.destroyRef.onDestroy(unlisten));
+  }
+
+  protected kindLabel(kind: PrEventKind): string {
+    return KIND_LABELS[kind];
   }
 
   private async refreshStatus(): Promise<void> {
@@ -621,7 +640,7 @@ export class Github {
     const settings = await this.tauri.githubSettings();
     this.clientId.set(settings.clientId ?? '');
     this.pollIntervalSecs.set(settings.pollIntervalSecs);
-    this.rules.set(settings.rules.map(toEditable));
+    this.notifications.set(toEditableNotifications(settings.notifications));
     this.muted.set([...settings.muted]);
   }
 
@@ -629,7 +648,7 @@ export class Github {
     return {
       clientId: this.clientId().trim() || null,
       pollIntervalSecs: this.pollIntervalSecs(),
-      rules: this.rules().map(fromEditable),
+      notifications: fromEditableNotifications(this.notifications()),
       muted: this.muted(),
     };
   }
@@ -640,6 +659,7 @@ export class Github {
 
   protected async connect(): Promise<void> {
     this.error.set('');
+    this.blockedMessage = '';
     this.busy.set(true);
     try {
       const auth = await this.tauri.githubConnectStart();
@@ -680,39 +700,11 @@ export class Github {
     this.status.set('disconnected');
   }
 
-  protected addRule(): void {
-    this.rules.update((rules) => [
-      ...rules,
-      {
-        id: `rule-${Date.now()}-${nextRuleId++}`,
-        enabled: true,
-        repoPattern: '*',
-        branchInclude: '',
-        branchExclude: '',
-        statuses: new Set<PrEventKind>(['opened']),
-      },
-    ]);
-    this.save();
-  }
-
-  protected removeRule(id: string): void {
-    this.rules.update((rules) => rules.filter((rule) => rule.id !== id));
-    this.save();
-  }
-
-  protected toggleEnabled(rule: EditableRule): void {
-    rule.enabled = !rule.enabled;
-    this.rules.update((rules) => [...rules]);
-    this.save();
-  }
-
-  protected toggleStatus(rule: EditableRule, kind: PrEventKind): void {
-    if (rule.statuses.has(kind)) {
-      rule.statuses.delete(kind);
-    } else {
-      rule.statuses.add(kind);
-    }
-    this.rules.update((rules) => [...rules]);
+  protected toggleKind(kind: PrEventKind): void {
+    this.notifications.update((notifications) => ({
+      ...notifications,
+      [kind]: { ...notifications[kind], enabled: !notifications[kind].enabled },
+    }));
     this.save();
   }
 

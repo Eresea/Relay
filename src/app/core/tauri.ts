@@ -316,38 +316,86 @@ export interface DeviceAuthorization {
 export type PrEventKind =
   'opened' | 'closed' | 'merged' | 'review_requested' | 'ci_failed' | 'ci_passed';
 
-/** Mirrors `github::rules::NotificationRule`. */
-export interface NotificationRule {
-  readonly id: string;
+/** All six, in the order the settings UI lists them. */
+export const PR_EVENT_KINDS: readonly PrEventKind[] = [
+  'opened',
+  'closed',
+  'merged',
+  'review_requested',
+  'ci_failed',
+  'ci_passed',
+];
+
+/** Mirrors `github::rules::NotificationTypeRule`. */
+export interface NotificationTypeRule {
   readonly enabled: boolean;
   readonly repoPattern: string;
   readonly branchInclude: readonly string[];
   readonly branchExclude: readonly string[];
-  readonly statuses: readonly PrEventKind[];
+}
+
+/** Mirrors `github::rules::NotificationSettings` — one rule per `PrEventKind`. */
+export interface NotificationSettings {
+  readonly opened: NotificationTypeRule;
+  readonly closed: NotificationTypeRule;
+  readonly merged: NotificationTypeRule;
+  readonly reviewRequested: NotificationTypeRule;
+  readonly ciFailed: NotificationTypeRule;
+  readonly ciPassed: NotificationTypeRule;
+}
+
+/** Reads the rule for one kind out of `NotificationSettings` — mirrors `NotificationSettings::rule_for`. */
+export function ruleFor(
+  notifications: NotificationSettings,
+  kind: PrEventKind,
+): NotificationTypeRule {
+  switch (kind) {
+    case 'opened':
+      return notifications.opened;
+    case 'closed':
+      return notifications.closed;
+    case 'merged':
+      return notifications.merged;
+    case 'review_requested':
+      return notifications.reviewRequested;
+    case 'ci_failed':
+      return notifications.ciFailed;
+    case 'ci_passed':
+      return notifications.ciPassed;
+  }
 }
 
 /** Mirrors `github::rules::GithubConnectorSettings`. */
 export interface GithubConnectorSettings {
   readonly pollIntervalSecs: number;
-  readonly rules: readonly NotificationRule[];
+  readonly notifications: NotificationSettings;
   readonly muted: readonly string[];
   /** A GitHub OAuth App (Device Flow enabled) client id. `null` until configured. */
   readonly clientId: string | null;
 }
 
+const DISABLED_RULE: NotificationTypeRule = {
+  enabled: false,
+  repoPattern: '*',
+  branchInclude: [],
+  branchExclude: [],
+};
+
+function enabledRule(repoPattern: string): NotificationTypeRule {
+  return { enabled: true, repoPattern, branchInclude: [], branchExclude: [] };
+}
+
 /** Mirrors `GithubConnectorSettings::default()` in `github::rules`. */
 export const DEFAULT_GITHUB_SETTINGS: GithubConnectorSettings = {
   pollIntervalSecs: 300,
-  rules: [
-    {
-      id: 'default',
-      enabled: true,
-      repoPattern: '*',
-      branchInclude: [],
-      branchExclude: [],
-      statuses: ['opened', 'merged', 'review_requested', 'ci_failed'],
-    },
-  ],
+  notifications: {
+    opened: enabledRule('*'),
+    closed: DISABLED_RULE,
+    merged: enabledRule('*'),
+    reviewRequested: enabledRule('*'),
+    ciFailed: enabledRule('*'),
+    ciPassed: DISABLED_RULE,
+  },
   muted: [],
   clientId: null,
 };
