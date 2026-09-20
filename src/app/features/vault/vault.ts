@@ -148,6 +148,7 @@ import { Icon } from '@shared/icon';
             class="field"
             type="password"
             placeholder="Master password"
+            autofocus
             [(ngModel)]="masterPassword"
             name="masterPassword"
           />
@@ -165,6 +166,7 @@ import { Icon } from '@shared/icon';
             class="field"
             type="password"
             placeholder="Master password (min. 8 characters)"
+            autofocus
             [(ngModel)]="masterPassword"
             name="masterPassword"
           />
