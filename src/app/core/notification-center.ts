@@ -14,6 +14,7 @@ export const DONE_GRACE_MS = 1200;
 @Injectable({ providedIn: 'root' })
 export class NotificationCenter {
   private readonly queue = signal<readonly NotificationPayload[]>([]);
+  private readonly dismissTimers = new Map<string, ReturnType<typeof setTimeout>>();
 
   readonly current = computed(() => this.queue()[0] ?? null);
 
@@ -32,12 +33,13 @@ export class NotificationCenter {
 
   private upsert(notification: NotificationPayload): void {
     this.queue.update((list) => {
-      const index = list.findIndex((n) => n.jobId === notification.jobId);
+      const index = list.findIndex((n) => n.notificationId === notification.notificationId);
       if (index === -1) return [...list, notification];
       const next = [...list];
       next[index] = notification;
       return next;
     });
+    this.scheduleCurrent();
   }
 
   private markDone(jobId: string, ok: boolean): void {
@@ -47,9 +49,36 @@ export class NotificationCenter {
         return ok ? { ...n, status: 'done', progress: 100 } : { ...n, status: 'blocked' };
       }),
     );
+    this.scheduleCurrent();
+  }
 
-    setTimeout(() => {
-      this.queue.update((list) => list.filter((n) => n.jobId !== jobId));
-    }, DONE_GRACE_MS);
+  dismiss(notificationId: string): void {
+    this.clearTimer(notificationId);
+    this.queue.update((list) => list.filter((n) => n.notificationId !== notificationId));
+    this.scheduleCurrent();
+  }
+
+  private scheduleCurrent(): void {
+    const current = this.queue()[0];
+    if (!current) return;
+
+    const delay = current.status === 'done' ? (current.autoDismissMs ?? DONE_GRACE_MS) : undefined;
+    if (delay === undefined) {
+      this.clearTimer(current.notificationId);
+      return;
+    }
+    if (this.dismissTimers.has(current.notificationId)) return;
+
+    this.dismissTimers.set(
+      current.notificationId,
+      setTimeout(() => this.dismiss(current.notificationId), delay),
+    );
+  }
+
+  private clearTimer(notificationId: string): void {
+    const timer = this.dismissTimers.get(notificationId);
+    if (timer === undefined) return;
+    clearTimeout(timer);
+    this.dismissTimers.delete(notificationId);
   }
 }

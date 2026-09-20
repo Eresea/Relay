@@ -44,6 +44,8 @@ pub enum AppEvent {
     /// — the HUD hashes it to a colour, never the notification's own id,
     /// so an agent's colour stays the same across every job it runs.
     Notification {
+        #[serde(rename = "notificationId")]
+        notification_id: String,
         #[serde(rename = "jobId")]
         job_id: JobId,
         #[serde(rename = "hueSource")]
@@ -57,6 +59,10 @@ pub enum AppEvent {
         /// None hides the progress track — never synthesise a percentage.
         #[serde(skip_serializing_if = "Option::is_none")]
         progress: Option<u8>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        auto_dismiss_ms: Option<u64>,
+        #[serde(skip_serializing_if = "Vec::is_empty")]
+        actions: Vec<NotificationAction>,
     },
 
     /// The job behind a notification finished. Separate from `Notification`
@@ -68,6 +74,15 @@ pub enum AppEvent {
         ok: bool,
     },
 }
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(tag = "id", rename_all = "camelCase")]
+pub enum NotificationAction {
+    Open { label: String, url: String },
+    Cancel { label: String },
+}
+
+pub const INFO_AUTO_DISMISS_MS: u64 = 8_000;
 
 #[derive(Debug, Clone, Copy, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -119,6 +134,7 @@ mod tests {
     #[test]
     fn notification_wire_shape_is_camel_case() {
         let event = AppEvent::Notification {
+            notification_id: "job-1".to_string(),
             job_id: JobId::from("job-1".to_string()),
             hue_source: "relay-demo".to_string(),
             title: "Doing the thing".to_string(),
@@ -126,12 +142,14 @@ mod tests {
             icon: None,
             status: NotificationStatus::Running,
             progress: Some(45),
+            auto_dismiss_ms: None,
+            actions: Vec::new(),
         };
 
         let json = serde_json::to_string(&event).unwrap();
         assert_eq!(
             json,
-            r#"{"type":"notification","jobId":"job-1","hueSource":"relay-demo","title":"Doing the thing","status":"running","progress":45}"#
+            r#"{"type":"notification","notificationId":"job-1","jobId":"job-1","hueSource":"relay-demo","title":"Doing the thing","status":"running","progress":45}"#
         );
     }
 

@@ -19,8 +19,8 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use serde::{Deserialize, Serialize};
 
 use crate::error::{Error, Result};
-use crate::events::{EventSink, NotificationStatus};
-use crate::jobs::{self, JobContext, JobRegistry};
+use crate::events::{EventSink, NotificationAction, NotificationStatus, INFO_AUTO_DISMISS_MS};
+use crate::jobs::{self, JobContext, JobRegistry, NotificationOptions};
 
 use super::client::{CiState, Conditional, GitHubClient};
 use super::oauth::{interpret_token_response, DeviceCodeResponse, TokenOutcome};
@@ -114,14 +114,30 @@ fn notify_pr_event<S: EventSink>(
     kind: PrEventKind,
     number: u64,
     pr_title: &str,
+    pr_url: &str,
 ) {
     let (title, detail) = describe(kind, repo, number, pr_title);
+    let notification_id = format!("{repo}#{number}:{kind:?}");
+    let pr_url = pr_url.to_string();
     jobs::spawn(
         sink.clone(),
         registry.clone(),
         repo.to_string(),
         move |ctx| async move {
-            ctx.report(NotificationStatus::Done, title, Some(detail), None);
+            ctx.report_notification(
+                NotificationStatus::Done,
+                title,
+                Some(detail),
+                None,
+                NotificationOptions {
+                    notification_id,
+                    auto_dismiss_ms: Some(INFO_AUTO_DISMISS_MS),
+                    actions: vec![NotificationAction::Open {
+                        label: "Open".to_string(),
+                        url: pr_url,
+                    }],
+                },
+            );
             Ok(())
         },
     );
@@ -291,7 +307,15 @@ pub async fn run_poll_cycle<C: GitHubClient, S: EventSink>(
         let events = diff_pr(cache.prs.get(&key), &current);
         for kind in events {
             if should_notify(settings, &repo, &detail.base.git_ref, item.number, kind) {
-                notify_pr_event(sink, registry, &repo, kind, item.number, &item.title);
+                notify_pr_event(
+                    sink,
+                    registry,
+                    &repo,
+                    kind,
+                    item.number,
+                    &item.title,
+                    &detail.html_url,
+                );
             }
         }
         cache.prs.insert(key, current);

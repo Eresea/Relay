@@ -6,7 +6,12 @@
  */
 export type NotificationStatus = 'running' | 'waiting' | 'blocked' | 'done';
 
+export type NotificationAction =
+  | { readonly id: 'open'; readonly label: string; readonly url: string }
+  | { readonly id: 'cancel'; readonly label: string };
+
 export interface NotificationPayload {
+  readonly notificationId: string;
   readonly jobId: string;
   readonly hueSource: string;
   readonly title: string;
@@ -15,6 +20,9 @@ export interface NotificationPayload {
   readonly status: NotificationStatus;
   /** Absent hides the progress track — never synthesise a percentage. */
   readonly progress?: number;
+  /** Completed notifications only; starts once this item reaches the front. */
+  readonly autoDismissMs?: number;
+  readonly actions?: readonly NotificationAction[];
 }
 
 export type AppEvent =

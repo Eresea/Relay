@@ -24,8 +24,8 @@ use tauri::{AppHandle, Manager};
 use tauri_plugin_store::StoreExt;
 
 use crate::error::{Error, Result};
-use crate::events::NotificationStatus;
-use crate::jobs::{self, JobId, JobRegistry};
+use crate::events::{NotificationAction, NotificationStatus};
+use crate::jobs::{self, JobId, JobRegistry, NotificationOptions};
 
 use client::{GitHubClient, HttpGitHubClient};
 use oauth::DeviceAuthorization;
@@ -113,7 +113,7 @@ pub fn connect_start(
     let sink = app.clone();
     let job_id = jobs::spawn(sink, registry, "github", move |ctx| async move {
         log::info!("github: connect job started");
-        ctx.report(
+        ctx.report_notification(
             NotificationStatus::Waiting,
             "Waiting for GitHub authorization",
             Some(format!(
@@ -121,6 +121,13 @@ pub fn connect_start(
                 device.user_code, device.verification_uri
             )),
             None,
+            NotificationOptions {
+                notification_id: "github-auth".to_string(),
+                auto_dismiss_ms: None,
+                actions: vec![NotificationAction::Cancel {
+                    label: "Cancel".to_string(),
+                }],
+            },
         );
         let token_store = KeyringTokenStore;
         let result =
