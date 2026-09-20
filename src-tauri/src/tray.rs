@@ -34,15 +34,20 @@ pub fn build(app: &App) -> tauri::Result<()> {
             }
         })
         .on_tray_icon_event(|tray, event| {
-            if let TrayIconEvent::Click {
-                button: MouseButton::Left,
-                button_state: MouseButtonState::Up,
-                ..
-            } = event
-            {
-                if let Err(error) = crate::overlay::toggle_palette(tray.app_handle()) {
-                    log::error!("tray click failed: {error}");
-                }
+            let result = match event {
+                TrayIconEvent::Click {
+                    button: MouseButton::Left,
+                    button_state: MouseButtonState::Up,
+                    ..
+                } => Some(crate::overlay::toggle_palette(tray.app_handle())),
+                TrayIconEvent::DoubleClick {
+                    button: MouseButton::Left,
+                    ..
+                } => Some(crate::overlay::show_main(tray.app_handle())),
+                _ => None,
+            };
+            if let Some(Err(error)) = result {
+                log::error!("tray click failed: {error}");
             }
         })
         .build(app)?;
