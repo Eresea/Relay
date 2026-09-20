@@ -608,8 +608,13 @@ export class Github {
   constructor() {
     void this.refreshStatus();
 
+    console.log('[github] component constructed, subscribing to relay://event');
     void this.tauri
       .onEvent((event) => {
+        console.log('[github] event received', event, {
+          jobId: this.deviceAuth()?.jobId,
+          status: this.status(),
+        });
         const jobId = this.deviceAuth()?.jobId;
         if (!jobId || this.status() !== 'connecting') return;
 
@@ -627,7 +632,10 @@ export class Github {
           }
         }
       })
-      .then((unlisten) => this.destroyRef.onDestroy(unlisten));
+      .then((unlisten) => {
+        console.log('[github] event subscription active');
+        this.destroyRef.onDestroy(unlisten);
+      });
 
     this.destroyRef.onDestroy(() => this.stopConnectFallbackPoll());
   }
@@ -672,7 +680,7 @@ export class Github {
       console.error('[github] fallback poll failed', error);
       return;
     }
-    console.debug('[github] fallback poll', { jobId, stillRunning, result });
+    console.log('[github] fallback poll', { jobId, stillRunning, result });
 
     if (result.connected) {
       this.stopConnectFallbackPoll();
