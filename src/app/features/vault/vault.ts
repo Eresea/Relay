@@ -1,4 +1,13 @@
-import { ChangeDetectionStrategy, Component, DestroyRef, inject, signal } from '@angular/core';
+import {
+  ChangeDetectionStrategy,
+  Component,
+  DestroyRef,
+  afterRenderEffect,
+  inject,
+  signal,
+  viewChild,
+  type ElementRef,
+} from '@angular/core';
 import { FormsModule } from '@angular/forms';
 
 import { TauriBridge, type PasswordOptions, type VaultEntrySummary } from '@core/tauri';
@@ -148,7 +157,7 @@ import { Icon } from '@shared/icon';
             class="field"
             type="password"
             placeholder="Master password"
-            autofocus
+            #masterPasswordField
             [(ngModel)]="masterPassword"
             name="masterPassword"
           />
@@ -166,7 +175,7 @@ import { Icon } from '@shared/icon';
             class="field"
             type="password"
             placeholder="Master password (min. 8 characters)"
-            autofocus
+            #masterPasswordField
             [(ngModel)]="masterPassword"
             name="masterPassword"
           />
@@ -386,6 +395,9 @@ import { Icon } from '@shared/icon';
 export class Vault {
   private readonly tauri = inject(TauriBridge);
   private readonly destroyRef = inject(DestroyRef);
+  private readonly masterPasswordField = viewChild<ElementRef<HTMLInputElement>>(
+    'masterPasswordField',
+  );
 
   protected readonly status = signal<'loading' | 'missing' | 'locked' | 'unlocked'>('loading');
   protected readonly busy = signal(false);
@@ -412,6 +424,12 @@ export class Vault {
   protected readonly saving = signal(false);
 
   constructor() {
+    afterRenderEffect(() => {
+      const status = this.status();
+      const field = this.masterPasswordField();
+      if ((status === 'locked' || status === 'missing') && field) field.nativeElement.focus();
+    });
+
     void this.refreshStatus();
 
     void this.tauri
