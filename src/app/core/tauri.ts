@@ -225,9 +225,20 @@ export class TauriBridge {
     await this.invoke('github_disconnect');
   }
 
-  /** Reads the connector's rules and poll interval from `settings.json`. */
+  /**
+   * Reads the connector's settings from `settings.json`. Merged field by
+   * field against the defaults rather than returned as-is: `getSetting`
+   * hands back whatever is on disk with no validation, and a value saved
+   * under an older shape of `GithubConnectorSettings` (or one hand-edited
+   * to drop a field) would otherwise reach callers with `notifications` —
+   * or one kind within it — simply missing.
+   */
   async githubSettings(): Promise<GithubConnectorSettings> {
-    return this.getSetting<GithubConnectorSettings>('github.settings', DEFAULT_GITHUB_SETTINGS);
+    const stored = await this.getSetting<Partial<GithubConnectorSettings> | null>(
+      'github.settings',
+      null,
+    );
+    return mergeGithubSettings(stored);
   }
 
   /** Persists the connector's rules and poll interval to `settings.json`. */
@@ -399,3 +410,30 @@ export const DEFAULT_GITHUB_SETTINGS: GithubConnectorSettings = {
   muted: [],
   clientId: null,
 };
+
+/**
+ * Fills in whatever `stored` is missing from `DEFAULT_GITHUB_SETTINGS`, one
+ * field at a time — including within `notifications`, per kind — rather
+ * than falling back wholesale the moment anything is absent. `stored` is
+ * untyped data from disk in all but name: it may be `null` (never saved),
+ * an older shape of this type, or hand-edited with a field dropped.
+ */
+function mergeGithubSettings(
+  stored: Partial<GithubConnectorSettings> | null | undefined,
+): GithubConnectorSettings {
+  const notifications = stored?.notifications;
+  const defaults = DEFAULT_GITHUB_SETTINGS;
+  return {
+    pollIntervalSecs: stored?.pollIntervalSecs ?? defaults.pollIntervalSecs,
+    muted: stored?.muted ?? defaults.muted,
+    clientId: stored?.clientId ?? defaults.clientId,
+    notifications: {
+      opened: notifications?.opened ?? defaults.notifications.opened,
+      closed: notifications?.closed ?? defaults.notifications.closed,
+      merged: notifications?.merged ?? defaults.notifications.merged,
+      reviewRequested: notifications?.reviewRequested ?? defaults.notifications.reviewRequested,
+      ciFailed: notifications?.ciFailed ?? defaults.notifications.ciFailed,
+      ciPassed: notifications?.ciPassed ?? defaults.notifications.ciPassed,
+    },
+  };
+}
