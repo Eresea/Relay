@@ -79,12 +79,29 @@ pub fn connect_start(
     client: HttpGitHubClient,
     registry: JobRegistry,
 ) -> Result<DeviceAuthorization> {
+    log::info!("github: connect_start called");
     let settings = read_settings(&app);
-    let client_id = rules::effective_client_id(&settings)
-        .ok_or(Error::GithubClientIdNotConfigured)?
-        .to_string();
+    let client_id = match rules::effective_client_id(&settings) {
+        Some(id) => id.to_string(),
+        None => {
+            log::warn!("github: connect_start called with no client id configured");
+            return Err(Error::GithubClientIdNotConfigured);
+        }
+    };
 
-    let device = tauri::async_runtime::block_on(client.start_device_flow(&client_id))?;
+    log::info!("github: requesting a device code");
+    let device = match tauri::async_runtime::block_on(client.start_device_flow(&client_id)) {
+        Ok(device) => device,
+        Err(error) => {
+            log::error!("github: start_device_flow failed: {error}");
+            return Err(error);
+        }
+    };
+    log::info!(
+        "github: got a device code, expires in {}s, poll every {}s",
+        device.expires_in,
+        device.poll_interval_secs()
+    );
     let user_code = device.user_code.clone();
     let verification_uri = device.verification_uri.clone();
     let expires_in = device.expires_in;
@@ -94,6 +111,7 @@ pub fn connect_start(
     let job_app = app.clone();
     let sink = app.clone();
     let job_id = jobs::spawn(sink, registry, "github", move |ctx| async move {
+        log::info!("github: connect job started");
         ctx.report(
             NotificationStatus::Waiting,
             "Waiting for GitHub authorization",
@@ -104,8 +122,16 @@ pub fn connect_start(
             None,
         );
         let token_store = KeyringTokenStore;
-        let stored =
-            poll::run_device_flow(&ctx, &job_client, &token_store, &client_id, device).await?;
+        let result =
+            poll::run_device_flow(&ctx, &job_client, &token_store, &client_id, device).await;
+        let stored = match result {
+            Ok(stored) => stored,
+            Err(error) => {
+                log::error!("github: connect job failed: {error}");
+                return Err(error);
+            }
+        };
+        log::info!("github: connected as {}", stored.username);
         ctx.report(
             NotificationStatus::Done,
             format!("Connected to GitHub as {}", stored.username),
@@ -115,6 +141,7 @@ pub fn connect_start(
         start_polling(&job_app, job_client, &job_registry);
         Ok(())
     });
+    log::info!("github: connect job spawned as {job_id}");
 
     Ok(DeviceAuthorization {
         user_code,

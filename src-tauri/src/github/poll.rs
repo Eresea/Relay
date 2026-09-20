@@ -153,11 +153,25 @@ pub async fn run_device_flow<C: GitHubClient, S: EventSink, T: TokenStore>(
     // of the flow) rather than a failure needing an explanation — the
     // frontend already updates its own state the moment it asks to cancel.
     if let Err(error) = &result {
-        if !matches!(error, Error::JobCancelled(_)) {
+        if matches!(error, Error::JobCancelled(_)) {
+            log::info!("github: connect job cancelled");
+        } else {
+            log::warn!("github: device flow failed: {error}");
             ctx.report(NotificationStatus::Blocked, error.to_string(), None, None);
         }
     }
     result
+}
+
+fn describe_outcome(outcome: &TokenOutcome) -> String {
+    match outcome {
+        TokenOutcome::Approved { .. } => "approved".to_string(),
+        TokenOutcome::Pending => "pending".to_string(),
+        TokenOutcome::SlowDown => "slow_down".to_string(),
+        TokenOutcome::Denied => "denied".to_string(),
+        TokenOutcome::Expired => "expired".to_string(),
+        TokenOutcome::Failed(reason) => format!("failed ({reason})"),
+    }
 }
 
 async fn run_device_flow_inner<C: GitHubClient, S: EventSink, T: TokenStore>(
@@ -169,25 +183,39 @@ async fn run_device_flow_inner<C: GitHubClient, S: EventSink, T: TokenStore>(
 ) -> Result<StoredToken> {
     let deadline = now_millis() + device.expires_in * 1000;
     let mut wait_secs = device.poll_interval_secs();
+    let mut attempt: u32 = 0;
 
     loop {
         ctx.checkpoint()?;
+        log::info!("github: waiting {wait_secs}s before the next poll (attempt {attempt})");
         tokio::time::sleep(Duration::from_secs(wait_secs)).await;
         ctx.checkpoint()?;
 
         if now_millis() >= deadline {
+            log::warn!("github: device code expired before it was approved");
             return Err(Error::GithubDeviceFlowExpired);
         }
 
+        attempt += 1;
+        log::info!("github: polling for approval (attempt {attempt})");
         let response = client
             .poll_device_token(client_id, &device.device_code)
             .await?;
-        match interpret_token_response(response) {
+        let outcome = interpret_token_response(response);
+        // Never log `outcome` via its derived `Debug` — `Approved` carries
+        // the raw access token, and this line must never put a bearer
+        // credential into a log file.
+        log::info!(
+            "github: poll attempt {attempt} outcome: {}",
+            describe_outcome(&outcome)
+        );
+        match outcome {
             TokenOutcome::Approved {
                 access_token,
                 refresh_token,
                 expires_in,
             } => {
+                log::info!("github: approved, fetching the username");
                 let username = client.fetch_viewer_login(&access_token).await?;
                 let stored = StoredToken {
                     access_token,
@@ -195,7 +223,9 @@ async fn run_device_flow_inner<C: GitHubClient, S: EventSink, T: TokenStore>(
                     expires_at: expires_in.map(|secs| now_millis() + secs * 1000),
                     username,
                 };
+                log::info!("github: writing the token to the keychain");
                 token_store.set(&stored)?;
+                log::info!("github: token stored");
                 return Ok(stored);
             }
             TokenOutcome::Pending => continue,
