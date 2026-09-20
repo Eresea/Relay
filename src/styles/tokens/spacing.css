@@ -12,8 +12,8 @@
   --space-10: 64px;
 
   /* Fixed layout constants — the desktop shell grid. */
-  --sidebar-width: 248px;
-  --sidebar-width-collapsed: 56px;
+  --sidebar-width: 216px;
+  --sidebar-width-collapsed: 40px;
   --titlebar-height: 38px;
   --toolbar-height: 44px;
   --row-height: 34px;

@@ -29,6 +29,7 @@ const ICONS = [
   'eye-off',
   'file-text',
   'folder',
+  'house',
   'inbox',
   'info',
   'library',
