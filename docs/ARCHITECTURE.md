@@ -200,10 +200,15 @@ has four fairly separate jobs of its own:
   the token exchange is the same process that started it — Google's
   documented flow for desktop apps, and the reason a "Desktop app" OAuth
   client accepts a loopback redirect at any port without pre-registering it.
-  Relay bundles no Google Cloud project of its own (this repo has no real
-  credentials to ship); `RELAY_GMAIL_CLIENT_ID` and the optional
-  `RELAY_GMAIL_CLIENT_SECRET` are read from the environment, so a real pair
-  drops in without a code change.
+  The client id/secret for Relay's own Google Cloud project are committed in
+  `src-tauri/gmail.config.toml` and compiled in via `include_str!` —
+  deliberately, not an oversight: per the paragraph above, this OAuth client
+  type does not treat the secret as confidential in the first place, so
+  shipping it the way any other installed application ships its client id
+  costs nothing a distributed binary would not already expose. `RELAY_GMAIL_CLIENT_ID`
+  / `RELAY_GMAIL_CLIENT_SECRET` env vars override the compiled-in pair when
+  set, for developing against a different Google Cloud project without
+  editing the tracked file.
 - `api.rs` — the Gmail/OAuth HTTP surface behind a `GoogleApi` trait, real
   (`HttpGoogleApi`, `reqwest`) and fake implementations, the same seam
   `jobs.rs` uses `EventSink`/`FakeSink` for. The connector requests

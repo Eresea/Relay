@@ -18,10 +18,12 @@
 //!
 //! Google issues a client id (and, for a "Desktop app" OAuth client, a
 //! client secret it does not expect to stay confidential — see `oauth.rs`)
-//! per Google Cloud project. Relay bundles neither: this sandbox has no real
-//! Google API credentials, so `RELAY_GMAIL_CLIENT_ID` /
-//! `RELAY_GMAIL_CLIENT_SECRET` are read from the environment, letting a real
-//! pair be dropped in without a code change.
+//! per Google Cloud project. Relay's own pair is compiled in from
+//! `gmail.config.toml`, committed the same way any other installed
+//! application ships its client id — see that file for why that is safe for
+//! this OAuth flow. `RELAY_GMAIL_CLIENT_ID` / `RELAY_GMAIL_CLIENT_SECRET`
+//! override it when set, e.g. to develop against a different Google Cloud
+//! project without editing the tracked file.
 
 mod api;
 mod oauth;
@@ -123,10 +125,49 @@ struct Runtime {
 #[derive(Default)]
 pub struct GmailState(Mutex<Runtime>);
 
+/// `gmail.config.toml`, compiled in at build time — not read from disk at
+/// runtime, since a packaged Tauri bundle would not otherwise carry it.
+const COMPILED_CONFIG_TOML: &str = include_str!("../../gmail.config.toml");
+
+#[derive(Debug, Clone, Default, Deserialize)]
+struct CompiledConfig {
+    #[serde(default)]
+    client_id: String,
+    #[serde(default)]
+    client_secret: String,
+}
+
+fn compiled_credentials() -> CompiledConfig {
+    toml::from_str(COMPILED_CONFIG_TOML).unwrap_or_else(|error| {
+        log::warn!("gmail.config.toml failed to parse: {error}");
+        CompiledConfig::default()
+    })
+}
+
+/// Env vars win when set (development against a different Google Cloud
+/// project); otherwise falls back to the compiled-in default, and only
+/// errors if neither supplies a client id.
+fn resolve_credentials(
+    env_client_id: Option<String>,
+    env_client_secret: Option<String>,
+    compiled: CompiledConfig,
+) -> Result<(String, Option<String>)> {
+    if let Some(client_id) = env_client_id {
+        return Ok((client_id, env_client_secret));
+    }
+    if compiled.client_id.is_empty() {
+        return Err(Error::GmailClientNotConfigured);
+    }
+    let client_secret = (!compiled.client_secret.is_empty()).then_some(compiled.client_secret);
+    Ok((compiled.client_id, client_secret))
+}
+
 fn client_credentials() -> Result<(String, Option<String>)> {
-    let client_id = std::env::var(CLIENT_ID_VAR).map_err(|_| Error::GmailClientNotConfigured)?;
-    let client_secret = std::env::var(CLIENT_SECRET_VAR).ok();
-    Ok((client_id, client_secret))
+    resolve_credentials(
+        std::env::var(CLIENT_ID_VAR).ok(),
+        std::env::var(CLIENT_SECRET_VAR).ok(),
+        compiled_credentials(),
+    )
 }
 
 fn file_path(app: &AppHandle) -> Result<PathBuf> {
@@ -736,33 +777,60 @@ mod tests {
         ));
     }
 
-    // `std::env` is process-global mutable state, but `cargo test` runs tests
-    // in parallel threads by default — without this lock these two tests
-    // race each other's `set_var`/`remove_var` calls, which is exactly what
-    // made this suite flaky in CI while passing locally by luck of thread
-    // scheduling. Every test touching `CLIENT_ID_VAR`/`CLIENT_SECRET_VAR`
-    // must hold it for its whole body.
-    static ENV_LOCK: Mutex<()> = Mutex::new(());
+    // `resolve_credentials` is the pure decision logic behind
+    // `client_credentials`, tested directly with fabricated inputs rather
+    // than through real env vars — `std::env` is process-global mutable
+    // state, and `cargo test` runs tests in parallel threads by default, so
+    // tests that actually called `set_var`/`remove_var` raced each other
+    // here previously (passed locally, flaked in CI). Nothing below touches
+    // the environment.
 
     #[test]
-    fn client_credentials_requires_an_id() {
-        let _guard = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
-        std::env::remove_var(CLIENT_ID_VAR);
-        assert!(matches!(
-            client_credentials(),
-            Err(Error::GmailClientNotConfigured)
-        ));
+    fn resolve_credentials_prefers_the_env_override() {
+        let result = resolve_credentials(
+            Some("env-id".into()),
+            Some("env-secret".into()),
+            CompiledConfig {
+                client_id: "compiled-id".into(),
+                client_secret: "compiled-secret".into(),
+            },
+        );
+        assert_eq!(
+            result.unwrap(),
+            ("env-id".to_string(), Some("env-secret".to_string()))
+        );
     }
 
     #[test]
-    fn client_credentials_reads_both_env_vars() {
-        let _guard = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
-        std::env::set_var(CLIENT_ID_VAR, "id-123");
-        std::env::set_var(CLIENT_SECRET_VAR, "secret-456");
-        let (id, secret) = client_credentials().unwrap();
-        assert_eq!(id, "id-123");
-        assert_eq!(secret.as_deref(), Some("secret-456"));
-        std::env::remove_var(CLIENT_ID_VAR);
-        std::env::remove_var(CLIENT_SECRET_VAR);
+    fn resolve_credentials_falls_back_to_the_compiled_default() {
+        let result = resolve_credentials(
+            None,
+            None,
+            CompiledConfig {
+                client_id: "compiled-id".into(),
+                client_secret: "compiled-secret".into(),
+            },
+        );
+        assert_eq!(
+            result.unwrap(),
+            (
+                "compiled-id".to_string(),
+                Some("compiled-secret".to_string())
+            )
+        );
+    }
+
+    #[test]
+    fn resolve_credentials_errors_when_nothing_is_configured() {
+        let result = resolve_credentials(None, None, CompiledConfig::default());
+        assert!(matches!(result, Err(Error::GmailClientNotConfigured)));
+    }
+
+    #[test]
+    fn the_committed_gmail_config_toml_parses_and_has_a_client_id() {
+        // Guards against a typo in the tracked file silently falling back to
+        // "not configured" instead of failing loudly.
+        let compiled = compiled_credentials();
+        assert!(!compiled.client_id.is_empty());
     }
 }

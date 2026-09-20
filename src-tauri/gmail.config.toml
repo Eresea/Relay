@@ -1,0 +1,16 @@
+# Google OAuth 2.0 "installed application" credentials for the Gmail
+# connector — see docs/ARCHITECTURE.md's Gmail connector section.
+#
+# Committing these is intentional and safe for this OAuth client type.
+# Google's own guidance for a "Desktop app" OAuth client does not treat
+# `client_secret` as confidential — there is no way to keep it hidden in a
+# distributed binary, so it is compiled in here the same way it would be
+# compiled into any other installed application. The actual security
+# boundary for this flow is PKCE (RFC 7636) plus the loopback redirect check
+# in src-tauri/src/gmail/oauth.rs, not secrecy of this file.
+#
+# RELAY_GMAIL_CLIENT_ID / RELAY_GMAIL_CLIENT_SECRET environment variables
+# override these values when set — e.g. to run against a different Google
+# Cloud project during development without editing this file.
+client_id = "577992791797-52bo126r6oasa794gu4dckv0g66eklul.apps.googleusercontent.com"
+client_secret = "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"
