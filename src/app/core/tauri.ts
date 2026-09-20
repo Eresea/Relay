@@ -89,6 +89,19 @@ export class TauriBridge {
   }
 
   /**
+   * Fires whenever the current window gains or loses OS focus. The overlay
+   * windows are created once and shown/hidden rather than recreated (see
+   * `overlay.rs`), so a webview's own load event never fires again after the
+   * first show — this is how a surface notices "I'm back on screen."
+   */
+  async onWindowFocusChanged(handler: (focused: boolean) => void): Promise<() => void> {
+    // eslint-disable-next-line @typescript-eslint/no-empty-function -- intentional no-op: nothing to unsubscribe from when there is no live Tauri event system
+    if (!this.available) return () => {};
+    const { getCurrentWindow } = await import('@tauri-apps/api/window');
+    return getCurrentWindow().onFocusChanged(({ payload: focused }) => handler(focused));
+  }
+
+  /**
    * Subscribes to the core's single event channel. Returns the unlisten
    * function; callers dispose it on teardown. A no-op outside Tauri, so
    * ng serve keeps working without a live core — `handler` is simply never

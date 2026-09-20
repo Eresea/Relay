@@ -1,6 +1,7 @@
 import {
   ChangeDetectionStrategy,
   Component,
+  DestroyRef,
   afterRenderEffect,
   computed,
   inject,
@@ -75,6 +76,16 @@ export class CommandPalette {
     afterRenderEffect(() => {
       this.rows()[this.activeIndex()]?.nativeElement.scrollIntoView({ block: 'nearest' });
     });
+
+    // The palette window is created once and only shown/hidden, never
+    // reloaded (see overlay.rs), so there is no fresh page load to autofocus
+    // on each open — only the OS focus event marks "the palette is back".
+    const destroyRef = inject(DestroyRef);
+    void this.tauri
+      .onWindowFocusChanged((focused) => {
+        if (focused) this.field().nativeElement.focus();
+      })
+      .then((unlisten) => destroyRef.onDestroy(unlisten));
   }
 
   protected onQuery(value: string): void {

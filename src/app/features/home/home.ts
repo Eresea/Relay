@@ -7,6 +7,8 @@ import { Vault } from '@features/vault/vault';
 import { Icon } from '@shared/icon';
 import { Kbd } from '@shared/kbd';
 
+const RAIL_EXPANDED_SETTING_KEY = 'rail.expanded';
+
 /**
  * The main window. `decorations: false` in tauri.conf.json means the OS draws
  * no title bar of its own, so everything here — including the
@@ -60,7 +62,7 @@ import { Kbd } from '@shared/kbd';
           <button
             type="button"
             class="rail-toggle"
-            (click)="railExpanded.set(!railExpanded())"
+            (click)="toggleRail()"
             [attr.aria-label]="railExpanded() ? 'Collapse sidebar' : 'Expand sidebar'"
           >
             <rl-icon name="panel-left" [size]="16" />
@@ -75,7 +77,7 @@ import { Kbd } from '@shared/kbd';
             (click)="openSettings()"
             aria-label="Settings"
           >
-            <rl-icon name="settings" [size]="16" />
+            <span class="rail-icon"><rl-icon name="settings" [size]="16" /></span>
             <span class="rail-label">Settings</span>
           </button>
         </div>
@@ -219,13 +221,16 @@ import { Kbd } from '@shared/kbd';
       flex: none;
     }
 
+    /* A 1:1 icon button — the toggle's own shape at every rail width, and
+     * a nav item's shape once the rail is narrow enough that its label is
+     * gone. Fixed square dimensions rather than a stretched-to-fit row, so
+     * it never reads as a wide bar with a stray icon in it. */
     .rail-toggle {
-      display: flex;
-      align-items: center;
-      gap: var(--space-4);
-      inline-size: 100%;
-      block-size: var(--control-md);
-      padding-inline: var(--space-3);
+      display: grid;
+      place-items: center;
+      flex: none;
+      inline-size: var(--control-sm);
+      block-size: var(--control-sm);
       color: var(--text-subtle);
       border-radius: var(--radius-sm);
       transition:
@@ -241,10 +246,10 @@ import { Kbd } from '@shared/kbd';
     .rail-item {
       display: flex;
       align-items: center;
-      gap: var(--space-4);
+      gap: var(--space-3);
       inline-size: 100%;
-      block-size: var(--control-md);
-      padding-inline: var(--space-3);
+      block-size: var(--control-sm);
+      padding-inline: var(--space-2);
       color: var(--text-subtle);
       border-radius: var(--radius-sm);
       transition:
@@ -262,6 +267,14 @@ import { Kbd } from '@shared/kbd';
       background: var(--tint-hover);
     }
 
+    .rail-icon {
+      display: grid;
+      place-items: center;
+      flex: none;
+      inline-size: var(--control-sm);
+      block-size: var(--control-sm);
+    }
+
     .rail-label {
       overflow: hidden;
       white-space: nowrap;
@@ -270,12 +283,12 @@ import { Kbd } from '@shared/kbd';
       font-weight: var(--weight-medium);
     }
 
-    /* Collapsed: only the icon should show, centred in the narrow rail —
-     * the label is removed from layout rather than just clipped, so it
-     * can't skew the icon off-centre or leave stray reserved space. */
-    .rail:not(.expanded) .rail-toggle,
+    /* Collapsed: only the icon shows, as a square the same size as the
+     * toggle above it — the label is removed from layout rather than just
+     * clipped, so it can't skew the icon off-centre or hold onto its row's
+     * width. */
     .rail:not(.expanded) .rail-item {
-      justify-content: center;
+      inline-size: var(--control-sm);
       padding-inline: 0;
       gap: 0;
     }
@@ -317,13 +330,19 @@ export class Home {
   protected readonly theme = inject(ThemeService);
   protected readonly paletteKeys = ['Ctrl', 'Space'] as const;
   protected readonly view = signal<'home' | 'settings' | 'vault'>('home');
-  protected readonly railExpanded = signal(true);
+  /** Starts collapsed — the safe default while the persisted value (below) is
+   * still loading — then reconciles with whatever the user last left it as. */
+  protected readonly railExpanded = signal(false);
   protected readonly settingsTab = signal<'general' | 'github'>('general');
 
   private readonly tauri = inject(TauriBridge);
   protected readonly maximized = signal(false);
 
   constructor() {
+    void this.tauri
+      .getSetting<boolean>(RAIL_EXPANDED_SETTING_KEY, this.railExpanded())
+      .then((stored) => this.railExpanded.set(stored));
+
     void this.tauri.isWindowMaximized().then((value) => this.maximized.set(value));
 
     const destroyRef = inject(DestroyRef);
@@ -355,6 +374,12 @@ export class Home {
   protected openSettings(): void {
     this.view.set('settings');
     this.settingsTab.set('general');
+  }
+
+  protected toggleRail(): void {
+    const expanded = !this.railExpanded();
+    this.railExpanded.set(expanded);
+    void this.tauri.setSetting(RAIL_EXPANDED_SETTING_KEY, expanded);
   }
 
   protected minimize(): void {
