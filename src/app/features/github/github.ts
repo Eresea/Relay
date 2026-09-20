@@ -585,6 +585,16 @@ export class Github {
   /** The most recent "blocked" detail reported for the in-flight connect job, if any — the real
    * reason a connection attempt failed, shown in place of a generic message when it is available. */
   private blockedMessage = '';
+  /**
+   * A pull-based check alongside the push-based event handling below, for
+   * the same reason `is_job_running` exists as a command at all: if the
+   * `notificationDone` event is ever missed or misdelivered — a dropped
+   * event, a listener registered a moment too late — the "connecting"
+   * screen would otherwise wait forever even though the connection quietly
+   * succeeded or failed. This polls the real, authoritative state directly
+   * instead of trusting the event alone.
+   */
+  private connectFallbackPoll: ReturnType<typeof setInterval> | null = null;
 
   protected readonly clientId = signal('');
   protected readonly pollIntervalSecs = signal(DEFAULT_GITHUB_SETTINGS.pollIntervalSecs);
@@ -606,6 +616,7 @@ export class Github {
           this.blockedMessage = event.detail ? `${event.title}: ${event.detail}` : event.title;
         }
         if (event.type === 'notificationDone' && event.jobId === jobId) {
+          this.stopConnectFallbackPoll();
           if (event.ok) {
             void this.refreshStatus();
           } else {
@@ -616,6 +627,38 @@ export class Github {
         }
       })
       .then((unlisten) => this.destroyRef.onDestroy(unlisten));
+
+    this.destroyRef.onDestroy(() => this.stopConnectFallbackPoll());
+  }
+
+  private startConnectFallbackPoll(jobId: string): void {
+    this.stopConnectFallbackPoll();
+    this.connectFallbackPoll = setInterval(() => void this.pollConnectFallback(jobId), 3000);
+  }
+
+  private stopConnectFallbackPoll(): void {
+    if (this.connectFallbackPoll === null) return;
+    clearInterval(this.connectFallbackPoll);
+    this.connectFallbackPoll = null;
+  }
+
+  private async pollConnectFallback(jobId: string): Promise<void> {
+    if (this.status() !== 'connecting') {
+      this.stopConnectFallbackPoll();
+      return;
+    }
+    const result = await this.tauri.githubStatus();
+    if (result.connected) {
+      this.stopConnectFallbackPoll();
+      void this.refreshStatus();
+      return;
+    }
+    if (!(await this.tauri.isJobRunning(jobId))) {
+      this.stopConnectFallbackPoll();
+      this.error.set(this.blockedMessage || 'Could not connect to GitHub.');
+      this.status.set('disconnected');
+      this.deviceAuth.set(null);
+    }
   }
 
   protected kindLabel(kind: PrEventKind): string {
@@ -669,6 +712,7 @@ export class Github {
       }
       this.deviceAuth.set(auth);
       this.status.set('connecting');
+      this.startConnectFallbackPoll(auth.jobId);
     } catch (error) {
       this.error.set(connectorErrorMessage(error));
     } finally {
@@ -689,6 +733,7 @@ export class Github {
   }
 
   protected async cancelConnect(auth: DeviceAuthorization): Promise<void> {
+    this.stopConnectFallbackPoll();
     await this.tauri.cancelJob(auth.jobId);
     this.deviceAuth.set(null);
     this.status.set('disconnected');
