@@ -101,6 +101,13 @@ export class TauriBridge {
     return listen<AppEvent>('relay://event', (message) => handler(message.payload));
   }
 
+  /** Opens a URL in the user's default browser. A no-op outside Tauri. */
+  async openUrl(url: string): Promise<void> {
+    if (!this.available) return;
+    const { openUrl } = await import('@tauri-apps/plugin-opener');
+    await openUrl(url);
+  }
+
   private settingsStore: LazyStore | null = null;
 
   /**
@@ -241,6 +248,48 @@ export class TauriBridge {
     return (await this.invoke<string>('vault_export')) ?? '';
   }
 
+  /** Whether a GitHub account is connected. Only reads the keychain. */
+  async githubStatus(): Promise<GithubStatus> {
+    return (
+      (await this.invoke<GithubStatus>('github_status')) ?? { connected: false, username: null }
+    );
+  }
+
+  /**
+   * Starts a Device Flow login and returns the code to show the user. The
+   * wait for their approval continues in a background job — `jobId` lets the
+   * caller correlate `notificationDone` for that job with this attempt.
+   */
+  async githubConnectStart(): Promise<DeviceAuthorization | null> {
+    return this.invoke<DeviceAuthorization>('github_connect_start');
+  }
+
+  /** Disconnects the GitHub account and stops the poll job, if running. */
+  async githubDisconnect(): Promise<void> {
+    await this.invoke('github_disconnect');
+  }
+
+  /**
+   * Reads the connector's settings from `settings.json`. Merged field by
+   * field against the defaults rather than returned as-is: `getSetting`
+   * hands back whatever is on disk with no validation, and a value saved
+   * under an older shape of `GithubConnectorSettings` (or one hand-edited
+   * to drop a field) would otherwise reach callers with `notifications` —
+   * or one kind within it — simply missing.
+   */
+  async githubSettings(): Promise<GithubConnectorSettings> {
+    const stored = await this.getSetting<Partial<GithubConnectorSettings> | null>(
+      'github.settings',
+      null,
+    );
+    return mergeGithubSettings(stored);
+  }
+
+  /** Persists the connector's rules and poll interval to `settings.json`. */
+  async setGithubSettings(settings: GithubConnectorSettings): Promise<void> {
+    await this.setSetting('github.settings', settings);
+  }
+
   private async invoke<T>(command: string, args: Record<string, unknown> = {}): Promise<T | null> {
     if (!this.available) {
       console.info(`[relay] invoke(${command}) skipped — not running under Tauri`, args);
@@ -257,6 +306,7 @@ export type CoreCommand =
   | { readonly id: 'open_main' }
   | { readonly id: 'hide_hud' }
   | { readonly id: 'open_vault' }
+  | { readonly id: 'open_github' }
   | { readonly id: 'quit' };
 
 /** What the palette displays for a core-contributed row. Mirrors `CoreCommandMeta`. */
@@ -301,6 +351,135 @@ export interface PasswordOptions {
   readonly lower: boolean;
   readonly digits: boolean;
   readonly symbols: boolean;
+}
+
+/** Mirrors `github::GithubStatus`. */
+export interface GithubStatus {
+  readonly connected: boolean;
+  readonly username: string | null;
+}
+
+/** Mirrors `github::oauth::DeviceAuthorization`. */
+export interface DeviceAuthorization {
+  readonly userCode: string;
+  readonly verificationUri: string;
+  readonly expiresIn: number;
+  readonly jobId: string;
+}
+
+/** Mirrors `github::rules::PrEventKind`. */
+export type PrEventKind =
+  'opened' | 'closed' | 'merged' | 'review_requested' | 'ci_failed' | 'ci_passed';
+
+/** All six, in the order the settings UI lists them. */
+export const PR_EVENT_KINDS: readonly PrEventKind[] = [
+  'opened',
+  'closed',
+  'merged',
+  'review_requested',
+  'ci_failed',
+  'ci_passed',
+];
+
+/** Mirrors `github::rules::NotificationTypeRule`. */
+export interface NotificationTypeRule {
+  readonly enabled: boolean;
+  readonly repoPattern: string;
+  readonly branchInclude: readonly string[];
+  readonly branchExclude: readonly string[];
+}
+
+/** Mirrors `github::rules::NotificationSettings` — one rule per `PrEventKind`. */
+export interface NotificationSettings {
+  readonly opened: NotificationTypeRule;
+  readonly closed: NotificationTypeRule;
+  readonly merged: NotificationTypeRule;
+  readonly reviewRequested: NotificationTypeRule;
+  readonly ciFailed: NotificationTypeRule;
+  readonly ciPassed: NotificationTypeRule;
+}
+
+/** Reads the rule for one kind out of `NotificationSettings` — mirrors `NotificationSettings::rule_for`. */
+export function ruleFor(
+  notifications: NotificationSettings,
+  kind: PrEventKind,
+): NotificationTypeRule {
+  switch (kind) {
+    case 'opened':
+      return notifications.opened;
+    case 'closed':
+      return notifications.closed;
+    case 'merged':
+      return notifications.merged;
+    case 'review_requested':
+      return notifications.reviewRequested;
+    case 'ci_failed':
+      return notifications.ciFailed;
+    case 'ci_passed':
+      return notifications.ciPassed;
+  }
+}
+
+/** Mirrors `github::rules::GithubConnectorSettings`. */
+export interface GithubConnectorSettings {
+  readonly pollIntervalSecs: number;
+  readonly notifications: NotificationSettings;
+  readonly muted: readonly string[];
+  /** A GitHub OAuth App (Device Flow enabled) client id. `null` until configured. */
+  readonly clientId: string | null;
+}
+
+const DISABLED_RULE: NotificationTypeRule = {
+  enabled: false,
+  repoPattern: '*',
+  branchInclude: [],
+  branchExclude: [],
+};
+
+function enabledRule(repoPattern: string): NotificationTypeRule {
+  return { enabled: true, repoPattern, branchInclude: [], branchExclude: [] };
+}
+
+/** Mirrors `GithubConnectorSettings::default()` in `github::rules`. */
+export const DEFAULT_GITHUB_SETTINGS: GithubConnectorSettings = {
+  pollIntervalSecs: 300,
+  notifications: {
+    opened: enabledRule('*'),
+    closed: DISABLED_RULE,
+    merged: enabledRule('*'),
+    reviewRequested: enabledRule('*'),
+    ciFailed: enabledRule('*'),
+    ciPassed: DISABLED_RULE,
+  },
+  muted: [],
+  clientId: null,
+};
+
+/**
+ * Fills in whatever `stored` is missing from `DEFAULT_GITHUB_SETTINGS`, one
+ * field at a time — including within `notifications`, per kind — rather
+ * than falling back wholesale the moment anything is absent. `stored` is
+ * untyped data from disk in all but name: it may be `null` (never saved),
+ * an older shape of this type, or hand-edited with a field dropped.
+ */
+function mergeGithubSettings(
+  stored: Partial<GithubConnectorSettings> | null | undefined,
+): GithubConnectorSettings {
+  const notifications = stored?.notifications;
+  const defaults = DEFAULT_GITHUB_SETTINGS;
+  return {
+    pollIntervalSecs: stored?.pollIntervalSecs ?? defaults.pollIntervalSecs,
+    muted: stored?.muted ?? defaults.muted,
+    clientId: stored?.clientId ?? defaults.clientId,
+    notifications: {
+      opened: notifications?.opened ?? defaults.notifications.opened,
+      closed: notifications?.closed ?? defaults.notifications.closed,
+      merged: notifications?.merged ?? defaults.notifications.merged,
+      reviewRequested: notifications?.reviewRequested ?? defaults.notifications.reviewRequested,
+      ciFailed: notifications?.ciFailed ?? defaults.notifications.ciFailed,
+      ciPassed: notifications?.ciPassed ?? defaults.notifications.ciPassed,
+    },
+  };
 }
 
 /** Mirrors `gmail::GmailStatus`. */
