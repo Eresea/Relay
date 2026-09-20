@@ -3,7 +3,7 @@
 #[cfg(desktop)]
 use tauri::{
     menu::{Menu, MenuItem},
-    tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
+    tray::{MouseButton, TrayIconBuilder, TrayIconEvent},
     App,
 };
 
@@ -35,11 +35,6 @@ pub fn build(app: &App) -> tauri::Result<()> {
         })
         .on_tray_icon_event(|tray, event| {
             let result = match event {
-                TrayIconEvent::Click {
-                    button: MouseButton::Left,
-                    button_state: MouseButtonState::Up,
-                    ..
-                } => Some(crate::overlay::toggle_palette(tray.app_handle())),
                 TrayIconEvent::DoubleClick {
                     button: MouseButton::Left,
                     ..
