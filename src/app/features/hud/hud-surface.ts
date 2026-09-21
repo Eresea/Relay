@@ -1,6 +1,7 @@
 import { ChangeDetectionStrategy, Component, effect, inject } from '@angular/core';
 
 import { hueFor } from '@core/entity-hue';
+import type { NotificationAction } from '@core/events';
 import { NotificationCenter } from '@core/notification-center';
 import { TauriBridge } from '@core/tauri';
 
@@ -24,6 +25,10 @@ import { Hud } from './hud';
         [hue]="hue(n.hueSource)"
         [status]="n.status"
         [progress]="n.progress ?? null"
+        [actions]="n.actions ?? []"
+        [dismissLabel]="n.status === 'running' || n.status === 'waiting' ? 'Cancel' : 'Dismiss'"
+        (dismiss)="dismiss(n.notificationId, n.jobId, n.status)"
+        (action)="runAction($event, n.notificationId, n.jobId)"
       />
     }
   `,
@@ -40,6 +45,17 @@ export class HudSurface {
 
   protected readonly notification = this.center.current;
   protected readonly hue = hueFor;
+
+  protected dismiss(notificationId: string, jobId: string, status: string): void {
+    this.center.dismiss(notificationId);
+    if (status === 'running' || status === 'waiting') void this.tauri.cancelJob(jobId);
+  }
+
+  protected runAction(action: NotificationAction, notificationId: string, jobId: string): void {
+    this.center.dismiss(notificationId);
+    if (action.id === 'open') void this.tauri.openUrl(action.url);
+    if (action.id === 'cancel') void this.tauri.cancelJob(jobId);
+  }
 
   constructor() {
     // The core shows the HUD when a notification arrives; taking it back off

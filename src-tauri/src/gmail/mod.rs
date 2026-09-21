@@ -45,8 +45,8 @@ pub use rules::NotificationRules;
 pub use secret::{KeyStore, OsKeyStore};
 
 use crate::error::{Error, Result};
-use crate::events::{EventSink, NotificationStatus};
-use crate::jobs::{self, JobId, JobRegistry};
+use crate::events::{EventSink, NotificationAction, NotificationStatus, INFO_AUTO_DISMISS_MS};
+use crate::jobs::{self, JobId, JobRegistry, NotificationOptions};
 use api::{ExchangeCodeParams, RefreshParams};
 use poll::PollCheckpoint;
 use secret::EncryptedSecret;
@@ -644,11 +644,22 @@ async fn poll_cycle<S: EventSink>(
     }
 
     for notification in &notifications {
-        sink.report(
-            NotificationStatus::Running,
+        sink.report_notification(
+            NotificationStatus::Done,
             notification.from.clone(),
             Some(notification.subject.clone()),
             None,
+            NotificationOptions {
+                notification_id: format!("gmail:{}", notification.message_id),
+                auto_dismiss_ms: Some(INFO_AUTO_DISMISS_MS),
+                actions: vec![NotificationAction::Open {
+                    label: "Open".to_string(),
+                    url: format!(
+                        "https://mail.google.com/mail/u/0/#all/{}",
+                        notification.message_id
+                    ),
+                }],
+            },
         );
     }
 

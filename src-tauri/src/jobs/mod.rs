@@ -32,7 +32,7 @@ use std::sync::{Arc, Mutex};
 use serde::{Deserialize, Serialize};
 
 use crate::error::{Error, Result};
-use crate::events::{AppEvent, EventSink, NotificationStatus};
+use crate::events::{AppEvent, EventSink, NotificationAction, NotificationStatus};
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(transparent)]
@@ -126,6 +126,12 @@ pub struct JobContext<S: EventSink> {
     cancelled: Arc<AtomicBool>,
 }
 
+pub struct NotificationOptions {
+    pub notification_id: String,
+    pub auto_dismiss_ms: Option<u64>,
+    pub actions: Vec<NotificationAction>,
+}
+
 impl<S: EventSink> JobContext<S> {
     pub fn is_cancelled(&self) -> bool {
         self.cancelled.load(Ordering::Relaxed)
@@ -149,9 +155,31 @@ impl<S: EventSink> JobContext<S> {
         detail: Option<String>,
         progress: Option<u8>,
     ) {
+        self.report_notification(
+            status,
+            title,
+            detail,
+            progress,
+            NotificationOptions {
+                notification_id: self.id.to_string(),
+                auto_dismiss_ms: None,
+                actions: Vec::new(),
+            },
+        );
+    }
+
+    pub fn report_notification(
+        &self,
+        status: NotificationStatus,
+        title: impl Into<String>,
+        detail: Option<String>,
+        progress: Option<u8>,
+        options: NotificationOptions,
+    ) {
         let title = title.into();
         log::debug!("job {} report: {title}", self.id);
         self.sink.emit(AppEvent::Notification {
+            notification_id: options.notification_id,
             job_id: self.id.clone(),
             hue_source: self.hue_source.clone(),
             title,
@@ -159,6 +187,8 @@ impl<S: EventSink> JobContext<S> {
             icon: None,
             status,
             progress,
+            auto_dismiss_ms: options.auto_dismiss_ms,
+            actions: options.actions,
         });
     }
 }
