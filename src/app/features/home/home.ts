@@ -3,6 +3,7 @@ import { ChangeDetectionStrategy, Component, DestroyRef, inject, signal } from '
 import { TauriBridge } from '@core/tauri';
 import { ThemeService } from '@core/theme';
 import { Settings } from '@features/settings/settings';
+import { UpdateStatusBar } from '@features/updates/update-center';
 import { Vault } from '@features/vault/vault';
 import { Icon } from '@shared/icon';
 import { NotificationPopover } from '@shared/notification-popover';
@@ -21,7 +22,7 @@ const RAIL_EXPANDED_SETTING_KEY = 'rail.expanded';
 @Component({
   selector: 'rl-home',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [Icon, NotificationPopover, Projects, Settings, Vault],
+  imports: [Icon, NotificationPopover, Projects, Settings, UpdateStatusBar, Vault],
   template: `
     <header class="titlebar u-chrome" data-tauri-drag-region>
       <div class="titlebar-start">
@@ -105,6 +106,10 @@ const RAIL_EXPANDED_SETTING_KEY = 'rail.expanded';
         }
       </main>
     </div>
+
+      <footer class="statusbar u-chrome">
+        <rl-update-status-bar />
+      </footer>
   `,
   styles: `
     :host {
@@ -308,6 +313,16 @@ const RAIL_EXPANDED_SETTING_KEY = 'rail.expanded';
       flex: 1;
       min-inline-size: 0;
       overflow-y: auto;
+    }
+
+    .statusbar {
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
+      flex: none;
+      min-block-size: var(--control-sm);
+      border-block-start: 1px solid var(--border-subtle);
+      background: var(--bg-sunken);
     }
   `,
 })

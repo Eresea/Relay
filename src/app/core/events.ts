@@ -30,10 +30,30 @@ export interface NotificationRecord extends NotificationPayload {
   readonly createdAt: number;
 }
 
+export type UpdateState =
+  | 'idle'
+  | 'checking'
+  | 'available'
+  | 'downloading'
+  | 'ready'
+  | 'installing'
+  | 'error';
+
+export interface UpdateSnapshot {
+  readonly state: UpdateState;
+  readonly currentVersion: string;
+  readonly version?: string;
+  readonly notes?: string;
+  readonly downloadedBytes: number;
+  readonly contentLength?: number;
+  readonly error?: string;
+}
+
 export type AppEvent =
   | { readonly type: 'commandsChanged' }
   | { readonly type: 'openSettingsRequested' }
   | { readonly type: 'openVaultRequested' }
   | { readonly type: 'openGithubRequested' }
   | ({ readonly type: 'notification' } & NotificationPayload)
-  | { readonly type: 'notificationDone'; readonly jobId: string; readonly ok: boolean };
+  | { readonly type: 'notificationDone'; readonly jobId: string; readonly ok: boolean }
+  | ({ readonly type: 'updateChanged' } & UpdateSnapshot);
