@@ -109,6 +109,15 @@ describe('NotificationCenter', () => {
     );
   });
 
+  it('marks every unread history record as read and returns their ids', () => {
+    center.handle(notification('job-1'));
+    center.handle(notification('job-2'));
+    center.markRead('job-2');
+
+    expect(center.markAllRead()).toEqual(['job-1']);
+    expect(center.history().every((record) => record.read)).toBe(true);
+  });
+
   it('marks a failed job blocked without inventing a progress value', () => {
     center.handle({
       type: 'notification',

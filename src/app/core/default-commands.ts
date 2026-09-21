@@ -16,6 +16,28 @@ export function registerDefaultCommands(): () => void {
 
   const commands: Command[] = [
     {
+      id: 'relay.project.open',
+      title: 'Open current project',
+      hint: 'Open the saved project folder',
+      group: 'Project',
+      icon: 'folder',
+      keywords: ['project', 'workspace', 'folder', 'context'],
+      run: async () => {
+        const project = await tauri.getProjectContext();
+        if (project) await tauri.openPath(project.path);
+        else await tauri.runCoreCommand({ id: 'open_main' });
+      },
+    },
+    {
+      id: 'relay.project.set',
+      title: 'Set current project',
+      hint: 'Save a project folder path',
+      group: 'Project',
+      icon: 'folder',
+      keywords: ['project', 'workspace', 'folder', 'context'],
+      run: () => tauri.runCoreCommand({ id: 'open_main' }),
+    },
+    {
       id: 'relay.theme.toggle',
       title: 'Toggle theme',
       hint: 'Switch between dark and light',

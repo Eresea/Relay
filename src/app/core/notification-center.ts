@@ -96,6 +96,14 @@ export class NotificationCenter {
     );
   }
 
+  markAllRead(): readonly string[] {
+    const unreadIds = this.historyState()
+      .filter((record) => !record.read)
+      .map((record) => record.notificationId);
+    this.historyState.update((list) => list.map((record) => ({ ...record, read: true })));
+    return unreadIds;
+  }
+
   clearHistory(): void {
     this.historyState.set([]);
   }

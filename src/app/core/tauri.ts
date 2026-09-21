@@ -133,6 +133,13 @@ export class TauriBridge {
     await openUrl(url);
   }
 
+  /** Opens a local file or folder in the user's default application. */
+  async openPath(path: string): Promise<void> {
+    if (!this.available) return;
+    const { openPath } = await import('@tauri-apps/plugin-opener');
+    await openPath(path);
+  }
+
   private settingsStore: LazyStore | null = null;
 
   /**
@@ -153,6 +160,14 @@ export class TauriBridge {
     if (!this.available) return;
     const store = await this.getSettingsStore();
     await store.set(key, value);
+  }
+
+  async getProjectContext(): Promise<ProjectContext | null> {
+    return this.getSetting<ProjectContext | null>('project.context', null);
+  }
+
+  async setProjectContext(context: ProjectContext | null): Promise<void> {
+    await this.setSetting('project.context', context);
   }
 
   private async getSettingsStore(): Promise<LazyStore> {
@@ -347,6 +362,12 @@ export interface CoreCommandMeta {
 export interface VaultStatus {
   readonly exists: boolean;
   readonly unlocked: boolean;
+}
+
+/** The one project Relay currently keeps in focus. */
+export interface ProjectContext {
+  readonly name: string;
+  readonly path: string;
 }
 
 /** Mirrors `vault::VaultEntrySummary` — every field but the password. */

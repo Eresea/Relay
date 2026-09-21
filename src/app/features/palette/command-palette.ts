@@ -16,6 +16,11 @@ import { CommandRegistry } from '@core/command-registry';
 import { hueVar } from '@core/entity-hue';
 import { search } from '@core/fuzzy';
 import { TauriBridge } from '@core/tauri';
+import {
+  RECENT_COMMANDS_KEY,
+  recentCommands,
+  updateRecentCommandIds,
+} from '@core/recent-commands';
 import { Icon } from '@shared/icon';
 import { Kbd } from '@shared/kbd';
 
@@ -51,17 +56,32 @@ export class CommandPalette {
 
   protected readonly query = signal('');
   protected readonly activeIndex = signal(0);
+  protected readonly recentIds = signal<readonly string[]>([]);
 
   protected readonly matches = computed(() => search(this.registry.commands(), this.query()));
 
   protected readonly sections = computed<readonly Section[]>(() => {
+    const matches = this.matches();
+    const recent = recentCommands(
+      matches.map((match) => match.command),
+      this.recentIds(),
+    )
+      .map((command) => matches.find((match) => match.command.id === command.id))
+      .filter((match): match is CommandMatch => match !== undefined);
+    const recentSet = new Set(recent.map((match) => match.command.id));
+    const visibleMatches = this.query().trim()
+      ? matches
+      : matches.filter((match) => !recentSet.has(match.command.id));
     const byGroup = new Map<string, CommandMatch[]>();
-    for (const match of this.matches()) {
+    for (const match of visibleMatches) {
       const bucket = byGroup.get(match.command.group);
       if (bucket) bucket.push(match);
       else byGroup.set(match.command.group, [match]);
     }
-    return [...byGroup].map(([group, matches]) => ({ group, matches }));
+    const sections = [...byGroup].map(([group, matches]) => ({ group, matches }));
+    return recent.length > 0 && !this.query().trim()
+      ? [{ group: 'Recent', matches: recent }, ...sections]
+      : sections;
   });
 
   /** Flat order, so arrow keys cross group boundaries without noticing them. */
@@ -86,6 +106,12 @@ export class CommandPalette {
         if (focused) this.field().nativeElement.focus();
       })
       .then((unlisten) => destroyRef.onDestroy(unlisten));
+
+    void this.tauri.getSetting<unknown>(RECENT_COMMANDS_KEY, []).then((stored) => {
+      if (Array.isArray(stored)) {
+        this.recentIds.set(stored.filter((id): id is string => typeof id === 'string'));
+      }
+    });
   }
 
   protected onQuery(value: string): void {
@@ -125,6 +151,9 @@ export class CommandPalette {
   }
 
   protected async run(command: Command): Promise<void> {
+    const recent = updateRecentCommandIds(this.recentIds(), command.id);
+    this.recentIds.set(recent);
+    void this.tauri.setSetting(RECENT_COMMANDS_KEY, recent);
     await command.run();
     await this.dismiss();
   }

@@ -39,14 +39,24 @@ const PAGE_SIZE = 20;
       <section rlPopoverContent class="popover" aria-label="Notifications">
         <header class="popover-header">
           <span class="u-caption">Notifications</span>
-          <button
-            type="button"
-            class="clear"
-            [disabled]="notifications().length === 0"
-            (click)="clearAll()"
-          >
-            Clear all
-          </button>
+          <div class="header-actions">
+            <button
+              type="button"
+              class="clear"
+              [disabled]="unreadCount() === 0"
+              (click)="markAllRead()"
+            >
+              Mark all read
+            </button>
+            <button
+              type="button"
+              class="clear"
+              [disabled]="notifications().length === 0"
+              (click)="clearAll()"
+            >
+              Clear all
+            </button>
+          </div>
         </header>
 
         @if (notifications().length === 0) {
@@ -147,6 +157,11 @@ const PAGE_SIZE = 20;
       justify-content: space-between;
       padding: var(--space-2) var(--space-2) var(--space-3);
       border-block-end: 1px solid var(--border-subtle);
+    }
+
+    .header-actions {
+      display: flex;
+      gap: var(--space-3);
     }
 
     .clear,
@@ -290,6 +305,11 @@ export class NotificationPopover {
   protected clearAll(): void {
     this.center.clearHistory();
     void this.tauri.notificationsClear();
+  }
+
+  protected markAllRead(): void {
+    const notificationIds = this.center.markAllRead();
+    if (notificationIds.length > 0) void this.tauri.notificationsMarkRead(notificationIds);
   }
 
   protected loadMore(): void {
