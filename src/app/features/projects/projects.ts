@@ -1,5 +1,6 @@
 import { ChangeDetectionStrategy, Component, inject, signal } from '@angular/core';
 
+import { BackgroundTasks } from '@core/background-tasks';
 import {
   TauriBridge,
   type GithubPullRequestSummary,
@@ -391,6 +392,7 @@ import { mergeProjectSummaries, projectKey, type ProjectSummary } from './projec
 export class Projects {
   private static readonly CACHE_KEY = 'projects.scan';
   private readonly tauri = inject(TauriBridge);
+  private readonly backgroundTasks = inject(BackgroundTasks);
   protected readonly projects = signal<readonly ProjectSummary[]>([]);
   protected readonly loading = signal(true);
   protected readonly syncing = signal(false);
@@ -484,8 +486,10 @@ export class Projects {
         return;
       default:
         if (!project.path) return;
-        void this.tauri
-          .runProjectAction(project.path, action)
+        void this.backgroundTasks
+          .run(this.describeAction(project, action), () =>
+            this.tauri.runProjectAction(project.path!, action),
+          )
           .then(() => {
             if (action.id !== 'gitSwitch') return;
             this.projects.set(
@@ -499,6 +503,21 @@ export class Projects {
           .catch(() => {
             this.error.set('Could not run that project action.');
           });
+    }
+  }
+
+  private describeAction(project: ProjectSummary, action: ProjectAction): string {
+    switch (action.id) {
+      case 'gitFetch':
+        return `Fetching ${project.name}`;
+      case 'gitPull':
+        return `Pulling ${project.name}`;
+      case 'gitSwitch':
+        return `Switching ${project.name} to ${action.branch}`;
+      case 'runScript':
+        return `Running npm run ${action.script} in ${project.name}`;
+      default:
+        return `Working on ${project.name}`;
     }
   }
 

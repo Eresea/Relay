@@ -66,24 +66,24 @@ export class UpdateCenter {
         <span class="u-sr-only">{{ label() }}</span>
       </button>
 
-      @if (snapshot().state !== 'idle') {
-        <div class="popover" role="status" aria-live="polite">
-          <p class="eyebrow">Update</p>
-          <p class="title">{{ title() }}</p>
-          <p class="detail">{{ detail() }}</p>
-          @if (actionLabel()) {
-            <button type="button" class="action" (click)="activate()">
-              {{ actionLabel() }}
-            </button>
-          }
-        </div>
-      }
+      <div class="popover" role="status" aria-live="polite">
+        <p class="eyebrow">Update</p>
+        <p class="title">{{ title() }}</p>
+        <p class="detail">{{ detail() }}</p>
+        @if (actionLabel()) {
+          <button type="button" class="action" (click)="activate()">
+            {{ actionLabel() }}
+          </button>
+        }
+      </div>
     </div>
   `,
   styles: `
     :host {
       display: block;
       flex: none;
+      /* Nudges the dot to sit under the rail's settings icon center. */
+      margin-inline-start: 5px;
     }
 
     .update-wrap {
@@ -97,8 +97,8 @@ export class UpdateCenter {
       display: flex;
       align-items: center;
       gap: var(--space-3);
-      min-block-size: var(--control-sm);
-      padding-inline: var(--space-4);
+      block-size: var(--statusbar-height);
+      padding-inline: var(--space-3);
       color: var(--text-subtle);
       border-radius: var(--radius-sm);
     }
@@ -165,7 +165,7 @@ export class UpdateCenter {
     .popover {
       position: absolute;
       inset-block-end: calc(100% + var(--space-3));
-      inset-inline-end: var(--space-3);
+      inset-inline-start: var(--space-3);
       z-index: 2;
       inline-size: 240px;
       padding: var(--space-5);

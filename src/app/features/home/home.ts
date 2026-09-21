@@ -5,6 +5,7 @@ import { ThemeService } from '@core/theme';
 import { Settings } from '@features/settings/settings';
 import { UpdateStatusBar } from '@features/updates/update-center';
 import { Vault } from '@features/vault/vault';
+import { BackgroundTaskIndicator } from '@shared/background-task-indicator';
 import { Icon } from '@shared/icon';
 import { NotificationPopover } from '@shared/notification-popover';
 import { Projects } from '@features/projects/projects';
@@ -22,7 +23,15 @@ const RAIL_EXPANDED_SETTING_KEY = 'rail.expanded';
 @Component({
   selector: 'rl-home',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [Icon, NotificationPopover, Projects, Settings, UpdateStatusBar, Vault],
+  imports: [
+    BackgroundTaskIndicator,
+    Icon,
+    NotificationPopover,
+    Projects,
+    Settings,
+    UpdateStatusBar,
+    Vault,
+  ],
   template: `
     <header class="titlebar u-chrome" data-tauri-drag-region>
       <div class="titlebar-start">
@@ -109,6 +118,7 @@ const RAIL_EXPANDED_SETTING_KEY = 'rail.expanded';
 
     <footer class="statusbar u-chrome">
       <rl-update-status-bar />
+      <rl-background-task-indicator />
     </footer>
   `,
   styles: `
@@ -261,7 +271,10 @@ const RAIL_EXPANDED_SETTING_KEY = 'rail.expanded';
       gap: var(--space-3);
       inline-size: 100%;
       block-size: var(--control-sm);
-      padding-inline: var(--space-2);
+      /* Start padding is always 0 so the icon never shifts when the rail
+       * expands — only the end padding (breathing room before the label's
+       * row edge) responds to that. */
+      padding-inline: 0 var(--space-2);
       color: var(--text-subtle);
       border-radius: var(--radius-sm);
       transition:
@@ -318,9 +331,11 @@ const RAIL_EXPANDED_SETTING_KEY = 'rail.expanded';
     .statusbar {
       display: flex;
       align-items: center;
-      justify-content: flex-end;
+      justify-content: space-between;
+      gap: var(--space-4);
       flex: none;
-      min-block-size: var(--control-sm);
+      block-size: var(--statusbar-height);
+      padding-inline: var(--space-3);
       border-block-start: 1px solid var(--border-subtle);
       background: var(--bg-sunken);
     }
