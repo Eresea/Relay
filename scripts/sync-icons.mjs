@@ -17,6 +17,7 @@ const OUT = join(import.meta.dirname, '..', 'src', 'assets', 'icons');
 const ICONS = [
   'arrow-left',
   'chevron-down',
+  'chevron-right',
   'circle',
   'circle-alert',
   'circle-check',

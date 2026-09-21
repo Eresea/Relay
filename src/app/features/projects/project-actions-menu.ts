@@ -2,6 +2,7 @@ import { ChangeDetectionStrategy, Component, input, output, viewChild } from '@a
 
 import { AppPopover, PopoverContent, PopoverTrigger } from '@shared/app-popover';
 import { Icon } from '@shared/icon';
+import { MenuSubmenu, SubmenuContent } from '@shared/menu-submenu';
 
 import type { ProjectSummary } from './project-summary';
 
@@ -20,7 +21,7 @@ export type ProjectAction =
 @Component({
   selector: 'rl-project-actions-menu',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [AppPopover, Icon, PopoverContent, PopoverTrigger],
+  imports: [AppPopover, Icon, MenuSubmenu, PopoverContent, PopoverTrigger, SubmenuContent],
   template: `
     <rl-app-popover surfaceRole="menu">
       <button
@@ -65,34 +66,49 @@ export type ProjectAction =
 
         @if (project().path) {
           <section class="menu-section">
-            <p class="section-label">Git</p>
-            <button type="button" role="menuitem" (click)="select({ id: 'gitFetch' })">
-              Fetch
-            </button>
-            <button type="button" role="menuitem" (click)="select({ id: 'gitPull' })">Pull</button>
-            @if (project().branches?.length) {
-              <p class="subsection-label">Switch branch</p>
-              @for (branch of project().branches; track branch) {
-                <button
-                  type="button"
-                  role="menuitem"
-                  [class.active]="branch === project().currentBranch"
-                  (click)="select({ id: 'gitSwitch', branch })"
-                >
-                  {{ branch }}
+            <rl-menu-submenu label="Git">
+              <ng-container rlSubmenuContent>
+                <button type="button" role="menuitem" (click)="select({ id: 'gitFetch' })">
+                  Fetch
                 </button>
-              }
-            }
+                <button type="button" role="menuitem" (click)="select({ id: 'gitPull' })">
+                  Pull
+                </button>
+                @if (project().branches?.length) {
+                  <rl-menu-submenu label="Switch branch">
+                    <ng-container rlSubmenuContent>
+                      @for (branch of project().branches; track branch) {
+                        <button
+                          type="button"
+                          role="menuitem"
+                          [class.active]="branch === project().currentBranch"
+                          (click)="select({ id: 'gitSwitch', branch })"
+                        >
+                          {{ branch }}
+                        </button>
+                      }
+                    </ng-container>
+                  </rl-menu-submenu>
+                }
+              </ng-container>
+            </rl-menu-submenu>
           </section>
 
           @if (project().packageScripts?.length) {
             <section class="menu-section">
-              <p class="section-label">Scripts</p>
-              @for (script of project().packageScripts; track script) {
-                <button type="button" role="menuitem" (click)="select({ id: 'runScript', script })">
-                  npm run {{ script }}
-                </button>
-              }
+              <rl-menu-submenu label="Scripts">
+                <ng-container rlSubmenuContent>
+                  @for (script of project().packageScripts; track script) {
+                    <button
+                      type="button"
+                      role="menuitem"
+                      (click)="select({ id: 'runScript', script })"
+                    >
+                      npm run {{ script }}
+                    </button>
+                  }
+                </ng-container>
+              </rl-menu-submenu>
             </section>
           }
         }
@@ -132,8 +148,7 @@ export type ProjectAction =
       border-block-start: 1px solid var(--border-subtle);
     }
 
-    .section-label,
-    .subsection-label {
+    .section-label {
       margin: 0;
       padding: var(--space-2) var(--space-3);
       color: var(--text-subtle);
@@ -141,12 +156,6 @@ export type ProjectAction =
       font-weight: var(--weight-medium);
       letter-spacing: 0.04em;
       text-transform: uppercase;
-    }
-
-    .subsection-label {
-      padding-block-start: var(--space-3);
-      letter-spacing: normal;
-      text-transform: none;
     }
 
     .menu button[role='menuitem'] {
