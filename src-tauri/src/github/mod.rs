@@ -29,6 +29,7 @@ use crate::jobs::{self, JobId, JobRegistry, NotificationOptions};
 
 use client::{GitHubClient, HttpGitHubClient, RepositorySummary};
 use oauth::DeviceAuthorization;
+use poll::PullRequestSnapshot;
 use rules::GithubConnectorSettings;
 use token_store::{KeyringTokenStore, TokenStore};
 
@@ -75,6 +76,10 @@ pub async fn repositories(client: HttpGitHubClient) -> Result<Vec<RepositorySumm
         return Ok(Vec::new());
     };
     client.list_repositories(&token.access_token).await
+}
+
+pub fn pull_requests(app: &AppHandle) -> Result<Vec<PullRequestSnapshot>> {
+    Ok(poll::recent_pull_requests(&poll_cache_path(app)))
 }
 
 /// Starts a Device Flow login: requests a code from GitHub (one blocking

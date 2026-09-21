@@ -74,6 +74,7 @@ pub fn run() {
             commands::vault_export,
             commands::github_status,
             commands::github_repositories,
+            commands::github_pull_requests,
             commands::github_connect_start,
             commands::github_disconnect,
             commands::gmail_status,

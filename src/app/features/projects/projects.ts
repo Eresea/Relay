@@ -1,6 +1,10 @@
 import { ChangeDetectionStrategy, Component, inject, signal } from '@angular/core';
 
-import { TauriBridge, type GithubRepositorySummary } from '@core/tauri';
+import {
+  TauriBridge,
+  type GithubPullRequestSummary,
+  type GithubRepositorySummary,
+} from '@core/tauri';
 import { Icon } from '@shared/icon';
 
 import { mergeProjectSummaries, type ProjectSummary } from './project-summary';
@@ -62,6 +66,23 @@ import { mergeProjectSummaries, type ProjectSummary } from './project-summary';
                     }
                     @if (project.visibility) {
                       · {{ project.visibility }}
+                    }
+                  </p>
+                }
+                @if (project.pullRequests.length) {
+                  <p class="project-signals">
+                    @if (waitingCount(project)) {
+                      <span
+                        ><span class="status-dot waiting"></span
+                        >{{ waitingCount(project) }} waiting</span
+                      >
+                    }
+                    @if (ciState(project) === 'failure') {
+                      <span><span class="status-dot failure"></span>CI failing</span>
+                    } @else if (ciState(project) === 'pending') {
+                      <span><span class="status-dot pending"></span>CI running</span>
+                    } @else if (ciState(project) === 'success') {
+                      <span><span class="status-dot success"></span>CI passing</span>
                     }
                   </p>
                 }
@@ -240,6 +261,43 @@ import { mergeProjectSummaries, type ProjectSummary } from './project-summary';
       color: var(--text-subtle);
     }
 
+    .project-signals {
+      display: flex;
+      flex-wrap: wrap;
+      gap: var(--space-4);
+      margin: var(--space-2) 0 0;
+      color: var(--text-muted);
+      font-size: var(--text-11);
+    }
+
+    .project-signals span {
+      display: inline-flex;
+      align-items: center;
+      gap: var(--space-2);
+    }
+
+    .status-dot {
+      inline-size: 6px;
+      block-size: 6px;
+      border-radius: 50%;
+    }
+
+    .status-dot.waiting {
+      background: var(--status-waiting);
+    }
+
+    .status-dot.failure {
+      background: var(--status-blocked);
+    }
+
+    .status-dot.pending {
+      background: var(--status-running);
+    }
+
+    .status-dot.success {
+      background: var(--status-done);
+    }
+
     .open-button {
       padding: var(--space-2) var(--space-3);
       color: var(--text-muted);
@@ -283,12 +341,14 @@ export class Projects {
     try {
       const workspaces = await this.tauri.scanWorkspaces();
       let repositories: readonly GithubRepositorySummary[] = [];
+      let pullRequests: readonly GithubPullRequestSummary[] = [];
       try {
         repositories = await this.tauri.githubRepositories();
+        pullRequests = await this.tauri.githubPullRequests();
       } catch {
         this.error.set('GitHub sync failed. Local clones are still shown.');
       }
-      this.projects.set(mergeProjectSummaries(workspaces, repositories));
+      this.projects.set(mergeProjectSummaries(workspaces, repositories, pullRequests));
     } catch {
       this.error.set('Could not scan local disks.');
     } finally {
@@ -309,5 +369,25 @@ export class Projects {
 
   protected formatSize(sizeKb: number): string {
     return sizeKb >= 1024 ? (sizeKb / 1024).toFixed(1) + ' MB' : Math.round(sizeKb) + ' KB';
+  }
+
+  protected waitingCount(project: ProjectSummary): number {
+    return project.pullRequests.filter((pullRequest) => pullRequest.reviewRequested).length;
+  }
+
+  protected ciState(project: ProjectSummary): GithubPullRequestSummary['ciState'] {
+    if (project.pullRequests.some((pullRequest) => pullRequest.ciState === 'failure')) {
+      return 'failure';
+    }
+    if (project.pullRequests.some((pullRequest) => pullRequest.ciState === 'pending')) {
+      return 'pending';
+    }
+    if (
+      project.pullRequests.length > 0 &&
+      project.pullRequests.every((pullRequest) => pullRequest.ciState === 'success')
+    ) {
+      return 'success';
+    }
+    return null;
   }
 }

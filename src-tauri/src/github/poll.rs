@@ -35,12 +35,27 @@ pub struct TrackedPr {
     pub review_requested: bool,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PullRequestSnapshot {
+    pub repository: String,
+    pub number: u64,
+    pub title: String,
+    pub url: String,
+    pub state: String,
+    pub review_requested: bool,
+    pub ci_state: Option<CiState>,
+    pub last_seen: u64,
+}
+
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct PollCache {
     #[serde(default)]
     pub search_etag: Option<String>,
     #[serde(default)]
     pub prs: HashMap<String, TrackedPr>,
+    #[serde(default)]
+    pub details: HashMap<String, PullRequestSnapshot>,
 }
 
 /// `"https://api.github.com/repos/OWNER/REPO"` → `"OWNER/REPO"`. The search
@@ -318,7 +333,20 @@ pub async fn run_poll_cycle<C: GitHubClient, S: EventSink>(
                 );
             }
         }
-        cache.prs.insert(key, current);
+        cache.prs.insert(key.clone(), current.clone());
+        cache.details.insert(
+            key,
+            PullRequestSnapshot {
+                repository: repo,
+                number: item.number,
+                title: item.title,
+                url: detail.html_url,
+                state: detail.state,
+                review_requested: current.review_requested,
+                ci_state: current.ci_state,
+                last_seen: now_millis(),
+            },
+        );
     }
 
     Ok(())
@@ -375,6 +403,16 @@ fn load_cache(path: &Path) -> PollCache {
         .ok()
         .and_then(|raw| serde_json::from_str(&raw).ok())
         .unwrap_or_default()
+}
+
+pub fn recent_pull_requests(path: &Path) -> Vec<PullRequestSnapshot> {
+    let mut pull_requests: Vec<_> = load_cache(path)
+        .details
+        .into_values()
+        .filter(|pull_request| pull_request.state == "open")
+        .collect();
+    pull_requests.sort_by_key(|pull_request| std::cmp::Reverse(pull_request.last_seen));
+    pull_requests
 }
 
 fn save_cache(path: &Path, cache: &PollCache) {
@@ -540,6 +578,63 @@ mod tests {
         assert!(needs_refresh(Some(1_000), 10));
     }
 
+    #[test]
+    fn recent_pull_requests_filters_closed_entries_and_sorts_by_last_seen() {
+        let path = std::env::temp_dir().join(format!(
+            "relay-github-pull-requests-{}.json",
+            std::process::id()
+        ));
+        let mut cache = PollCache::default();
+        cache.details.insert(
+            "my-org/relay#7".to_string(),
+            PullRequestSnapshot {
+                repository: "my-org/relay".to_string(),
+                number: 7,
+                title: "Older".to_string(),
+                url: "https://github.com/my-org/relay/pull/7".to_string(),
+                state: "open".to_string(),
+                review_requested: false,
+                ci_state: None,
+                last_seen: 100,
+            },
+        );
+        cache.details.insert(
+            "my-org/relay#8".to_string(),
+            PullRequestSnapshot {
+                repository: "my-org/relay".to_string(),
+                number: 8,
+                title: "Closed".to_string(),
+                url: "https://github.com/my-org/relay/pull/8".to_string(),
+                state: "closed".to_string(),
+                review_requested: false,
+                ci_state: None,
+                last_seen: 300,
+            },
+        );
+        cache.details.insert(
+            "my-org/relay#9".to_string(),
+            PullRequestSnapshot {
+                repository: "my-org/relay".to_string(),
+                number: 9,
+                title: "Newer".to_string(),
+                url: "https://github.com/my-org/relay/pull/9".to_string(),
+                state: "open".to_string(),
+                review_requested: false,
+                ci_state: None,
+                last_seen: 200,
+            },
+        );
+        save_cache(&path, &cache);
+
+        let result = recent_pull_requests(&path);
+        let numbers: Vec<_> = result
+            .into_iter()
+            .map(|pull_request| pull_request.number)
+            .collect();
+        let _ = std::fs::remove_file(path);
+        assert_eq!(numbers, vec![9, 7]);
+    }
+
     fn pr_detail(
         number: u64,
         state: &str,
@@ -639,6 +734,7 @@ mod tests {
         let mut cache = PollCache {
             search_etag: Some("still-fresh".to_string()),
             prs: HashMap::new(),
+            details: HashMap::new(),
         };
 
         run_poll_cycle(

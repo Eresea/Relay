@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest';
 
-import type { GithubRepositorySummary, WorkspaceSummary } from '@core/tauri';
+import type {
+  GithubPullRequestSummary,
+  GithubRepositorySummary,
+  WorkspaceSummary,
+} from '@core/tauri';
 
 import { mergeProjectSummaries } from './project-summary';
 
@@ -22,11 +26,23 @@ const repository = (fullName: string, pushedAt: string): GithubRepositorySummary
   defaultBranch: 'main',
 });
 
+const pullRequest = (repository: string): GithubPullRequestSummary => ({
+  repository,
+  number: 7,
+  title: 'Fix the thing',
+  url: 'https://github.com/' + repository + '/pull/7',
+  state: 'open',
+  reviewRequested: true,
+  ciState: 'failure',
+  lastSeen: 100,
+});
+
 describe('mergeProjectSummaries', () => {
   it('joins a local clone to its GitHub repository by owner and name', () => {
     const [project] = mergeProjectSummaries(
       [workspace('F:/Code/relay', 'OpenAI/Relay')],
       [repository('openai/relay', '2026-09-21T10:00:00Z')],
+      [pullRequest('openai/relay')],
     );
 
     expect(project).toMatchObject({
@@ -34,6 +50,7 @@ describe('mergeProjectSummaries', () => {
       path: 'F:/Code/relay',
       githubRepo: 'openai/relay',
       sizeKb: 128,
+      pullRequests: [pullRequest('openai/relay')],
     });
   });
 

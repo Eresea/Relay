@@ -21,7 +21,7 @@ use crate::error::Result;
 use crate::events::{AppEvent, EventSink};
 use crate::github::{
     self, client::HttpGitHubClient, client::RepositorySummary, oauth::DeviceAuthorization,
-    GithubStatus,
+    poll::PullRequestSnapshot, GithubStatus,
 };
 use crate::gmail::{self, GmailSettings, GmailState, GmailStatus, HttpGoogleApi, OsKeyStore};
 use crate::jobs::{JobId, JobRegistry};
@@ -223,6 +223,11 @@ pub async fn github_repositories(
     client: tauri::State<'_, HttpGitHubClient>,
 ) -> Result<Vec<RepositorySummary>> {
     github::repositories(client.inner().clone()).await
+}
+
+#[tauri::command]
+pub fn github_pull_requests(app: AppHandle) -> Result<Vec<PullRequestSnapshot>> {
+    github::pull_requests(&app)
 }
 
 /// Starts a Device Flow login and returns the code to show the user. The

@@ -148,6 +148,10 @@ export class TauriBridge {
     return (await this.invoke<GithubRepositorySummary[]>('github_repositories')) ?? [];
   }
 
+  async githubPullRequests(): Promise<readonly GithubPullRequestSummary[]> {
+    return (await this.invoke<GithubPullRequestSummary[]>('github_pull_requests')) ?? [];
+  }
+
   private settingsStore: LazyStore | null = null;
 
   /**
@@ -382,6 +386,18 @@ export interface GithubRepositorySummary {
   readonly sizeKb: number;
   readonly pushedAt: string | null;
   readonly defaultBranch: string;
+}
+
+/** Mirrors the latest PR snapshot maintained by the GitHub poller. */
+export interface GithubPullRequestSummary {
+  readonly repository: string;
+  readonly number: number;
+  readonly title: string;
+  readonly url: string;
+  readonly state: string;
+  readonly reviewRequested: boolean;
+  readonly ciState: 'pending' | 'success' | 'failure' | null;
+  readonly lastSeen: number;
 }
 
 /** Mirrors `vault::VaultEntrySummary` — every field but the password. */
