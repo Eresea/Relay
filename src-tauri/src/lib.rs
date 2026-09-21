@@ -4,6 +4,7 @@ mod events;
 mod github;
 mod gmail;
 mod jobs;
+mod notifications;
 mod overlay;
 #[cfg(desktop)]
 mod shortcuts;
@@ -79,6 +80,9 @@ pub fn run() {
             commands::gmail_connect,
             commands::gmail_cancel_connect,
             commands::gmail_disconnect,
+            commands::notifications_list,
+            commands::notifications_mark_read,
+            commands::notifications_clear,
         ])
         .on_window_event(|window, event| {
             // The palette is a spotlight, not a window: losing focus dismisses

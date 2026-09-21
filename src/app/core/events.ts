@@ -25,6 +25,11 @@ export interface NotificationPayload {
   readonly actions?: readonly NotificationAction[];
 }
 
+export interface NotificationRecord extends NotificationPayload {
+  readonly read: boolean;
+  readonly createdAt: number;
+}
+
 export type AppEvent =
   | { readonly type: 'commandsChanged' }
   | { readonly type: 'openSettingsRequested' }

@@ -115,6 +115,12 @@ pub enum Error {
 
     #[error(transparent)]
     Http(#[from] reqwest::Error),
+
+    #[error(transparent)]
+    Sqlite(#[from] rusqlite::Error),
+
+    #[error("notification data is corrupt: {0}")]
+    NotificationCorrupt(String),
 }
 
 impl Serialize for Error {
