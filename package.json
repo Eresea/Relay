@@ -16,6 +16,7 @@
     "lint": "eslint .",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
+    "version:check": "node scripts/check-version.mjs",
     "tauri": "tauri",
     "dev": "tauri dev",
     "app:build": "tauri build",

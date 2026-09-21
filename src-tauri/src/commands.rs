@@ -18,6 +18,8 @@ use serde::{Deserialize, Serialize};
 use tauri::AppHandle;
 
 use crate::error::Result;
+#[cfg(desktop)]
+use crate::events::UpdateSnapshot;
 use crate::events::{AppEvent, EventSink};
 use crate::github::{
     self, client::HttpGitHubClient, client::RepositorySummary, oauth::DeviceAuthorization,
@@ -27,6 +29,8 @@ use crate::gmail::{self, GmailSettings, GmailState, GmailStatus, HttpGoogleApi, 
 use crate::jobs::{JobId, JobRegistry};
 use crate::notifications::NotificationRecord;
 use crate::overlay;
+#[cfg(desktop)]
+use crate::updates::UpdateManager;
 use crate::vault::{
     self, NewVaultEntry, PasswordOptions, VaultEntrySummary, VaultState, VaultStatus,
 };
@@ -341,6 +345,36 @@ pub fn scan_workspaces() -> Result<Vec<WorkspaceSummary>> {
 #[tauri::command]
 pub fn open_terminal(path: String) -> Result<()> {
     crate::workspaces::open_terminal(&path)
+}
+
+#[cfg(desktop)]
+#[tauri::command]
+pub fn update_status(updates: tauri::State<UpdateManager>) -> UpdateSnapshot {
+    updates.snapshot()
+}
+
+#[cfg(desktop)]
+#[tauri::command]
+pub async fn update_check(app: AppHandle, updates: tauri::State<'_, UpdateManager>) -> Result<()> {
+    updates.check_and_download(app).await
+}
+
+#[cfg(desktop)]
+#[tauri::command]
+pub async fn update_download(
+    app: AppHandle,
+    updates: tauri::State<'_, UpdateManager>,
+) -> Result<()> {
+    updates.download(app).await
+}
+
+#[cfg(desktop)]
+#[tauri::command]
+pub async fn update_install(
+    app: AppHandle,
+    updates: tauri::State<'_, UpdateManager>,
+) -> Result<()> {
+    updates.install(app).await
 }
 
 #[cfg(test)]

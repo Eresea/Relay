@@ -5,6 +5,7 @@ import { registerDefaultCommands } from '@core/default-commands';
 import { NotificationCenter } from '@core/notification-center';
 import { currentSurface, isOverlaySurface } from '@core/surface';
 import { TauriBridge, type CoreCommand } from '@core/tauri';
+import { UpdateCenter } from '@features/updates/update-center';
 import { ThemeService } from '@core/theme';
 import { CommandPalette } from '@features/palette/command-palette';
 import { Home } from '@features/home/home';
@@ -43,6 +44,7 @@ export class App {
   private readonly registry = inject(CommandRegistry);
   private readonly tauri = inject(TauriBridge);
   private readonly notifications = inject(NotificationCenter);
+  private readonly updates = inject(UpdateCenter);
 
   protected readonly surface = currentSurface();
 
@@ -82,11 +84,13 @@ export class App {
   private async subscribeToEvents(destroyRef: DestroyRef): Promise<void> {
     try {
       this.notifications.restore(await this.tauri.notificationsList());
+      this.updates.restore(await this.tauri.updateStatus());
     } catch (error: unknown) {
       console.error('[relay] notification history unavailable', error);
     }
     const unlisten = await this.tauri.onEvent((event) => {
       this.notifications.handle(event);
+      this.updates.handle(event);
     });
     destroyRef.onDestroy(unlisten);
   }

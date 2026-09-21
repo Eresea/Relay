@@ -117,6 +117,18 @@ pub enum Error {
     Http(#[from] reqwest::Error),
 
     #[error(transparent)]
+    Updater(#[from] tauri_plugin_updater::Error),
+
+    #[error("invalid updater configuration: {0}")]
+    UpdaterConfiguration(String),
+
+    #[error("no update is available")]
+    NoUpdateAvailable,
+
+    #[error("the update has not finished downloading")]
+    UpdateNotDownloaded,
+
+    #[error(transparent)]
     Sqlite(#[from] rusqlite::Error),
 
     #[error("notification data is corrupt: {0}")]

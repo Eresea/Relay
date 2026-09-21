@@ -14,6 +14,48 @@ use crate::jobs::JobId;
 /// type, so the frontend's subscription surface never grows.
 pub const CHANNEL: &str = "relay://event";
 
+#[derive(Debug, Clone, Copy, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub enum UpdateState {
+    Idle,
+    Checking,
+    Available,
+    Downloading,
+    Ready,
+    Installing,
+    Error,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UpdateSnapshot {
+    pub state: UpdateState,
+    pub current_version: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub version: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub notes: Option<String>,
+    pub downloaded_bytes: u64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub content_length: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub error: Option<String>,
+}
+
+impl Default for UpdateSnapshot {
+    fn default() -> Self {
+        Self {
+            state: UpdateState::Idle,
+            current_version: env!("CARGO_PKG_VERSION").to_owned(),
+            version: None,
+            notes: None,
+            downloaded_bytes: 0,
+            content_length: None,
+            error: None,
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize)]
 #[serde(tag = "type", rename_all = "camelCase")]
 pub enum AppEvent {
@@ -72,6 +114,12 @@ pub enum AppEvent {
         #[serde(rename = "jobId")]
         job_id: JobId,
         ok: bool,
+    },
+
+    /// Persistent update state for the main window's status strip.
+    UpdateChanged {
+        #[serde(flatten)]
+        snapshot: UpdateSnapshot,
     },
 }
 
@@ -191,6 +239,26 @@ mod tests {
         assert_eq!(
             json,
             r#"{"type":"notificationDone","jobId":"job-2","ok":false}"#
+        );
+    }
+
+    #[test]
+    fn update_changed_wire_shape() {
+        let json = serde_json::to_string(&AppEvent::UpdateChanged {
+            snapshot: UpdateSnapshot {
+                state: UpdateState::Downloading,
+                current_version: "0.1.0".to_string(),
+                version: Some("0.2.0".to_string()),
+                notes: None,
+                downloaded_bytes: 50,
+                content_length: Some(100),
+                error: None,
+            },
+        })
+        .unwrap();
+        assert_eq!(
+            json,
+            r#"{"type":"updateChanged","state":"downloading","currentVersion":"0.1.0","version":"0.2.0","downloadedBytes":50,"contentLength":100}"#
         );
     }
 }

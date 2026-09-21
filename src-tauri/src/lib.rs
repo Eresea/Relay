@@ -10,6 +10,8 @@ mod overlay;
 mod shortcuts;
 #[cfg(desktop)]
 mod tray;
+#[cfg(desktop)]
+mod updates;
 mod vault;
 mod workspaces;
 
@@ -48,8 +50,10 @@ pub fn run() {
         .manage(GithubState::default())
         .manage(HttpGitHubClient::default())
         .manage(GmailState::default())
+        .manage(updates::UpdateManager::default())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_store::Builder::default().build())
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(
             tauri_plugin_log::Builder::default()
                 .level(log::LevelFilter::Info)
@@ -88,6 +92,10 @@ pub fn run() {
             commands::notifications_clear,
             commands::scan_workspaces,
             commands::open_terminal,
+            commands::update_status,
+            commands::update_check,
+            commands::update_download,
+            commands::update_install,
         ])
         .on_window_event(|window, event| {
             // The palette is a spotlight, not a window: losing focus dismisses
@@ -164,6 +172,9 @@ pub fn run() {
                     log::warn!("could not resume the Gmail connector: {error}");
                 }
             });
+
+            let update_manager = app.state::<updates::UpdateManager>().inner().clone();
+            update_manager.start(app.handle().clone());
 
             Ok(())
         })
