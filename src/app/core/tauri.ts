@@ -140,6 +140,10 @@ export class TauriBridge {
     await openPath(path);
   }
 
+  async scanWorkspaces(): Promise<readonly WorkspaceSummary[]> {
+    return (await this.invoke<WorkspaceSummary[]>('scan_workspaces')) ?? [];
+  }
+
   private settingsStore: LazyStore | null = null;
 
   /**
@@ -160,14 +164,6 @@ export class TauriBridge {
     if (!this.available) return;
     const store = await this.getSettingsStore();
     await store.set(key, value);
-  }
-
-  async getProjectContext(): Promise<ProjectContext | null> {
-    return this.getSetting<ProjectContext | null>('project.context', null);
-  }
-
-  async setProjectContext(context: ProjectContext | null): Promise<void> {
-    await this.setSetting('project.context', context);
   }
 
   private async getSettingsStore(): Promise<LazyStore> {
@@ -364,10 +360,12 @@ export interface VaultStatus {
   readonly unlocked: boolean;
 }
 
-/** The one project Relay currently keeps in focus. */
-export interface ProjectContext {
+/** A local Git clone discovered by the bounded workspace scanner. */
+export interface WorkspaceSummary {
   readonly name: string;
   readonly path: string;
+  readonly githubRepo: string | null;
+  readonly modifiedAt: number | null;
 }
 
 /** Mirrors `vault::VaultEntrySummary` — every field but the password. */

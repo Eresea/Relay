@@ -27,6 +27,7 @@ use crate::overlay;
 use crate::vault::{
     self, NewVaultEntry, PasswordOptions, VaultEntrySummary, VaultState, VaultStatus,
 };
+use crate::workspaces::WorkspaceSummary;
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -313,6 +314,12 @@ pub fn notifications_mark_read(app: AppHandle, notification_ids: Vec<String>) ->
 #[tauri::command]
 pub fn notifications_clear(app: AppHandle) -> Result<()> {
     crate::notifications::clear(&app)
+}
+
+/// Discovers a small, bounded set of local Git clones across mounted disks.
+#[tauri::command]
+pub fn scan_workspaces() -> Result<Vec<WorkspaceSummary>> {
+    crate::workspaces::scan()
 }
 
 #[cfg(test)]

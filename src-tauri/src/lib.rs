@@ -11,6 +11,7 @@ mod shortcuts;
 #[cfg(desktop)]
 mod tray;
 mod vault;
+mod workspaces;
 
 use tauri::{Manager, WindowEvent};
 
@@ -83,6 +84,7 @@ pub fn run() {
             commands::notifications_list,
             commands::notifications_mark_read,
             commands::notifications_clear,
+            commands::scan_workspaces,
         ])
         .on_window_event(|window, event| {
             // The palette is a spotlight, not a window: losing focus dismisses

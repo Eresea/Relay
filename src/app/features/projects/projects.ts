@@ -1,0 +1,290 @@
+import { ChangeDetectionStrategy, Component, inject, signal } from '@angular/core';
+
+import { TauriBridge, type WorkspaceSummary } from '@core/tauri';
+import { Icon } from '@shared/icon';
+
+@Component({
+  selector: 'rl-projects',
+  changeDetection: ChangeDetectionStrategy.OnPush,
+  imports: [Icon],
+  template: `
+    <section class="projects" aria-labelledby="projects-title">
+      <header class="page-header">
+        <div>
+          <p class="u-caption">Workspace</p>
+          <h1 id="projects-title">Projects</h1>
+          <p class="page-description">Local Git clones, ready when you are.</p>
+        </div>
+        <button type="button" class="scan-button" [disabled]="scanning()" (click)="scan()">
+          <rl-icon [name]="scanning() ? 'loader-circle' : 'search'" [size]="14" />
+          {{ scanning() ? 'Scanning' : 'Scan disks' }}
+        </button>
+      </header>
+
+      @if (error()) {
+        <p class="error" role="alert">{{ error() }}</p>
+      }
+
+      @if (scanning()) {
+        <div class="empty-state" aria-live="polite">
+          <rl-icon name="loader-circle" [size]="20" />
+          <p class="empty-title">Looking for Git clones</p>
+          <p class="empty-description">
+            The scan is limited to mounted disks and a few folder levels.
+          </p>
+        </div>
+      } @else if (workspaces().length === 0) {
+        <div class="empty-state">
+          <rl-icon name="folder" [size]="20" />
+          <p class="empty-title">No local projects found</p>
+          <p class="empty-description">Scan again after cloning a repository.</p>
+        </div>
+      } @else {
+        <div class="project-list" role="list">
+          @for (workspace of workspaces(); track workspace.path) {
+            <article class="project-row" role="listitem">
+              <span class="project-glyph"><rl-icon name="folder" [size]="16" /></span>
+              <div class="project-copy">
+                <p class="project-name">{{ workspace.name }}</p>
+                <p class="project-path">{{ workspace.path }}</p>
+                @if (workspace.githubRepo) {
+                  <p class="project-remote">github.com/{{ workspace.githubRepo }}</p>
+                }
+                @if (workspace.modifiedAt) {
+                  <p class="project-remote">Updated {{ formatModified(workspace.modifiedAt) }}</p>
+                }
+              </div>
+              <button
+                type="button"
+                class="open-button"
+                (click)="open(workspace)"
+                [attr.aria-label]="'Open ' + workspace.name"
+              >
+                Open
+              </button>
+            </article>
+          }
+        </div>
+      }
+    </section>
+  `,
+  styles: `
+    :host {
+      display: block;
+      min-block-size: 100%;
+    }
+
+    .projects {
+      max-inline-size: 860px;
+      margin: 0 auto;
+      padding: var(--space-9) var(--space-8);
+    }
+
+    .page-header {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: var(--space-7);
+      padding-block-end: var(--space-7);
+      border-block-end: 1px solid var(--border-subtle);
+    }
+
+    h1,
+    .page-description,
+    .empty-title,
+    .empty-description,
+    .error,
+    .project-name,
+    .project-path,
+    .project-remote {
+      margin: 0;
+    }
+
+    h1 {
+      margin-block-start: var(--space-2);
+      font-size: var(--text-20);
+      font-weight: var(--weight-semibold);
+      letter-spacing: -0.04em;
+      color: var(--text-strong);
+    }
+
+    .page-description {
+      margin-block-start: var(--space-2);
+      font-size: var(--text-13);
+      color: var(--text-muted);
+    }
+
+    .scan-button,
+    .open-button {
+      display: inline-flex;
+      align-items: center;
+      gap: var(--space-2);
+      flex: none;
+      border-radius: var(--radius-sm);
+      font-size: var(--text-12);
+      font-weight: var(--weight-medium);
+    }
+
+    .scan-button {
+      min-block-size: var(--control-sm);
+      padding-inline: var(--space-3);
+      color: var(--primary-ink);
+      background: var(--primary);
+    }
+
+    .scan-button:hover:not(:disabled) {
+      background: var(--primary-hover);
+    }
+
+    .scan-button:disabled {
+      cursor: wait;
+      opacity: 0.7;
+    }
+
+    .empty-state {
+      display: grid;
+      justify-items: center;
+      padding: var(--space-10) var(--space-7);
+      text-align: center;
+      color: var(--text-subtle);
+    }
+
+    .empty-title {
+      margin-block-start: var(--space-4);
+      color: var(--text-body);
+      font-size: var(--text-13);
+      font-weight: var(--weight-medium);
+    }
+
+    .empty-description {
+      max-inline-size: 360px;
+      margin-block-start: var(--space-2);
+      font-size: var(--text-12);
+      line-height: 1.5;
+      color: var(--text-muted);
+    }
+
+    .error {
+      padding-block: var(--space-4);
+      color: var(--danger-ink);
+      font-size: var(--text-12);
+      background: var(--danger-tint);
+    }
+
+    .project-list {
+      border-block-end: 1px solid var(--border-subtle);
+    }
+
+    .project-row {
+      display: flex;
+      align-items: center;
+      gap: var(--space-5);
+      min-block-size: 72px;
+      padding-block: var(--space-5);
+      border-block-end: 1px solid var(--border-subtle);
+    }
+
+    .project-row:last-child {
+      border-block-end: 0;
+    }
+
+    .project-glyph {
+      display: grid;
+      place-items: center;
+      inline-size: 30px;
+      block-size: 30px;
+      flex: none;
+      color: var(--text-muted);
+      background: var(--bg-raised);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-sm);
+    }
+
+    .project-copy {
+      min-inline-size: 0;
+      flex: 1;
+    }
+
+    .project-name {
+      overflow: hidden;
+      color: var(--text-body);
+      font-size: var(--text-13);
+      font-weight: var(--weight-medium);
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .project-path,
+    .project-remote {
+      overflow: hidden;
+      margin-block-start: var(--space-1);
+      color: var(--text-muted);
+      font-family: var(--font-mono);
+      font-size: var(--text-11);
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .project-remote {
+      color: var(--text-subtle);
+    }
+
+    .open-button {
+      padding: var(--space-2) var(--space-3);
+      color: var(--text-muted);
+    }
+
+    .open-button:hover {
+      color: var(--text-body);
+      background: var(--tint-hover);
+    }
+
+    @media (max-width: 620px) {
+      .projects {
+        padding-inline: var(--space-6);
+      }
+
+      .page-header {
+        align-items: stretch;
+        flex-direction: column;
+      }
+
+      .scan-button {
+        align-self: flex-start;
+      }
+    }
+  `,
+})
+export class Projects {
+  private readonly tauri = inject(TauriBridge);
+  protected readonly workspaces = signal<readonly WorkspaceSummary[]>([]);
+  protected readonly scanning = signal(false);
+  protected readonly error = signal('');
+
+  constructor() {
+    void this.scan();
+  }
+
+  protected async scan(): Promise<void> {
+    if (this.scanning()) return;
+    this.scanning.set(true);
+    this.error.set('');
+    try {
+      this.workspaces.set(await this.tauri.scanWorkspaces());
+    } catch {
+      this.error.set('Could not scan local disks.');
+    } finally {
+      this.scanning.set(false);
+    }
+  }
+
+  protected open(workspace: WorkspaceSummary): void {
+    void this.tauri.openPath(workspace.path);
+  }
+
+  protected formatModified(timestamp: number): string {
+    return new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric' }).format(
+      timestamp * 1000,
+    );
+  }
+}
