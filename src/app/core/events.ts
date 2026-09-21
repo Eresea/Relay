@@ -31,13 +31,7 @@ export interface NotificationRecord extends NotificationPayload {
 }
 
 export type UpdateState =
-  | 'idle'
-  | 'checking'
-  | 'available'
-  | 'downloading'
-  | 'ready'
-  | 'installing'
-  | 'error';
+  'idle' | 'checking' | 'available' | 'downloading' | 'ready' | 'installing' | 'error';
 
 export interface UpdateSnapshot {
   readonly state: UpdateState;

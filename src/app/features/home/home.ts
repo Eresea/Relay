@@ -107,9 +107,9 @@ const RAIL_EXPANDED_SETTING_KEY = 'rail.expanded';
       </main>
     </div>
 
-      <footer class="statusbar u-chrome">
-        <rl-update-status-bar />
-      </footer>
+    <footer class="statusbar u-chrome">
+      <rl-update-status-bar />
+    </footer>
   `,
   styles: `
     :host {

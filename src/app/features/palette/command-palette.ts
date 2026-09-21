@@ -16,11 +16,7 @@ import { CommandRegistry } from '@core/command-registry';
 import { hueVar } from '@core/entity-hue';
 import { search } from '@core/fuzzy';
 import { TauriBridge } from '@core/tauri';
-import {
-  RECENT_COMMANDS_KEY,
-  recentCommands,
-  updateRecentCommandIds,
-} from '@core/recent-commands';
+import { RECENT_COMMANDS_KEY, recentCommands, updateRecentCommandIds } from '@core/recent-commands';
 import { Icon } from '@shared/icon';
 import { Kbd } from '@shared/kbd';
 
