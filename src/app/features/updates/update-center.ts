@@ -2,6 +2,7 @@ import {
   ChangeDetectionStrategy,
   Component,
   computed,
+  DestroyRef,
   inject,
   Injectable,
   signal,
@@ -43,11 +44,20 @@ export class UpdateCenter {
   }
 }
 
+const POPOVER_CLOSE_DELAY_MS = 200;
+
 @Component({
   selector: 'rl-update-status-bar',
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
-    <div class="update-wrap" [attr.data-state]="snapshot().state">
+    <div
+      class="update-wrap"
+      [attr.data-state]="snapshot().state"
+      (mouseenter)="showPopover()"
+      (mouseleave)="scheduleHidePopover()"
+      (focusin)="showPopover()"
+      (focusout)="scheduleHidePopover()"
+    >
       <button
         type="button"
         class="indicator"
@@ -66,7 +76,7 @@ export class UpdateCenter {
         <span class="u-sr-only">{{ label() }}</span>
       </button>
 
-      <div class="popover" role="status" aria-live="polite">
+      <div class="popover" [class.visible]="popoverVisible()" role="status" aria-live="polite">
         <p class="eyebrow">Update</p>
         <p class="title">{{ title() }}</p>
         <p class="detail">{{ detail() }}</p>
@@ -164,7 +174,7 @@ export class UpdateCenter {
 
     .popover {
       position: absolute;
-      inset-block-end: calc(100% + var(--space-3));
+      inset-block-end: calc(100% + var(--space-2));
       inset-inline-start: var(--space-3);
       z-index: 2;
       inline-size: 240px;
@@ -182,8 +192,12 @@ export class UpdateCenter {
         transform var(--dur-hover) var(--ease-standard);
     }
 
-    .update-wrap:hover .popover,
-    .update-wrap:focus-within .popover {
+    /* Visibility is driven by JS (mouseenter/leave with a close delay,
+     * see showPopover/scheduleHidePopover) rather than a pure :hover
+     * chain — a CSS-only :hover has no grace period, so the instant the
+     * pointer crosses the gap between the dot and the popover, hover drops
+     * and the popover closes before the pointer ever reaches it. */
+    .popover.visible {
       opacity: 1;
       pointer-events: auto;
       transform: translateY(0);
@@ -247,6 +261,9 @@ export class UpdateCenter {
 })
 export class UpdateStatusBar {
   private readonly center = inject(UpdateCenter);
+
+  protected readonly popoverVisible = signal(false);
+  private hideTimer: ReturnType<typeof setTimeout> | null = null;
 
   protected readonly snapshot = this.center.snapshot;
   protected readonly progress = computed(() => {
@@ -318,5 +335,26 @@ export class UpdateStatusBar {
         void this.center.install();
         break;
     }
+  }
+
+  protected showPopover(): void {
+    this.clearHideTimer();
+    this.popoverVisible.set(true);
+  }
+
+  protected scheduleHidePopover(): void {
+    this.clearHideTimer();
+    this.hideTimer = setTimeout(() => this.popoverVisible.set(false), POPOVER_CLOSE_DELAY_MS);
+  }
+
+  private clearHideTimer(): void {
+    if (this.hideTimer) {
+      clearTimeout(this.hideTimer);
+      this.hideTimer = null;
+    }
+  }
+
+  constructor() {
+    inject(DestroyRef).onDestroy(() => this.clearHideTimer());
   }
 }
