@@ -6,6 +6,7 @@ import { Settings } from '@features/settings/settings';
 import { Vault } from '@features/vault/vault';
 import { Icon } from '@shared/icon';
 import { Kbd } from '@shared/kbd';
+import { NotificationPopover } from '@shared/notification-popover';
 
 const RAIL_EXPANDED_SETTING_KEY = 'rail.expanded';
 
@@ -20,7 +21,7 @@ const RAIL_EXPANDED_SETTING_KEY = 'rail.expanded';
 @Component({
   selector: 'rl-home',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [Icon, Kbd, Settings, Vault],
+  imports: [Icon, Kbd, NotificationPopover, Settings, Vault],
   template: `
     <header class="titlebar u-chrome" data-tauri-drag-region>
       <div class="titlebar-start">
@@ -34,6 +35,7 @@ const RAIL_EXPANDED_SETTING_KEY = 'rail.expanded';
           <rl-icon name="house" [size]="16" />
         </button>
         <span class="wordmark">Relay</span>
+        <rl-notification-popover />
       </div>
       <div class="window-controls">
         <button type="button" class="window-btn" (click)="theme.toggle()" aria-label="Toggle theme">

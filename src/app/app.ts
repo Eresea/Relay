@@ -80,7 +80,14 @@ export class App {
 
   /** Routes the core's push channel into whichever service owns that kind of event. */
   private async subscribeToEvents(destroyRef: DestroyRef): Promise<void> {
-    const unlisten = await this.tauri.onEvent((event) => this.notifications.handle(event));
+    try {
+      this.notifications.restore(await this.tauri.notificationsList());
+    } catch (error: unknown) {
+      console.error('[relay] notification history unavailable', error);
+    }
+    const unlisten = await this.tauri.onEvent((event) => {
+      this.notifications.handle(event);
+    });
     destroyRef.onDestroy(unlisten);
   }
 }
