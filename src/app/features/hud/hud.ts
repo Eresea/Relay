@@ -15,6 +15,9 @@ export type HudStatus = 'running' | 'waiting' | 'blocked' | 'done' | 'idle';
   selector: 'rl-hud',
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [Icon],
+  host: {
+    class: 'u-glass u-chrome',
+  },
   template: `
     <span class="u-entity-tile" [style.--entity-hue]="tone()">
       <rl-icon [name]="icon()" [size]="16" />

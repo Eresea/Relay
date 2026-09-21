@@ -5,6 +5,10 @@ import { ThemeService } from '@core/theme';
 import { Github } from '@features/github/github';
 import { Gmail } from '@features/gmail/gmail';
 
+const HUD_TOP_OFFSET_KEY = 'hud.topOffset';
+const DEFAULT_HUD_TOP_OFFSET = 80;
+const MAX_HUD_TOP_OFFSET = 2000;
+
 /**
  * Relay's one settings surface, reached from the palette's "Open settings"
  * command (and, for the GitHub tab specifically, "GitHub" — see
@@ -65,6 +69,22 @@ import { Gmail } from '@features/gmail/gmail';
           <button type="button" class="link" (click)="theme.toggle()">
             Switch to {{ theme.theme() === 'dark' ? 'light' : 'dark' }}
           </button>
+        </div>
+        <div class="row">
+          <div>
+            <p class="label">Notification top offset</p>
+            <p class="hint">Distance from the top-right corner, in pixels.</p>
+          </div>
+          <input
+            class="number-input"
+            type="number"
+            min="0"
+            max="2000"
+            step="1"
+            [value]="hudTopOffset()"
+            aria-label="Notification top offset in pixels"
+            (change)="saveHudTopOffset($event)"
+          />
         </div>
       </section>
 
@@ -180,6 +200,17 @@ import { Gmail } from '@features/gmail/gmail';
       background: var(--tint-hover);
     }
 
+    .number-input {
+      inline-size: 76px;
+      flex: none;
+      padding: var(--space-2) var(--space-3);
+      color: var(--text-body);
+      background: var(--bg-sunken);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-sm);
+      text-align: end;
+    }
+
     .switch {
       position: relative;
       flex: none;
@@ -224,6 +255,7 @@ export class Settings {
   protected readonly tab = signal<'general' | 'github' | 'gmail'>('general');
   protected readonly launchAtLogin = signal(false);
   protected readonly launchAtLoginPending = signal(true);
+  protected readonly hudTopOffset = signal(DEFAULT_HUD_TOP_OFFSET);
 
   constructor() {
     effect(() => this.tab.set(this.initialTab()));
@@ -232,6 +264,17 @@ export class Settings {
       this.launchAtLogin.set(enabled);
       this.launchAtLoginPending.set(false);
     });
+
+    void this.tauri
+      .getSetting<number>(HUD_TOP_OFFSET_KEY, DEFAULT_HUD_TOP_OFFSET)
+      .then((offset) => this.hudTopOffset.set(clampHudTopOffset(offset)));
+  }
+
+  protected saveHudTopOffset(event: Event): void {
+    if (!(event.target instanceof HTMLInputElement)) return;
+    const offset = clampHudTopOffset(Number.parseInt(event.target.value, 10));
+    this.hudTopOffset.set(offset);
+    void this.tauri.setSetting(HUD_TOP_OFFSET_KEY, offset);
   }
 
   protected toggleLaunchAtLogin(): void {
@@ -244,4 +287,10 @@ export class Settings {
       .catch(() => this.launchAtLogin.set(!next))
       .finally(() => this.launchAtLoginPending.set(false));
   }
+}
+
+function clampHudTopOffset(offset: number): number {
+  return Number.isFinite(offset)
+    ? Math.min(MAX_HUD_TOP_OFFSET, Math.max(0, Math.round(offset)))
+    : DEFAULT_HUD_TOP_OFFSET;
 }

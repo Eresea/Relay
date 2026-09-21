@@ -21,7 +21,12 @@ import { mergeProjectSummaries, type ProjectSummary } from './project-summary';
           <h1 id="projects-title">Projects</h1>
           <p class="page-description">Local clones and recent GitHub repositories.</p>
         </div>
-        <button type="button" class="scan-button" [disabled]="syncing()" (click)="sync()">
+        <button
+          type="button"
+          class="scan-button"
+          [disabled]="loading() || syncing()"
+          (click)="sync()"
+        >
           <rl-icon [name]="syncing() ? 'loader-circle' : 'search'" [size]="14" />
           {{ syncing() ? 'Syncing' : 'Sync projects' }}
         </button>
@@ -31,7 +36,12 @@ import { mergeProjectSummaries, type ProjectSummary } from './project-summary';
         <p class="error" role="alert">{{ error() }}</p>
       }
 
-      @if (syncing()) {
+      @if (loading()) {
+        <div class="empty-state" aria-live="polite">
+          <rl-icon name="loader-circle" [size]="20" />
+          <p class="empty-title">Loading saved projects</p>
+        </div>
+      } @else if (syncing()) {
         <div class="empty-state" aria-live="polite">
           <rl-icon name="loader-circle" [size]="20" />
           <p class="empty-title">Finding your projects</p>
@@ -43,7 +53,7 @@ import { mergeProjectSummaries, type ProjectSummary } from './project-summary';
         <div class="empty-state">
           <rl-icon name="folder" [size]="20" />
           <p class="empty-title">No projects found</p>
-          <p class="empty-description">Connect GitHub or clone a repository, then sync again.</p>
+          <p class="empty-description">Sync to discover local clones and GitHub repositories.</p>
         </div>
       } @else {
         <div class="project-list" role="list">
@@ -360,13 +370,26 @@ import { mergeProjectSummaries, type ProjectSummary } from './project-summary';
   `,
 })
 export class Projects {
+  private static readonly CACHE_KEY = 'projects.scan';
   private readonly tauri = inject(TauriBridge);
   protected readonly projects = signal<readonly ProjectSummary[]>([]);
+  protected readonly loading = signal(true);
   protected readonly syncing = signal(false);
   protected readonly error = signal('');
 
   constructor() {
-    void this.sync();
+    void this.restore();
+  }
+
+  private async restore(): Promise<void> {
+    try {
+      const saved = await this.tauri.getSetting<readonly ProjectSummary[]>(Projects.CACHE_KEY, []);
+      if (Array.isArray(saved)) this.projects.set(saved);
+    } catch {
+      this.error.set('Could not load saved projects.');
+    } finally {
+      this.loading.set(false);
+    }
   }
 
   protected async sync(): Promise<void> {
@@ -383,7 +406,13 @@ export class Projects {
       } catch {
         this.error.set('GitHub sync failed. Local clones are still shown.');
       }
-      this.projects.set(mergeProjectSummaries(workspaces, repositories, pullRequests));
+      const projects = mergeProjectSummaries(workspaces, repositories, pullRequests);
+      this.projects.set(projects);
+      try {
+        await this.tauri.setSetting(Projects.CACHE_KEY, projects);
+      } catch {
+        this.error.set('Could not save project scan.');
+      }
     } catch {
       this.error.set('Could not scan local disks.');
     } finally {

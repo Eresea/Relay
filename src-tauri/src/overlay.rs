@@ -6,12 +6,17 @@
 //! rather than part of the desktop.
 
 use tauri::{AppHandle, Manager, WebviewWindow};
+use tauri_plugin_store::StoreExt;
 
 use crate::error::{Error, Result};
 
 pub const PALETTE: &str = "palette";
 pub const HUD: &str = "hud";
 pub const MAIN: &str = "main";
+
+const HUD_TOP_OFFSET_KEY: &str = "hud.topOffset";
+const DEFAULT_HUD_TOP_OFFSET: i32 = 80;
+const MAX_HUD_TOP_OFFSET: i64 = 2_000;
 
 fn window(app: &AppHandle, label: &'static str) -> Result<WebviewWindow> {
     app.get_webview_window(label)
@@ -68,8 +73,8 @@ pub fn show_main(app: &AppHandle) -> Result<()> {
     Ok(())
 }
 
-/// Brings the HUD on screen in the lower-right of the monitor holding the
-/// cursor — the corner desktop status overlays conventionally occupy — and
+/// Brings the HUD on screen in the top-right of the monitor holding the
+/// cursor, with a persisted top offset, and
 /// never takes focus: the HUD reports on work, it is not somewhere to type.
 ///
 /// A job reports many times over its life, so this returns early when the
@@ -91,7 +96,7 @@ pub fn show_hud(app: &AppHandle) -> Result<()> {
         let origin = monitor.position();
 
         let x = origin.x + screen.width as i32 - size.width as i32 - MARGIN;
-        let y = origin.y + screen.height as i32 - size.height as i32 - MARGIN;
+        let y = origin.y + hud_top_offset(app);
         win.set_position(tauri::PhysicalPosition::new(x, y))?;
     }
 
@@ -102,4 +107,25 @@ pub fn show_hud(app: &AppHandle) -> Result<()> {
 pub fn hide_hud(app: &AppHandle) -> Result<()> {
     window(app, HUD)?.hide()?;
     Ok(())
+}
+
+fn hud_top_offset(app: &AppHandle) -> i32 {
+    app.store("settings.json")
+        .ok()
+        .and_then(|store| store.get(HUD_TOP_OFFSET_KEY))
+        .and_then(|value| value.as_i64())
+        .map(|offset| offset.clamp(0, MAX_HUD_TOP_OFFSET) as i32)
+        .unwrap_or(DEFAULT_HUD_TOP_OFFSET)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn top_offset_defaults_and_stays_bounded() {
+        assert_eq!(DEFAULT_HUD_TOP_OFFSET, 80);
+        assert_eq!((-1_i64).clamp(0, MAX_HUD_TOP_OFFSET), 0);
+        assert_eq!((2_001_i64).clamp(0, MAX_HUD_TOP_OFFSET), 2_000);
+    }
 }
