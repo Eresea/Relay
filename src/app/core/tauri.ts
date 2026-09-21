@@ -2,7 +2,7 @@ import { Injectable } from '@angular/core';
 
 import type { LazyStore } from '@tauri-apps/plugin-store';
 
-import type { AppEvent, NotificationRecord } from './events';
+import type { AppEvent } from './events';
 
 /**
  * The boundary between the Angular app and the Rust core.
@@ -112,18 +112,6 @@ export class TauriBridge {
     if (!this.available) return () => {};
     const { listen } = await import('@tauri-apps/api/event');
     return listen<AppEvent>('relay://event', (message) => handler(message.payload));
-  }
-
-  async notificationsList(): Promise<readonly NotificationRecord[]> {
-    return (await this.invoke<NotificationRecord[]>('notifications_list')) ?? [];
-  }
-
-  async notificationsMarkRead(notificationIds: readonly string[]): Promise<void> {
-    await this.invoke('notifications_mark_read', { notificationIds });
-  }
-
-  async notificationsClear(): Promise<void> {
-    await this.invoke('notifications_clear');
   }
 
   /** Opens a URL in the user's default browser. A no-op outside Tauri. */
