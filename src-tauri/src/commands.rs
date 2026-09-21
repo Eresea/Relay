@@ -336,9 +336,17 @@ pub fn notifications_clear(app: AppHandle) -> Result<()> {
 }
 
 /// Discovers a small, bounded set of local Git clones across mounted disks.
+///
+/// Walking the disk blocks the calling thread, and a sync `#[tauri::command]`
+/// runs directly on the native IPC callback thread (see the `jobs` module
+/// docs) — that thread also pumps the webview's UI events, so blocking it
+/// freezes the whole window, not just this command. Dispatching to a
+/// blocking thread keeps the UI responsive while the scan runs.
 #[tauri::command]
-pub fn scan_workspaces() -> Result<Vec<WorkspaceSummary>> {
-    crate::workspaces::scan()
+pub async fn scan_workspaces() -> Result<Vec<WorkspaceSummary>> {
+    tauri::async_runtime::spawn_blocking(crate::workspaces::scan)
+        .await
+        .map_err(|error| std::io::Error::other(error.to_string()))?
 }
 
 /// Opens a local Git clone in the platform terminal.
@@ -347,10 +355,16 @@ pub fn open_terminal(path: String) -> Result<()> {
     crate::workspaces::open_terminal(&path)
 }
 
-/// Runs one explicitly selected Git or package script action in a local clone.
+/// Runs one explicitly selected Git or package script action in a local
+/// clone. See `scan_workspaces` above for why this has to leave the IPC
+/// callback thread: `git fetch`/`pull` can block for as long as the network
+/// does, and every other command — including opening an unrelated popover —
+/// would stall behind it otherwise.
 #[tauri::command]
-pub fn project_action(path: String, action: WorkspaceAction) -> Result<()> {
-    crate::workspaces::run_action(&path, action)
+pub async fn project_action(path: String, action: WorkspaceAction) -> Result<()> {
+    tauri::async_runtime::spawn_blocking(move || crate::workspaces::run_action(&path, action))
+        .await
+        .map_err(|error| std::io::Error::other(error.to_string()))?
 }
 
 #[cfg(desktop)]
