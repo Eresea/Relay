@@ -22,6 +22,7 @@ use crate::events::{AppEvent, EventSink};
 use crate::github::{self, client::HttpGitHubClient, oauth::DeviceAuthorization, GithubStatus};
 use crate::gmail::{self, GmailSettings, GmailState, GmailStatus, HttpGoogleApi, OsKeyStore};
 use crate::jobs::{JobId, JobRegistry};
+use crate::notifications::NotificationRecord;
 use crate::overlay;
 use crate::vault::{
     self, NewVaultEntry, PasswordOptions, VaultEntrySummary, VaultState, VaultStatus,
@@ -297,6 +298,21 @@ pub async fn gmail_disconnect(
         &OsKeyStore,
     )
     .await
+}
+
+#[tauri::command]
+pub fn notifications_list(app: AppHandle) -> Result<Vec<NotificationRecord>> {
+    crate::notifications::list(&app)
+}
+
+#[tauri::command]
+pub fn notifications_mark_read(app: AppHandle, notification_ids: Vec<String>) -> Result<()> {
+    crate::notifications::mark_read(&app, &notification_ids)
+}
+
+#[tauri::command]
+pub fn notifications_clear(app: AppHandle) -> Result<()> {
+    crate::notifications::clear(&app)
 }
 
 #[cfg(test)]

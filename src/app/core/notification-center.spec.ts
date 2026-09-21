@@ -89,6 +89,26 @@ describe('NotificationCenter', () => {
     expect(center.current()?.jobId).toBe('job-2');
   });
 
+  it('keeps completed notifications in history after the HUD dismisses them', () => {
+    center.handle(notification('job-1', { status: 'done' }));
+    vi.advanceTimersByTime(DONE_GRACE_MS + 1);
+
+    expect(center.current()).toBeNull();
+    expect(center.history()[0]).toEqual(
+      expect.objectContaining({ jobId: 'job-1', status: 'done' }),
+    );
+  });
+
+  it('marks a history record as read without removing it', () => {
+    center.handle(notification('job-1'));
+
+    center.markRead('job-1');
+
+    expect(center.history()[0]).toEqual(
+      expect.objectContaining({ notificationId: 'job-1', read: true }),
+    );
+  });
+
   it('marks a failed job blocked without inventing a progress value', () => {
     center.handle({
       type: 'notification',

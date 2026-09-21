@@ -6,7 +6,7 @@
 //! listener (`core/tauri.ts`) and dispatches on `type`, so a new event never
 //! needs new frontend plumbing to arrive.
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 use crate::jobs::JobId;
 
@@ -75,7 +75,7 @@ pub enum AppEvent {
     },
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "id", rename_all = "camelCase")]
 pub enum NotificationAction {
     Open { label: String, url: String },
@@ -84,7 +84,7 @@ pub enum NotificationAction {
 
 pub const INFO_AUTO_DISMISS_MS: u64 = 8_000;
 
-#[derive(Debug, Clone, Copy, Serialize)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub enum NotificationStatus {
     /// No current producer reports this mid-flight: the GitHub connector's
@@ -111,6 +111,10 @@ pub trait EventSink: Clone + Send + Sync + 'static {
 
 impl EventSink for tauri::AppHandle {
     fn emit(&self, event: AppEvent) {
+        if let Err(error) = crate::notifications::persist(self, &event) {
+            log::error!("failed to persist notification: {error}");
+        }
+
         // The HUD window is created hidden and nothing else ever shows it, so
         // without this a notification renders into a window the user never
         // sees — the whole pipeline runs correctly and silently. Bring it on
