@@ -92,6 +92,7 @@ pub fn run() {
             commands::notifications_clear,
             commands::scan_workspaces,
             commands::open_terminal,
+            commands::project_action,
             commands::update_status,
             commands::update_check,
             commands::update_download,

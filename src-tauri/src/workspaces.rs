@@ -4,7 +4,7 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::time::UNIX_EPOCH;
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 use crate::error::Result;
 
@@ -19,6 +19,18 @@ pub struct WorkspaceSummary {
     pub path: String,
     pub github_repo: Option<String>,
     pub modified_at: Option<u64>,
+    pub current_branch: Option<String>,
+    pub branches: Vec<String>,
+    pub package_scripts: Vec<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(tag = "id", rename_all = "camelCase")]
+pub enum WorkspaceAction {
+    GitFetch,
+    GitPull,
+    GitSwitch { branch: String },
+    RunScript { script: String },
 }
 
 /// Finds local Git clones without asking the user to register every folder.
@@ -119,6 +131,36 @@ pub fn open_terminal(path: &str) -> Result<()> {
     .into())
 }
 
+pub fn run_action(path: &str, action: WorkspaceAction) -> Result<()> {
+    let path = Path::new(path);
+    if !has_git_metadata(path) {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::NotFound,
+            "workspace is not a Git clone",
+        )
+        .into());
+    }
+
+    match action {
+        WorkspaceAction::GitFetch => run_command(path, "git", ["fetch", "--all", "--prune"]),
+        WorkspaceAction::GitPull => run_command(path, "git", ["pull", "--ff-only"]),
+        WorkspaceAction::GitSwitch { branch } => {
+            run_command(path, "git", ["switch", "--", branch.as_str()])
+        }
+        WorkspaceAction::RunScript { script } => {
+            if !package_scripts(path).iter().any(|name| name == &script) {
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::InvalidInput,
+                    "package script was not found",
+                )
+                .into());
+            }
+            let npm = if cfg!(windows) { "npm.cmd" } else { "npm" };
+            run_command(path, npm, ["run", script.as_str()])
+        }
+    }
+}
+
 fn summary(path: &Path) -> WorkspaceSummary {
     let name = path
         .file_name()
@@ -132,7 +174,70 @@ fn summary(path: &Path) -> WorkspaceSummary {
         path: path.to_string_lossy().into_owned(),
         github_repo: read_origin(path),
         modified_at: modified_at(path),
+        current_branch: current_branch(path),
+        branches: branches(path),
+        package_scripts: package_scripts(path),
     }
+}
+
+fn run_command<const N: usize>(path: &Path, program: &str, args: [&str; N]) -> Result<()> {
+    let status = Command::new(program)
+        .current_dir(path)
+        .args(args)
+        .status()?;
+    if status.success() {
+        return Ok(());
+    }
+    Err(std::io::Error::other(format!(
+        "{program} exited with status {}",
+        status
+            .code()
+            .map_or_else(|| "unknown".to_string(), |code| code.to_string())
+    ))
+    .into())
+}
+
+fn git_lines(path: &Path, args: &[&str]) -> Vec<String> {
+    let Ok(output) = Command::new("git").current_dir(path).args(args).output() else {
+        return Vec::new();
+    };
+    if !output.status.success() {
+        return Vec::new();
+    }
+    String::from_utf8_lossy(&output.stdout)
+        .lines()
+        .map(str::trim)
+        .filter(|line| !line.is_empty())
+        .map(str::to_owned)
+        .collect()
+}
+
+fn current_branch(path: &Path) -> Option<String> {
+    git_lines(path, &["branch", "--show-current"])
+        .into_iter()
+        .next()
+}
+
+fn branches(path: &Path) -> Vec<String> {
+    git_lines(path, &["branch", "--format=%(refname:short)"])
+}
+
+fn package_scripts(path: &Path) -> Vec<String> {
+    let Ok(contents) = std::fs::read_to_string(path.join("package.json")) else {
+        return Vec::new();
+    };
+    let Ok(package) = serde_json::from_str::<serde_json::Value>(&contents) else {
+        return Vec::new();
+    };
+    let Some(scripts) = package
+        .get("scripts")
+        .and_then(serde_json::Value::as_object)
+    else {
+        return Vec::new();
+    };
+    let mut names = scripts.keys().cloned().collect::<Vec<_>>();
+    names.sort();
+    names
 }
 
 fn has_git_metadata(path: &Path) -> bool {
@@ -266,6 +371,21 @@ mod tests {
         .unwrap();
 
         assert_eq!(read_origin(&root), Some("openai/relay".to_string()));
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn reads_sorted_package_scripts() {
+        let root =
+            std::env::temp_dir().join(format!("relay-package-scripts-test-{}", std::process::id()));
+        std::fs::create_dir_all(&root).unwrap();
+        std::fs::write(
+            root.join("package.json"),
+            r#"{"scripts":{"test":"vitest","build":"ng build"}}"#,
+        )
+        .unwrap();
+
+        assert_eq!(package_scripts(&root), ["build", "test"]);
         std::fs::remove_dir_all(root).unwrap();
     }
 

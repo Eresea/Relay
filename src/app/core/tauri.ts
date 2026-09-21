@@ -167,6 +167,10 @@ export class TauriBridge {
     await this.invoke('open_terminal', { path });
   }
 
+  async runProjectAction(path: string, action: ProjectActionRequest): Promise<void> {
+    await this.invoke('project_action', { path, action });
+  }
+
   async scanWorkspaces(): Promise<readonly WorkspaceSummary[]> {
     return (await this.invoke<WorkspaceSummary[]>('scan_workspaces')) ?? [];
   }
@@ -401,7 +405,16 @@ export interface WorkspaceSummary {
   readonly path: string;
   readonly githubRepo: string | null;
   readonly modifiedAt: number | null;
+  readonly currentBranch?: string | null;
+  readonly branches?: readonly string[];
+  readonly packageScripts?: readonly string[];
 }
+
+export type ProjectActionRequest =
+  | { readonly id: 'gitFetch' }
+  | { readonly id: 'gitPull' }
+  | { readonly id: 'gitSwitch'; readonly branch: string }
+  | { readonly id: 'runScript'; readonly script: string };
 
 /** Mirrors the Rust GitHub repository summary. Size is GitHub's KB value. */
 export interface GithubRepositorySummary {

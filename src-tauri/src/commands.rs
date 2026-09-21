@@ -34,7 +34,7 @@ use crate::updates::UpdateManager;
 use crate::vault::{
     self, NewVaultEntry, PasswordOptions, VaultEntrySummary, VaultState, VaultStatus,
 };
-use crate::workspaces::WorkspaceSummary;
+use crate::workspaces::{WorkspaceAction, WorkspaceSummary};
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -345,6 +345,12 @@ pub fn scan_workspaces() -> Result<Vec<WorkspaceSummary>> {
 #[tauri::command]
 pub fn open_terminal(path: String) -> Result<()> {
     crate::workspaces::open_terminal(&path)
+}
+
+/// Runs one explicitly selected Git or package script action in a local clone.
+#[tauri::command]
+pub fn project_action(path: String, action: WorkspaceAction) -> Result<()> {
+    crate::workspaces::run_action(&path, action)
 }
 
 #[cfg(desktop)]

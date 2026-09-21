@@ -6,13 +6,15 @@ import {
   type GithubRepositorySummary,
 } from '@core/tauri';
 import { Icon } from '@shared/icon';
+import { IconPicker } from '@shared/icon-picker';
 
-import { mergeProjectSummaries, type ProjectSummary } from './project-summary';
+import { ProjectActionsMenu, type ProjectAction } from './project-actions-menu';
+import { mergeProjectSummaries, projectKey, type ProjectSummary } from './project-summary';
 
 @Component({
   selector: 'rl-projects',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [Icon],
+  imports: [Icon, IconPicker, ProjectActionsMenu],
   template: `
     <section class="projects" aria-labelledby="projects-title">
       <header class="page-header">
@@ -59,7 +61,13 @@ import { mergeProjectSummaries, type ProjectSummary } from './project-summary';
         <div class="project-list" role="list">
           @for (project of projects(); track project.githubRepo ?? project.path) {
             <article class="project-row" role="listitem">
-              <span class="project-glyph"><rl-icon name="folder" [size]="16" /></span>
+              <span class="project-glyph">
+                <rl-icon-picker
+                  [value]="project.icon ?? 'folder'"
+                  [label]="'Choose icon for ' + project.name"
+                  (valueChange)="setProjectIcon(project, $event)"
+                />
+              </span>
               <div class="project-copy">
                 <p class="project-name">{{ project.name }}</p>
                 <p class="project-path">{{ project.path ?? 'No local workspace' }}</p>
@@ -125,6 +133,10 @@ import { mergeProjectSummaries, type ProjectSummary } from './project-summary';
                     View
                   </button>
                 }
+                <rl-project-actions-menu
+                  [project]="project"
+                  (action)="runProjectAction(project, $event)"
+                />
               </div>
             </article>
           }
@@ -261,6 +273,13 @@ import { mergeProjectSummaries, type ProjectSummary } from './project-summary';
       background: var(--bg-raised);
       border: 1px solid var(--border-subtle);
       border-radius: var(--radius-sm);
+    }
+
+    .project-row:hover .project-glyph,
+    .project-row:focus-within .project-glyph {
+      color: var(--text-body);
+      border-color: var(--border-default);
+      background: var(--tint-hover);
     }
 
     .project-copy {
@@ -406,7 +425,12 @@ export class Projects {
       } catch {
         this.error.set('GitHub sync failed. Local clones are still shown.');
       }
-      const projects = mergeProjectSummaries(workspaces, repositories, pullRequests);
+      const savedIcons = new Map(
+        this.projects().map((project) => [projectKey(project), project.icon ?? 'folder']),
+      );
+      const projects = mergeProjectSummaries(workspaces, repositories, pullRequests).map(
+        (project) => ({ ...project, icon: savedIcons.get(projectKey(project)) ?? 'folder' }),
+      );
       this.projects.set(projects);
       try {
         await this.tauri.setSetting(Projects.CACHE_KEY, projects);
@@ -420,6 +444,14 @@ export class Projects {
     }
   }
 
+  protected setProjectIcon(project: ProjectSummary, icon: string): void {
+    const projects = this.projects().map((current) =>
+      projectKey(current) === projectKey(project) ? { ...current, icon } : current,
+    );
+    this.projects.set(projects);
+    void this.tauri.setSetting(Projects.CACHE_KEY, projects);
+  }
+
   protected open(project: ProjectSummary): void {
     if (project.path) void this.tauri.openPath(project.path);
     else if (project.githubUrl) void this.tauri.openUrl(project.githubUrl);
@@ -427,6 +459,47 @@ export class Projects {
 
   protected openTerminal(project: ProjectSummary): void {
     if (project.path) void this.tauri.openTerminal(project.path);
+  }
+
+  protected runProjectAction(project: ProjectSummary, action: ProjectAction): void {
+    switch (action.id) {
+      case 'open':
+        this.open(project);
+        return;
+      case 'terminal':
+        this.openTerminal(project);
+        return;
+      case 'github':
+        if (project.githubUrl) void this.tauri.openUrl(project.githubUrl);
+        return;
+      case 'pullRequests':
+        if (project.githubUrl)
+          void this.tauri.openUrl(project.githubUrl.replace(/\/$/, '') + '/pulls');
+        return;
+      case 'copyPath':
+        if (project.path) void navigator.clipboard?.writeText(project.path);
+        return;
+      case 'copyUrl':
+        if (project.githubUrl) void navigator.clipboard?.writeText(project.githubUrl);
+        return;
+      default:
+        if (!project.path) return;
+        void this.tauri
+          .runProjectAction(project.path, action)
+          .then(() => {
+            if (action.id !== 'gitSwitch') return;
+            this.projects.set(
+              this.projects().map((current) =>
+                projectKey(current) === projectKey(project)
+                  ? { ...current, currentBranch: action.branch }
+                  : current,
+              ),
+            );
+          })
+          .catch(() => {
+            this.error.set('Could not run that project action.');
+          });
+    }
   }
 
   protected formatModified(timestamp: string): string {

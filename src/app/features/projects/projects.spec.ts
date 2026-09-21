@@ -79,4 +79,44 @@ describe('Projects', () => {
       expect.arrayContaining([expect.objectContaining({ path: workspace.path })]),
     );
   });
+
+  it('keeps a custom icon when the project is rescanned', async () => {
+    bridge.getSetting.mockResolvedValue([
+      {
+        name: 'Relay',
+        path: 'F:/Code/Apps/Relay',
+        icon: 'star',
+        githubRepo: null,
+        githubUrl: null,
+        visibility: null,
+        sizeKb: null,
+        pushedAt: null,
+        modifiedAt: 10,
+        pullRequests: [],
+      },
+    ]);
+    bridge.scanWorkspaces.mockResolvedValue([
+      {
+        name: 'Relay',
+        path: 'F:/Code/Apps/Relay',
+        githubRepo: null,
+        modifiedAt: 12,
+      },
+    ]);
+
+    const fixture = TestBed.createComponent(Projects);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+    const host = fixture.nativeElement as HTMLElement;
+    (host.querySelector('.scan-button') as HTMLButtonElement).click();
+    await fixture.whenStable();
+
+    expect(bridge.setSetting).toHaveBeenCalledWith(
+      'projects.scan',
+      expect.arrayContaining([
+        expect.objectContaining({ path: 'F:/Code/Apps/Relay', icon: 'star' }),
+      ]),
+    );
+  });
 });

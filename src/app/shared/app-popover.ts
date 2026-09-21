@@ -6,6 +6,7 @@ import {
   HostBinding,
   HostListener,
   inject,
+  input,
   output,
   signal,
 } from '@angular/core';
@@ -30,7 +31,9 @@ export class PopoverTrigger {
   }
 
   @HostBinding('attr.aria-haspopup')
-  protected readonly hasPopup = 'dialog';
+  protected get hasPopup(): 'dialog' | 'menu' {
+    return this.popover.surfaceRole();
+  }
 
   @HostListener('click')
   protected toggle(): void {
@@ -50,7 +53,7 @@ export class PopoverContent {}
   template: `
     <ng-content select="[rlPopoverTrigger]" />
     @if (open()) {
-      <div [id]="contentId" class="surface" role="dialog">
+      <div [id]="contentId" class="surface" [attr.role]="surfaceRole()">
         <ng-content select="[rlPopoverContent]" />
       </div>
     }
@@ -76,6 +79,7 @@ export class PopoverContent {}
 export class AppPopover {
   readonly open = signal(false);
   readonly openChange = output<boolean>();
+  readonly surfaceRole = input<'dialog' | 'menu'>('dialog');
   readonly contentId = `relay-popover-${nextPopoverId++}`;
   private readonly host = inject<ElementRef<HTMLElement>>(ElementRef);
 

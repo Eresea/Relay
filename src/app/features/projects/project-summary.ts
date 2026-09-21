@@ -7,12 +7,16 @@ import type {
 export interface ProjectSummary {
   readonly name: string;
   readonly path: string | null;
+  readonly icon?: string;
   readonly githubRepo: string | null;
   readonly githubUrl: string | null;
   readonly visibility: string | null;
   readonly sizeKb: number | null;
   readonly pushedAt: string | null;
   readonly modifiedAt: number | null;
+  readonly currentBranch?: string | null;
+  readonly branches?: readonly string[];
+  readonly packageScripts?: readonly string[];
   readonly pullRequests: readonly GithubPullRequestSummary[];
 }
 
@@ -56,14 +60,22 @@ function project(
   return {
     name: workspace?.name ?? repository?.name ?? 'Project',
     path: workspace?.path ?? null,
+    icon: 'folder',
     githubRepo,
     githubUrl: repository?.htmlUrl ?? null,
     visibility: repository?.visibility ?? null,
     sizeKb: repository?.sizeKb ?? null,
     pushedAt: repository?.pushedAt ?? null,
     modifiedAt: workspace?.modifiedAt ?? null,
+    currentBranch: workspace?.currentBranch ?? null,
+    branches: workspace?.branches ?? [],
+    packageScripts: workspace?.packageScripts ?? [],
     pullRequests: githubRepo ? (pullRequestsByRepo.get(key(githubRepo)) ?? []) : [],
   };
+}
+
+export function projectKey(project: Pick<ProjectSummary, 'name' | 'path' | 'githubRepo'>): string {
+  return (project.githubRepo ?? project.path ?? project.name).trim().toLowerCase();
 }
 
 function activityAt(project: ProjectSummary): number {
