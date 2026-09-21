@@ -11,7 +11,7 @@ use crate::error::{Error, Result};
 use crate::events::{AppEvent, UpdateSnapshot, UpdateState, CHANNEL};
 
 const DEFAULT_ENDPOINT: &str =
-    "https://github.com/Eresea/Relay-releases/releases/latest/download/latest.json";
+    "https://github.com/Eresea/Relay/releases/latest/download/latest.json";
 const CHECK_INTERVAL: Duration = Duration::from_secs(6 * 60 * 60);
 
 struct PendingUpdate {
