@@ -126,6 +126,7 @@ jobs:
         with:
           releaseId: ${{ needs.release.outputs.release_id }}
           tagName: ${{ needs.release.outputs.release_tag }}
+          releaseName: Relay ${{ needs.release.outputs.release_tag }}
           owner: ${{ needs.release.outputs.release_repo_owner || 'Eresea' }}
           repo: ${{ needs.release.outputs.release_repo_name || 'Relay' }}
           projectPath: .
