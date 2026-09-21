@@ -19,7 +19,10 @@ use tauri::AppHandle;
 
 use crate::error::Result;
 use crate::events::{AppEvent, EventSink};
-use crate::github::{self, client::HttpGitHubClient, oauth::DeviceAuthorization, GithubStatus};
+use crate::github::{
+    self, client::HttpGitHubClient, client::RepositorySummary, oauth::DeviceAuthorization,
+    GithubStatus,
+};
 use crate::gmail::{self, GmailSettings, GmailState, GmailStatus, HttpGoogleApi, OsKeyStore};
 use crate::jobs::{JobId, JobRegistry};
 use crate::notifications::NotificationRecord;
@@ -213,6 +216,13 @@ pub fn vault_export(app: AppHandle, vault: tauri::State<VaultState>) -> Result<S
 #[tauri::command]
 pub fn github_status() -> Result<GithubStatus> {
     github::status()
+}
+
+#[tauri::command]
+pub async fn github_repositories(
+    client: tauri::State<'_, HttpGitHubClient>,
+) -> Result<Vec<RepositorySummary>> {
+    github::repositories(client.inner().clone()).await
 }
 
 /// Starts a Device Flow login and returns the code to show the user. The

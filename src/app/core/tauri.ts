@@ -144,6 +144,10 @@ export class TauriBridge {
     return (await this.invoke<WorkspaceSummary[]>('scan_workspaces')) ?? [];
   }
 
+  async githubRepositories(): Promise<readonly GithubRepositorySummary[]> {
+    return (await this.invoke<GithubRepositorySummary[]>('github_repositories')) ?? [];
+  }
+
   private settingsStore: LazyStore | null = null;
 
   /**
@@ -366,6 +370,18 @@ export interface WorkspaceSummary {
   readonly path: string;
   readonly githubRepo: string | null;
   readonly modifiedAt: number | null;
+}
+
+/** Mirrors the Rust GitHub repository summary. Size is GitHub's KB value. */
+export interface GithubRepositorySummary {
+  readonly name: string;
+  readonly fullName: string;
+  readonly htmlUrl: string;
+  readonly private: boolean;
+  readonly visibility: string;
+  readonly sizeKb: number;
+  readonly pushedAt: string | null;
+  readonly defaultBranch: string;
 }
 
 /** Mirrors `vault::VaultEntrySummary` — every field but the password. */

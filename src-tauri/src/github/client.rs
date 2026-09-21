@@ -6,7 +6,7 @@
 //! `fake` below) rather than a live GitHub — the same split `jobs::spawn`
 //! makes with `EventSink`.
 
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
 use crate::error::{Error, Result};
 
@@ -71,6 +71,23 @@ pub enum CiState {
     Failure,
 }
 
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq)]
+pub struct RepositorySummary {
+    pub name: String,
+    #[serde(rename(serialize = "fullName", deserialize = "full_name"))]
+    pub full_name: String,
+    #[serde(rename(serialize = "htmlUrl", deserialize = "html_url"))]
+    pub html_url: String,
+    pub private: bool,
+    pub visibility: String,
+    #[serde(rename(serialize = "sizeKb", deserialize = "size"))]
+    pub size_kb: u64,
+    #[serde(rename(serialize = "pushedAt", deserialize = "pushed_at"))]
+    pub pushed_at: Option<String>,
+    #[serde(rename(serialize = "defaultBranch", deserialize = "default_branch"))]
+    pub default_branch: String,
+}
+
 #[derive(Debug, Clone, Deserialize)]
 struct CheckRun {
     status: String,
@@ -123,6 +140,7 @@ pub trait GitHubClient: Clone + Send + Sync + 'static {
         username: &str,
         etag: Option<&str>,
     ) -> Result<Conditional<Vec<SearchIssueItem>>>;
+    async fn list_repositories(&self, token: &str) -> Result<Vec<RepositorySummary>>;
     async fn fetch_pr(
         &self,
         token: &str,
@@ -290,6 +308,18 @@ impl GitHubClient for HttpGitHubClient {
         })
     }
 
+    async fn list_repositories(&self, token: &str) -> Result<Vec<RepositorySummary>> {
+        let response = self
+            .authed_get(
+                token,
+                "https://api.github.com/user/repos?sort=pushed&direction=desc&per_page=30&affiliation=owner%2Ccollaborator%2Corganization_member",
+                None,
+            )
+            .await?;
+        check_rate_limit(&response)?;
+        read_json(response).await
+    }
+
     async fn fetch_pr(
         &self,
         token: &str,
@@ -367,6 +397,7 @@ pub mod fake {
     type PrResponses = Arc<Mutex<std::collections::HashMap<PrKey, Result<PullRequestDetail>>>>;
     type CiStateResponses = Arc<Mutex<std::collections::HashMap<String, Result<Option<CiState>>>>>;
     type SearchResponses = Arc<Mutex<Vec<Result<Conditional<Vec<SearchIssueItem>>>>>>;
+    type RepositoryResponses = Arc<Mutex<Vec<Result<Vec<RepositorySummary>>>>>;
 
     #[derive(Clone, Default)]
     pub struct FakeGitHubClient {
@@ -375,6 +406,7 @@ pub mod fake {
         pub refreshes: Arc<Mutex<Vec<Result<TokenResponse>>>>,
         pub viewer_login: Arc<Mutex<Vec<Result<String>>>>,
         pub searches: SearchResponses,
+        pub repositories: RepositoryResponses,
         pub prs: PrResponses,
         pub ci_states: CiStateResponses,
     }
@@ -419,6 +451,10 @@ pub mod fake {
             _etag: Option<&str>,
         ) -> Result<Conditional<Vec<SearchIssueItem>>> {
             take(&self.searches)
+        }
+
+        async fn list_repositories(&self, _token: &str) -> Result<Vec<RepositorySummary>> {
+            take(&self.repositories)
         }
 
         async fn fetch_pr(
@@ -497,6 +533,26 @@ mod tests {
     #[test]
     fn no_check_runs_is_not_known() {
         assert_eq!(overall_ci_state(&[]), None);
+    }
+
+    #[test]
+    fn repository_summary_reads_the_fields_used_by_the_projects_surface() {
+        let repository: RepositorySummary = serde_json::from_str(
+            r#"{
+                "name":"relay",
+                "full_name":"openai/relay",
+                "html_url":"https://github.com/openai/relay",
+                "private":true,
+                "visibility":"private",
+                "size":2048,
+                "pushed_at":"2026-09-21T10:00:00Z",
+                "default_branch":"main"
+            }"#,
+        )
+        .unwrap();
+        assert_eq!(repository.full_name, "openai/relay");
+        assert_eq!(repository.size_kb, 2048);
+        assert_eq!(repository.visibility, "private");
     }
 
     #[test]

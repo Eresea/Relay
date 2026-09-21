@@ -27,7 +27,7 @@ use crate::error::{Error, Result};
 use crate::events::{NotificationAction, NotificationStatus};
 use crate::jobs::{self, JobId, JobRegistry, NotificationOptions};
 
-use client::{GitHubClient, HttpGitHubClient};
+use client::{GitHubClient, HttpGitHubClient, RepositorySummary};
 use oauth::DeviceAuthorization;
 use rules::GithubConnectorSettings;
 use token_store::{KeyringTokenStore, TokenStore};
@@ -65,6 +65,16 @@ pub fn status() -> Result<GithubStatus> {
             username: None,
         }),
     }
+}
+
+/// Returns the signed-in user's recent repositories. An unconnected account
+/// is a valid empty result so the Projects surface can still show local-only
+/// clones without inventing a separate auth state.
+pub async fn repositories(client: HttpGitHubClient) -> Result<Vec<RepositorySummary>> {
+    let Some(token) = KeyringTokenStore.get()? else {
+        return Ok(Vec::new());
+    };
+    client.list_repositories(&token.access_token).await
 }
 
 /// Starts a Device Flow login: requests a code from GitHub (one blocking

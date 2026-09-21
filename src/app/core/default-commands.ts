@@ -18,10 +18,10 @@ export function registerDefaultCommands(): () => void {
     {
       id: 'relay.projects.open',
       title: 'Open projects',
-      hint: 'Scan local Git clones',
+      hint: 'Sync local clones and GitHub repositories',
       group: 'Project',
       icon: 'library',
-      keywords: ['project', 'workspace', 'folder', 'context'],
+      keywords: ['project', 'workspace', 'folder', 'github', 'sync'],
       run: () => tauri.runCoreCommand({ id: 'open_main' }),
     },
     {

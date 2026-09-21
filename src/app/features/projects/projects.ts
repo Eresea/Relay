@@ -1,7 +1,9 @@
 import { ChangeDetectionStrategy, Component, inject, signal } from '@angular/core';
 
-import { TauriBridge, type WorkspaceSummary } from '@core/tauri';
+import { TauriBridge, type GithubRepositorySummary } from '@core/tauri';
 import { Icon } from '@shared/icon';
+
+import { mergeProjectSummaries, type ProjectSummary } from './project-summary';
 
 @Component({
   selector: 'rl-projects',
@@ -13,11 +15,11 @@ import { Icon } from '@shared/icon';
         <div>
           <p class="u-caption">Workspace</p>
           <h1 id="projects-title">Projects</h1>
-          <p class="page-description">Local Git clones, ready when you are.</p>
+          <p class="page-description">Local clones and recent GitHub repositories.</p>
         </div>
-        <button type="button" class="scan-button" [disabled]="scanning()" (click)="scan()">
-          <rl-icon [name]="scanning() ? 'loader-circle' : 'search'" [size]="14" />
-          {{ scanning() ? 'Scanning' : 'Scan disks' }}
+        <button type="button" class="scan-button" [disabled]="syncing()" (click)="sync()">
+          <rl-icon [name]="syncing() ? 'loader-circle' : 'search'" [size]="14" />
+          {{ syncing() ? 'Syncing' : 'Sync projects' }}
         </button>
       </header>
 
@@ -25,42 +27,52 @@ import { Icon } from '@shared/icon';
         <p class="error" role="alert">{{ error() }}</p>
       }
 
-      @if (scanning()) {
+      @if (syncing()) {
         <div class="empty-state" aria-live="polite">
           <rl-icon name="loader-circle" [size]="20" />
-          <p class="empty-title">Looking for Git clones</p>
+          <p class="empty-title">Finding your projects</p>
           <p class="empty-description">
-            The scan is limited to mounted disks and a few folder levels.
+            Scanning mounted disks and checking GitHub for recent repositories.
           </p>
         </div>
-      } @else if (workspaces().length === 0) {
+      } @else if (projects().length === 0) {
         <div class="empty-state">
           <rl-icon name="folder" [size]="20" />
-          <p class="empty-title">No local projects found</p>
-          <p class="empty-description">Scan again after cloning a repository.</p>
+          <p class="empty-title">No projects found</p>
+          <p class="empty-description">Connect GitHub or clone a repository, then sync again.</p>
         </div>
       } @else {
         <div class="project-list" role="list">
-          @for (workspace of workspaces(); track workspace.path) {
+          @for (project of projects(); track project.githubRepo ?? project.path) {
             <article class="project-row" role="listitem">
               <span class="project-glyph"><rl-icon name="folder" [size]="16" /></span>
               <div class="project-copy">
-                <p class="project-name">{{ workspace.name }}</p>
-                <p class="project-path">{{ workspace.path }}</p>
-                @if (workspace.githubRepo) {
-                  <p class="project-remote">github.com/{{ workspace.githubRepo }}</p>
+                <p class="project-name">{{ project.name }}</p>
+                <p class="project-path">{{ project.path ?? 'No local workspace' }}</p>
+                @if (project.githubRepo) {
+                  <p class="project-remote">github.com/{{ project.githubRepo }}</p>
                 }
-                @if (workspace.modifiedAt) {
-                  <p class="project-remote">Updated {{ formatModified(workspace.modifiedAt) }}</p>
+                @if (project.sizeKb !== null || project.pushedAt || project.visibility) {
+                  <p class="project-remote">
+                    @if (project.sizeKb !== null) {
+                      {{ formatSize(project.sizeKb) }}
+                    }
+                    @if (project.pushedAt) {
+                      · pushed {{ formatModified(project.pushedAt) }}
+                    }
+                    @if (project.visibility) {
+                      · {{ project.visibility }}
+                    }
+                  </p>
                 }
               </div>
               <button
                 type="button"
                 class="open-button"
-                (click)="open(workspace)"
-                [attr.aria-label]="'Open ' + workspace.name"
+                (click)="open(project)"
+                [attr.aria-label]="(project.path ? 'Open ' : 'View ') + project.name"
               >
-                Open
+                {{ project.path ? 'Open' : 'View' }}
               </button>
             </article>
           }
@@ -137,7 +149,6 @@ import { Icon } from '@shared/icon';
     }
 
     .scan-button:disabled {
-      cursor: wait;
       opacity: 0.7;
     }
 
@@ -257,34 +268,46 @@ import { Icon } from '@shared/icon';
 })
 export class Projects {
   private readonly tauri = inject(TauriBridge);
-  protected readonly workspaces = signal<readonly WorkspaceSummary[]>([]);
-  protected readonly scanning = signal(false);
+  protected readonly projects = signal<readonly ProjectSummary[]>([]);
+  protected readonly syncing = signal(false);
   protected readonly error = signal('');
 
   constructor() {
-    void this.scan();
+    void this.sync();
   }
 
-  protected async scan(): Promise<void> {
-    if (this.scanning()) return;
-    this.scanning.set(true);
+  protected async sync(): Promise<void> {
+    if (this.syncing()) return;
+    this.syncing.set(true);
     this.error.set('');
     try {
-      this.workspaces.set(await this.tauri.scanWorkspaces());
+      const workspaces = await this.tauri.scanWorkspaces();
+      let repositories: readonly GithubRepositorySummary[] = [];
+      try {
+        repositories = await this.tauri.githubRepositories();
+      } catch {
+        this.error.set('GitHub sync failed. Local clones are still shown.');
+      }
+      this.projects.set(mergeProjectSummaries(workspaces, repositories));
     } catch {
       this.error.set('Could not scan local disks.');
     } finally {
-      this.scanning.set(false);
+      this.syncing.set(false);
     }
   }
 
-  protected open(workspace: WorkspaceSummary): void {
-    void this.tauri.openPath(workspace.path);
+  protected open(project: ProjectSummary): void {
+    if (project.path) void this.tauri.openPath(project.path);
+    else if (project.githubUrl) void this.tauri.openUrl(project.githubUrl);
   }
 
-  protected formatModified(timestamp: number): string {
+  protected formatModified(timestamp: string): string {
     return new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric' }).format(
-      timestamp * 1000,
+      Date.parse(timestamp),
     );
+  }
+
+  protected formatSize(sizeKb: number): string {
+    return sizeKb >= 1024 ? (sizeKb / 1024).toFixed(1) + ' MB' : Math.round(sizeKb) + ' KB';
   }
 }
