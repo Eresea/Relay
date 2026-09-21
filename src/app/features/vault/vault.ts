@@ -419,10 +419,6 @@ export class Vault {
         if (event.type === 'openVaultRequested') void this.refreshStatus();
       })
       .then((unlisten) => this.destroyRef.onDestroy(unlisten));
-
-    this.destroyRef.onDestroy(() => {
-      if (this.copyTimeout) clearTimeout(this.copyTimeout);
-    });
   }
 
   private async refreshStatus(): Promise<void> {
