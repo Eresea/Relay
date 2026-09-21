@@ -31,7 +31,7 @@ jobs:
         shell: bash
         env:
           RELEASE_OWNER: ${{ vars.RELAY_RELEASE_OWNER || 'Eresea' }}
-          RELEASE_NAME: ${{ vars.RELAY_RELEASE_NAME || 'Relay-releases' }}
+          RELEASE_NAME: ${{ vars.RELAY_RELEASE_NAME || 'Relay' }}
           INPUT_TAG: ${{ inputs.tag }}
           REF_TAG: ${{ github.ref_name }}
         run: |
@@ -127,7 +127,7 @@ jobs:
           releaseId: ${{ needs.release.outputs.release_id }}
           tagName: ${{ needs.release.outputs.release_tag }}
           owner: ${{ needs.release.outputs.release_repo_owner || 'Eresea' }}
-          repo: ${{ needs.release.outputs.release_repo_name || 'Relay-releases' }}
+          repo: ${{ needs.release.outputs.release_repo_name || 'Relay' }}
           projectPath: .
           uploadUpdaterJson: true
           uploadUpdaterSignatures: true

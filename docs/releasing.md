@@ -1,13 +1,16 @@
 # Releasing Relay
 
-Relay's source repository can remain private. Public updater artifacts live in
-the separate `Eresea/Relay-releases` repository, which must be created as a
-public repository with an initial `main` branch.
+Relay's source repository is public and also hosts the updater artifacts in its
+GitHub Releases. The updater feed is served from the `Eresea/Relay` release
+assets.
+
+The workflow defaults to `Eresea/Relay`; `RELAY_RELEASE_OWNER` and
+`RELAY_RELEASE_NAME` are optional overrides.
 
 ## One-time GitHub configuration
 
-Create a token that can write releases in `Eresea/Relay-releases`, then add it
-to the private Relay repository as the `RELAY_RELEASE_TOKEN` Actions secret.
+Create a token that can write releases in `Eresea/Relay`, then add it to the
+Relay repository as the `RELAY_RELEASE_TOKEN` Actions secret.
 
 Add the Tauri signing values as Actions configuration:
 
