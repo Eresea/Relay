@@ -1,9 +1,0 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="title desc">
-  <title id="title">Relay app icon (mono white on transparent)</title>
-  <desc id="desc">Relay ribbon R mark in solid white, transparent background.</desc>
-
-  <g id="relay-mark" transform="translate(28.8 26.8) scale(0.967)">
-    <path d="M50 210 C69 108 135 60 220 60 H326 C386 60 420 92 420 149 C420 192 399 225 363 257 L261 348 L212 294 L319 197 C336 181 343 167 343 151 C343 132 329 121 307 121 H177 C119 121 79 150 50 210 Z" fill="#ffffff"/>
-    <path d="M81 373 V287 C81 245 109 217 149 217 H166 C181 217 193 223 205 235 L384 414 H281 L166 299 C158 291 151 288 143 288 C130 288 122 297 122 311 V406 C98 401 81 389 81 373 Z" fill="#ffffff"/>
-  </g>
-</svg>
