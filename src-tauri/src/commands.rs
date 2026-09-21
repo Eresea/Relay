@@ -337,6 +337,12 @@ pub fn scan_workspaces() -> Result<Vec<WorkspaceSummary>> {
     crate::workspaces::scan()
 }
 
+/// Opens a local Git clone in the platform terminal.
+#[tauri::command]
+pub fn open_terminal(path: String) -> Result<()> {
+    crate::workspaces::open_terminal(&path)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

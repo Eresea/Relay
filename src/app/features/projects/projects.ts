@@ -87,14 +87,35 @@ import { mergeProjectSummaries, type ProjectSummary } from './project-summary';
                   </p>
                 }
               </div>
-              <button
-                type="button"
-                class="open-button"
-                (click)="open(project)"
-                [attr.aria-label]="(project.path ? 'Open ' : 'View ') + project.name"
-              >
-                {{ project.path ? 'Open' : 'View' }}
-              </button>
+              <div class="project-actions">
+                @if (project.path) {
+                  <button
+                    type="button"
+                    class="open-button"
+                    (click)="open(project)"
+                    [attr.aria-label]="'Open ' + project.name"
+                  >
+                    Open
+                  </button>
+                  <button
+                    type="button"
+                    class="terminal-button"
+                    (click)="openTerminal(project)"
+                    [attr.aria-label]="'Open terminal in ' + project.name"
+                  >
+                    Terminal
+                  </button>
+                } @else {
+                  <button
+                    type="button"
+                    class="open-button"
+                    (click)="open(project)"
+                    [attr.aria-label]="'View ' + project.name"
+                  >
+                    View
+                  </button>
+                }
+              </div>
             </article>
           }
         </div>
@@ -303,7 +324,21 @@ import { mergeProjectSummaries, type ProjectSummary } from './project-summary';
       color: var(--text-muted);
     }
 
-    .open-button:hover {
+    .project-actions {
+      display: inline-flex;
+      flex: none;
+      gap: var(--space-2);
+    }
+
+    .terminal-button {
+      padding: var(--space-2) var(--space-3);
+      color: var(--text-muted);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-sm);
+    }
+
+    .open-button:hover,
+    .terminal-button:hover {
       color: var(--text-body);
       background: var(--tint-hover);
     }
@@ -359,6 +394,10 @@ export class Projects {
   protected open(project: ProjectSummary): void {
     if (project.path) void this.tauri.openPath(project.path);
     else if (project.githubUrl) void this.tauri.openUrl(project.githubUrl);
+  }
+
+  protected openTerminal(project: ProjectSummary): void {
+    if (project.path) void this.tauri.openTerminal(project.path);
   }
 
   protected formatModified(timestamp: string): string {

@@ -140,6 +140,11 @@ export class TauriBridge {
     await openPath(path);
   }
 
+  /** Opens a local workspace in the platform terminal. */
+  async openTerminal(path: string): Promise<void> {
+    await this.invoke('open_terminal', { path });
+  }
+
   async scanWorkspaces(): Promise<readonly WorkspaceSummary[]> {
     return (await this.invoke<WorkspaceSummary[]>('scan_workspaces')) ?? [];
   }

@@ -1,6 +1,7 @@
 use std::cmp::Reverse;
 use std::collections::VecDeque;
 use std::path::{Path, PathBuf};
+use std::process::Command;
 use std::time::UNIX_EPOCH;
 
 use serde::Serialize;
@@ -63,6 +64,59 @@ pub fn scan() -> Result<Vec<WorkspaceSummary>> {
         )
     });
     Ok(workspaces)
+}
+
+/// Opens the platform terminal in a discovered workspace.
+pub fn open_terminal(path: &str) -> Result<()> {
+    let path = Path::new(path);
+    if !path.is_dir() {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::NotFound,
+            "workspace directory does not exist",
+        )
+        .into());
+    }
+
+    #[cfg(target_os = "windows")]
+    {
+        Command::new("cmd.exe").current_dir(path).spawn()?;
+        Ok(())
+    }
+
+    #[cfg(target_os = "macos")]
+    {
+        Command::new("open")
+            .args(["-a", "Terminal"])
+            .arg(path)
+            .spawn()?;
+        Ok(())
+    }
+
+    #[cfg(target_os = "linux")]
+    {
+        let mut last_error = None;
+        for program in [
+            "x-terminal-emulator",
+            "gnome-terminal",
+            "konsole",
+            "xfce4-terminal",
+        ] {
+            match Command::new(program).current_dir(path).spawn() {
+                Ok(_) => return Ok(()),
+                Err(error) => last_error = Some(error),
+            }
+        }
+        Err(last_error
+            .unwrap_or_else(|| std::io::Error::other("no terminal emulator found"))
+            .into())
+    }
+
+    #[cfg(not(any(target_os = "windows", target_os = "macos", target_os = "linux")))]
+    Err(std::io::Error::new(
+        std::io::ErrorKind::Unsupported,
+        "opening a terminal is not supported on this platform",
+    )
+    .into())
 }
 
 fn summary(path: &Path) -> WorkspaceSummary {
@@ -213,5 +267,12 @@ mod tests {
 
         assert_eq!(read_origin(&root), Some("openai/relay".to_string()));
         std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn refuses_to_open_a_missing_workspace() {
+        let path =
+            std::env::temp_dir().join(format!("relay-missing-workspace-{}", std::process::id()));
+        assert!(open_terminal(path.to_str().unwrap()).is_err());
     }
 }

@@ -87,6 +87,7 @@ pub fn run() {
             commands::notifications_mark_read,
             commands::notifications_clear,
             commands::scan_workspaces,
+            commands::open_terminal,
         ])
         .on_window_event(|window, event| {
             // The palette is a spotlight, not a window: losing focus dismisses
