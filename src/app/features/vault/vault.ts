@@ -37,10 +37,10 @@ import { Icon } from '@shared/icon';
               type="button"
               class="icon-btn"
               [disabled]="!generated()"
-              (click)="copy(generated())"
-              aria-label="Copy password"
+              (click)="copyGenerated()"
+              [attr.aria-label]="copiedId() === 'generated' ? 'Copied' : 'Copy password'"
             >
-              <rl-icon name="copy" [size]="16" />
+              <rl-icon [name]="copiedId() === 'generated' ? 'check' : 'copy'" [size]="16" />
             </button>
           </div>
 
@@ -132,9 +132,9 @@ import { Icon } from '@shared/icon';
                     type="button"
                     class="icon-btn"
                     (click)="copyEntry(entry.id)"
-                    aria-label="Copy password"
+                    [attr.aria-label]="copiedId() === entry.id ? 'Copied' : 'Copy password'"
                   >
-                    <rl-icon name="copy" [size]="16" />
+                    <rl-icon [name]="copiedId() === entry.id ? 'check' : 'copy'" [size]="16" />
                   </button>
                   @if (pendingDeleteId() === entry.id) {
                     <button
@@ -444,6 +444,8 @@ export class Vault {
   protected readonly exportPath = signal('');
 
   protected readonly generated = signal('');
+  protected readonly copiedId = signal<string | null>(null);
+  private copyTimeout: ReturnType<typeof setTimeout> | null = null;
   protected readonly length = signal(20);
   protected readonly upper = signal(true);
   protected readonly lower = signal(true);
@@ -469,6 +471,10 @@ export class Vault {
         if (event.type === 'openVaultRequested') void this.refreshStatus();
       })
       .then((unlisten) => this.destroyRef.onDestroy(unlisten));
+
+    this.destroyRef.onDestroy(() => {
+      if (this.copyTimeout) clearTimeout(this.copyTimeout);
+    });
   }
 
   private async refreshStatus(): Promise<void> {
@@ -597,13 +603,23 @@ export class Vault {
     return this.revealedId() === id ? this.revealedPassword() : '••••••••';
   }
 
-  protected copyEntry(id: string): void {
-    void this.tauri.vaultRevealPassword(id).then((password) => this.copy(password));
+  protected copyGenerated(): void {
+    if (!this.generated()) return;
+    this.copy(this.generated(), 'generated');
   }
 
-  protected copy(value: string): void {
+  protected copyEntry(id: string): void {
+    void this.tauri.vaultRevealPassword(id).then((password) => this.copy(password, id));
+  }
+
+  protected copy(value: string, id?: string): void {
     if (!value) return;
     void navigator.clipboard.writeText(value);
+    if (id) {
+      if (this.copyTimeout) clearTimeout(this.copyTimeout);
+      this.copiedId.set(id);
+      this.copyTimeout = setTimeout(() => this.copiedId.set(null), 2000);
+    }
   }
 
   protected async export(): Promise<void> {
