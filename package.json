@@ -20,6 +20,8 @@
     "tauri": "tauri",
     "dev": "tauri dev",
     "app:build": "tauri build",
+    "android:init": "tauri android init --ci --skip-targets-install",
+    "android:build": "tauri android build",
     "rust:fmt": "cargo fmt --manifest-path src-tauri/Cargo.toml --all",
     "rust:lint": "cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings",
     "rust:test": "cargo test --manifest-path src-tauri/Cargo.toml"

@@ -116,15 +116,19 @@ pub enum Error {
     #[error(transparent)]
     Http(#[from] reqwest::Error),
 
+    #[cfg(desktop)]
     #[error(transparent)]
     Updater(#[from] tauri_plugin_updater::Error),
 
+    #[cfg(desktop)]
     #[error("invalid updater configuration: {0}")]
     UpdaterConfiguration(String),
 
+    #[cfg(desktop)]
     #[error("no update is available")]
     NoUpdateAvailable,
 
+    #[cfg(desktop)]
     #[error("the update has not finished downloading")]
     UpdateNotDownloaded,
 

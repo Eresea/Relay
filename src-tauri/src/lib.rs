@@ -15,7 +15,7 @@ mod updates;
 mod vault;
 mod workspaces;
 
-use tauri::{Manager, WindowEvent};
+use tauri::Manager;
 
 use github::client::HttpGitHubClient;
 use github::GithubState;
@@ -23,6 +23,7 @@ use gmail::GmailState;
 use jobs::JobRegistry;
 use vault::VaultState;
 
+#[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let mut builder = tauri::Builder::default();
 
@@ -44,22 +45,69 @@ pub fn run() {
         ));
     }
 
-    builder
+    builder = builder
         .manage(JobRegistry::default())
         .manage(VaultState::default())
         .manage(GithubState::default())
         .manage(HttpGitHubClient::default())
         .manage(GmailState::default())
-        .manage(updates::UpdateManager::default())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_store::Builder::default().build())
-        .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(
             tauri_plugin_log::Builder::default()
                 .level(log::LevelFilter::Info)
                 .build(),
-        )
-        .invoke_handler(tauri::generate_handler![
+        );
+
+    #[cfg(desktop)]
+    {
+        builder = builder
+            .manage(updates::UpdateManager::default())
+            .plugin(tauri_plugin_updater::Builder::new().build())
+            .invoke_handler(tauri::generate_handler![
+                commands::core_commands,
+                commands::run_core_command,
+                commands::cancel_job,
+                commands::is_job_running,
+                commands::dismiss_palette,
+                commands::toggle_palette,
+                commands::vault_status,
+                commands::vault_create,
+                commands::vault_unlock,
+                commands::vault_lock,
+                commands::generate_password,
+                commands::vault_add_entry,
+                commands::vault_list_entries,
+                commands::vault_reveal_password,
+                commands::vault_delete_entry,
+                commands::vault_export,
+                commands::github_status,
+                commands::github_repositories,
+                commands::github_pull_requests,
+                commands::github_connect_start,
+                commands::github_disconnect,
+                commands::gmail_status,
+                commands::gmail_get_settings,
+                commands::gmail_set_settings,
+                commands::gmail_connect,
+                commands::gmail_cancel_connect,
+                commands::gmail_disconnect,
+                commands::notifications_list,
+                commands::notifications_mark_read,
+                commands::notifications_clear,
+                commands::scan_workspaces,
+                commands::open_terminal,
+                commands::project_action,
+                commands::update_status,
+                commands::update_check,
+                commands::update_download,
+                commands::update_install,
+            ]);
+    }
+
+    #[cfg(not(desktop))]
+    {
+        builder = builder.invoke_handler(tauri::generate_handler![
             commands::core_commands,
             commands::run_core_command,
             commands::cancel_job,
@@ -93,12 +141,12 @@ pub fn run() {
             commands::scan_workspaces,
             commands::open_terminal,
             commands::project_action,
-            commands::update_status,
-            commands::update_check,
-            commands::update_download,
-            commands::update_install,
-        ])
-        .on_window_event(|window, event| {
+        ]);
+    }
+
+    #[cfg(desktop)]
+    {
+        builder = builder.on_window_event(|window, event| {
             // The palette is a spotlight, not a window: losing focus dismisses
             // it. Closing any window hides it instead of destroying it, so the
             // next open is instant.
@@ -111,16 +159,19 @@ pub fn run() {
             // tray, so closing its window means "put it away", not "quit";
             // quitting is the tray's own Quit item.
             match event {
-                WindowEvent::Focused(false) if window.label() == overlay::PALETTE => {
+                tauri::WindowEvent::Focused(false) if window.label() == overlay::PALETTE => {
                     let _ = window.hide();
                 }
-                WindowEvent::CloseRequested { api, .. } => {
+                tauri::WindowEvent::CloseRequested { api, .. } => {
                     api.prevent_close();
                     let _ = window.hide();
                 }
                 _ => {}
             }
-        })
+        });
+    }
+
+    builder
         .setup(|app| {
             #[cfg(desktop)]
             {
@@ -136,16 +187,20 @@ pub fn run() {
             // the instant Relay launches on Linux, and the HUD's behaviour
             // differs per platform before a single notification has been
             // emitted.
-            if let Err(error) = overlay::hide_hud(app.handle()) {
-                log::warn!("could not hide the HUD at startup: {error}");
-            }
-            if let Err(error) = overlay::hide_palette(app.handle()) {
-                log::warn!("could not hide the palette at startup: {error}");
+            #[cfg(desktop)]
+            {
+                if let Err(error) = overlay::hide_hud(app.handle()) {
+                    log::warn!("could not hide the HUD at startup: {error}");
+                }
+                if let Err(error) = overlay::hide_palette(app.handle()) {
+                    log::warn!("could not hide the palette at startup: {error}");
+                }
             }
 
             // The main window is created hidden so that launching Relay at
             // login does not throw a window in the user's face. The tray and
             // the global shortcut are the entry points.
+            #[cfg(desktop)]
             if std::env::args().any(|arg| arg == "--show") {
                 let _ = overlay::show_main(app.handle());
             }
@@ -174,8 +229,11 @@ pub fn run() {
                 }
             });
 
-            let update_manager = app.state::<updates::UpdateManager>().inner().clone();
-            update_manager.start(app.handle().clone());
+            #[cfg(desktop)]
+            {
+                let update_manager = app.state::<updates::UpdateManager>().inner().clone();
+                update_manager.start(app.handle().clone());
+            }
 
             Ok(())
         })

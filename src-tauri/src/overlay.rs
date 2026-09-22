@@ -68,6 +68,7 @@ pub fn toggle_palette(app: &AppHandle) -> Result<()> {
 pub fn show_main(app: &AppHandle) -> Result<()> {
     let win = window(app, MAIN)?;
     win.show()?;
+    #[cfg(desktop)]
     win.unminimize()?;
     win.set_focus()?;
     Ok(())

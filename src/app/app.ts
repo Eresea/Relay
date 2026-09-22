@@ -10,6 +10,7 @@ import { ThemeService } from '@core/theme';
 import { CommandPalette } from '@features/palette/command-palette';
 import { Home } from '@features/home/home';
 import { HudSurface } from '@features/hud/hud-surface';
+import { Mobile } from '@features/mobile/mobile';
 
 /**
  * Relay renders one of three surfaces depending on which window is asking.
@@ -19,7 +20,7 @@ import { HudSurface } from '@features/hud/hud-surface';
 @Component({
   selector: 'rl-root',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [CommandPalette, Home, HudSurface],
+  imports: [CommandPalette, Home, HudSurface, Mobile],
   template: `
     @switch (surface) {
       @case ('palette') {
@@ -27,6 +28,9 @@ import { HudSurface } from '@features/hud/hud-surface';
       }
       @case ('hud') {
         <rl-hud-surface />
+      }
+      @case ('mobile') {
+        <rl-mobile />
       }
       @default {
         <rl-home />
@@ -60,7 +64,7 @@ export class App {
     const destroyRef = inject(DestroyRef);
     destroyRef.onDestroy(dispose);
 
-    void this.mergeCoreCommands();
+    if (this.surface !== 'mobile') void this.mergeCoreCommands();
     void this.subscribeToEvents(destroyRef);
   }
 
@@ -84,13 +88,13 @@ export class App {
   private async subscribeToEvents(destroyRef: DestroyRef): Promise<void> {
     try {
       this.notifications.restore(await this.tauri.notificationsList());
-      this.updates.restore(await this.tauri.updateStatus());
+      if (this.surface !== 'mobile') this.updates.restore(await this.tauri.updateStatus());
     } catch (error: unknown) {
       console.error('[relay] notification history unavailable', error);
     }
     const unlisten = await this.tauri.onEvent((event) => {
       this.notifications.handle(event);
-      this.updates.handle(event);
+      if (this.surface !== 'mobile') this.updates.handle(event);
     });
     destroyRef.onDestroy(unlisten);
   }
