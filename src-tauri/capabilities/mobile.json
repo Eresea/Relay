@@ -4,5 +4,16 @@
   "description": "Capabilities for Relay's Android and iOS companion surface.",
   "windows": ["main"],
   "platforms": ["android", "iOS"],
-  "permissions": ["core:default", "opener:default", "store:default", "log:default"]
+  "permissions": [
+    "core:default",
+    "opener:default",
+    "store:default",
+    "log:default",
+    "notification:allow-is-permission-granted",
+    "notification:allow-request-permission",
+    "notification:allow-notify",
+    "notification:allow-register-action-types",
+    "notification:allow-register-listener",
+    "notification:allow-create-channel"
+  ]
 }

@@ -65,7 +65,79 @@ export class App {
     destroyRef.onDestroy(dispose);
 
     if (this.surface !== 'mobile') void this.mergeCoreCommands();
-    void this.subscribeToEvents(destroyRef);
+    if (this.surface === 'mobile') {
+      void this.startMobileSurface(destroyRef);
+    } else {
+      void this.subscribeToEvents(destroyRef);
+    }
+  }
+
+  private async startMobileSurface(destroyRef: DestroyRef): Promise<void> {
+    await this.setupMobileNotifications(destroyRef);
+    await this.subscribeToEvents(destroyRef);
+  }
+
+  private async setupMobileNotifications(destroyRef: DestroyRef): Promise<void> {
+    if (!this.tauri.available) return;
+
+    try {
+      const {
+        Importance,
+        Visibility,
+        createChannel,
+        isPermissionGranted,
+        onAction,
+        registerActionTypes,
+        requestPermission,
+      } = await import('@tauri-apps/plugin-notification');
+
+      let granted = await isPermissionGranted();
+      if (!granted) granted = (await requestPermission()) === 'granted';
+      if (!granted) return;
+
+      await createChannel({
+        id: 'relay-events',
+        name: 'Relay events',
+        description: 'Notifications from Relay connectors and jobs.',
+        importance: Importance.Default,
+        visibility: Visibility.Private,
+        vibration: true,
+      });
+      await registerActionTypes([
+        {
+          id: 'relay-notification',
+          actions: [
+            { id: 'open', title: 'Open' },
+            { id: 'mark-read', title: 'Mark read' },
+            { id: 'clear', title: 'Clear' },
+          ],
+        },
+      ]);
+
+      const listener = await onAction((raw) => {
+        const action = raw as unknown as MobileNotificationAction;
+        const notificationId = action.notification?.extra?.['notificationId'];
+        if (typeof notificationId !== 'string') return;
+
+        if (action.actionId === 'clear') {
+          this.notifications.clearHistory();
+          void this.tauri.notificationsClear();
+          return;
+        }
+
+        void this.tauri.notificationsMarkRead([notificationId]);
+        const openUrl = action.notification?.extra?.['openUrl'];
+        if (
+          (action.actionId === 'tap' || action.actionId === 'open') &&
+          typeof openUrl === 'string'
+        ) {
+          void this.tauri.openUrl(openUrl);
+        }
+      });
+      destroyRef.onDestroy(() => void listener.unregister());
+    } catch (error: unknown) {
+      console.error('[relay] mobile notifications unavailable', error);
+    }
   }
 
   /** Commands owned by the Rust side — system actions, service control. */
@@ -98,4 +170,11 @@ export class App {
     });
     destroyRef.onDestroy(unlisten);
   }
+}
+
+interface MobileNotificationAction {
+  readonly actionId?: string;
+  readonly notification?: {
+    readonly extra?: Record<string, unknown>;
+  };
 }
