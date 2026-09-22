@@ -16,6 +16,13 @@ pub const CHANNEL: &str = "relay://event";
 
 #[derive(Debug, Clone, Copy, Serialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(
+    not(desktop),
+    allow(
+        dead_code,
+        reason = "desktop updater wire shape is shared with the frontend"
+    )
+)]
 pub enum UpdateState {
     Idle,
     Checking,
@@ -58,6 +65,13 @@ impl Default for UpdateSnapshot {
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(tag = "type", rename_all = "camelCase")]
+#[cfg_attr(
+    not(desktop),
+    allow(
+        dead_code,
+        reason = "desktop updater wire shape is shared with the frontend"
+    )
+)]
 pub enum AppEvent {
     /// The set of core-contributed palette commands changed and should be
     /// re-fetched. Nothing emits this yet — `core_commands()` is static —
