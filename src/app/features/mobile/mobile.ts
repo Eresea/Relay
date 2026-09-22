@@ -1,4 +1,12 @@
-import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
+import { onBackButtonPress } from '@tauri-apps/api/app';
+import {
+  ChangeDetectionStrategy,
+  Component,
+  DestroyRef,
+  computed,
+  inject,
+  signal,
+} from '@angular/core';
 
 import { NotificationCenter } from '@core/notification-center';
 import type { NotificationRecord } from '@core/events';
@@ -13,8 +21,24 @@ type MobileTab = 'dashboard' | 'notifications' | 'vault';
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [Icon, Vault],
   template: `
-    <div class="mobile-shell">
+    <div
+      class="mobile-shell"
+      (pointerdown)="startRailGesture($event)"
+      (pointermove)="moveRailGesture($event)"
+      (pointerup)="endRailGesture($event)"
+      (pointercancel)="cancelRailGesture()"
+    >
       <header class="mobile-header">
+        <button
+          type="button"
+          class="header-button"
+          (click)="toggleRail()"
+          [attr.aria-expanded]="railOpen()"
+          [attr.aria-label]="railOpen() ? 'Close navigation' : 'Open navigation'"
+          aria-controls="mobile-rail"
+        >
+          <rl-icon name="panel-left" [size]="16" />
+        </button>
         <div>
           <p class="eyebrow">Relay</p>
           <h1>{{ tabTitle() }}</h1>
@@ -28,6 +52,58 @@ type MobileTab = 'dashboard' | 'notifications' | 'vault';
           <rl-icon name="loader-circle" [size]="16" />
         </button>
       </header>
+
+      @if (railOpen()) {
+        <button
+          type="button"
+          class="rail-backdrop"
+          (click)="closeRail()"
+          aria-label="Close navigation"
+        ></button>
+        <aside id="mobile-rail" class="mobile-rail" aria-label="Relay navigation">
+          <div class="rail-heading">
+            <span class="eyebrow">Relay</span>
+            <button
+              type="button"
+              class="rail-close"
+              (click)="closeRail()"
+              aria-label="Close navigation"
+            >
+              <rl-icon name="x" [size]="16" />
+            </button>
+          </div>
+          <button
+            type="button"
+            class="rail-item"
+            [class.active]="tab() === 'dashboard'"
+            (click)="selectTab('dashboard')"
+          >
+            <rl-icon name="house" [size]="16" />
+            <span>Dashboard</span>
+          </button>
+          <button
+            type="button"
+            class="rail-item"
+            [class.active]="tab() === 'notifications'"
+            (click)="selectTab('notifications')"
+          >
+            <rl-icon name="inbox" [size]="16" />
+            <span>Notifications</span>
+            @if (unreadCount() > 0) {
+              <span class="rail-badge">{{ unreadCount() }}</span>
+            }
+          </button>
+          <button
+            type="button"
+            class="rail-item"
+            [class.active]="tab() === 'vault'"
+            (click)="selectTab('vault')"
+          >
+            <rl-icon name="lock" [size]="16" />
+            <span>Password vault</span>
+          </button>
+        </aside>
+      }
 
       <main class="mobile-content">
         @if (tab() === 'dashboard') {
@@ -99,19 +175,30 @@ type MobileTab = 'dashboard' | 'notifications' | 'vault';
             } @else {
               <div class="activity-list">
                 @for (notification of notifications(); track notification.notificationId) {
-                  <button
-                    type="button"
-                    class="activity-row"
-                    [class.unread]="!notification.read"
-                    (click)="openNotification(notification)"
-                  >
-                    <span class="status-dot" [attr.data-status]="notification.status"></span>
-                    <span class="activity-copy">
-                      <strong>{{ notification.title }}</strong>
-                      <span>{{ notification.detail || 'Relay notification' }}</span>
-                    </span>
-                    <rl-icon name="chevron-right" [size]="16" />
-                  </button>
+                  <div class="notification-swipe">
+                    <span class="swipe-action" aria-hidden="true">Mark read</span>
+                    <button
+                      type="button"
+                      class="activity-row"
+                      [class.unread]="!notification.read"
+                      [class.swiping]="isSwiping(notification.notificationId)"
+                      [style.transform]="
+                        'translateX(' + swipeOffset(notification.notificationId) + 'px)'
+                      "
+                      (pointerdown)="startNotificationSwipe($event, notification.notificationId)"
+                      (pointermove)="moveNotificationSwipe($event)"
+                      (pointerup)="endNotificationSwipe($event)"
+                      (pointercancel)="cancelNotificationSwipe()"
+                      (click)="openNotification(notification, $event)"
+                    >
+                      <span class="status-dot" [attr.data-status]="notification.status"></span>
+                      <span class="activity-copy">
+                        <strong>{{ notification.title }}</strong>
+                        <span>{{ notification.detail || 'Relay notification' }}</span>
+                      </span>
+                      <rl-icon name="chevron-right" [size]="16" />
+                    </button>
+                  </div>
                 }
               </div>
             }
@@ -168,12 +255,15 @@ type MobileTab = 'dashboard' | 'notifications' | 'vault';
     }
 
     .mobile-shell {
+      position: relative;
       display: flex;
       flex-direction: column;
       block-size: 100%;
       min-block-size: 100dvh;
       max-inline-size: 720px;
       margin-inline: auto;
+      overflow: hidden;
+      touch-action: pan-y;
     }
 
     .mobile-header {
@@ -233,6 +323,94 @@ type MobileTab = 'dashboard' | 'notifications' | 'vault';
     .header-button:focus-visible {
       color: var(--text-strong);
       background: var(--tint-hover);
+    }
+
+    .rail-backdrop {
+      position: fixed;
+      z-index: 4;
+      inset: 0;
+      background: color-mix(in srgb, var(--bg-app) 48%, transparent);
+    }
+
+    .mobile-rail {
+      position: fixed;
+      z-index: 5;
+      inset-block: 0;
+      inset-inline-start: 0;
+      display: flex;
+      inline-size: min(82vw, 288px);
+      flex-direction: column;
+      gap: var(--space-2);
+      padding: calc(var(--space-5) + env(safe-area-inset-top)) var(--space-4)
+        calc(var(--space-4) + env(safe-area-inset-bottom));
+      background: var(--bg-sunken);
+      border-inline-end: 1px solid var(--border-subtle);
+      box-shadow: var(--shadow-lg);
+      animation: mobile-rail-in 160ms var(--ease-standard);
+    }
+
+    @keyframes mobile-rail-in {
+      from {
+        opacity: 0;
+        transform: translateX(-16px);
+      }
+      to {
+        opacity: 1;
+        transform: translateX(0);
+      }
+    }
+
+    .rail-heading {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      min-block-size: 44px;
+      margin-block-end: var(--space-3);
+    }
+
+    .rail-close {
+      display: grid;
+      place-items: center;
+      inline-size: 44px;
+      block-size: 44px;
+      color: var(--text-subtle);
+      border-radius: var(--radius-md);
+    }
+
+    .rail-close:hover,
+    .rail-close:focus-visible,
+    .rail-item:hover,
+    .rail-item:focus-visible,
+    .rail-item.active {
+      background: var(--tint-hover);
+    }
+
+    .rail-item {
+      display: flex;
+      align-items: center;
+      min-block-size: 48px;
+      gap: var(--space-3);
+      padding-inline: var(--space-3);
+      color: var(--text-subtle);
+      border-radius: var(--radius-md);
+      text-align: start;
+    }
+
+    .rail-item.active {
+      color: var(--primary-ink);
+      background: var(--tint-selected);
+    }
+
+    .rail-badge {
+      min-inline-size: 20px;
+      margin-inline-start: auto;
+      padding-inline: 5px;
+      color: var(--primary-ink);
+      background: var(--primary);
+      border-radius: var(--radius-pill);
+      font-size: var(--text-11);
+      line-height: 20px;
+      text-align: center;
     }
 
     .mobile-content {
@@ -343,6 +521,24 @@ type MobileTab = 'dashboard' | 'notifications' | 'vault';
       overflow: hidden;
     }
 
+    .notification-swipe {
+      position: relative;
+      overflow: hidden;
+      background: var(--tint-selected);
+    }
+
+    .swipe-action {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
+      padding-inline-end: var(--space-5);
+      color: var(--primary-ink);
+      font-size: var(--text-12);
+      font-weight: var(--weight-medium);
+    }
+
     .activity-row {
       display: flex;
       align-items: center;
@@ -353,6 +549,13 @@ type MobileTab = 'dashboard' | 'notifications' | 'vault';
       color: var(--text-subtle);
       text-align: start;
       border-block-end: 1px solid var(--border-subtle);
+      background: var(--bg-raised);
+      transition: transform 160ms var(--ease-standard);
+      touch-action: pan-y;
+    }
+
+    .activity-row.swiping {
+      transition: none;
     }
 
     .activity-row:last-child {
@@ -483,8 +686,20 @@ type MobileTab = 'dashboard' | 'notifications' | 'vault';
 export class Mobile {
   private readonly center = inject(NotificationCenter);
   private readonly tauri = inject(TauriBridge);
+  private readonly destroyRef = inject(DestroyRef);
+
+  private railGesture: { pointerId: number; startX: number; startY: number } | null = null;
+  private notificationSwipe: {
+    notificationId: string;
+    pointerId: number;
+    startX: number;
+    startY: number;
+  } | null = null;
+  private suppressClickFor: string | null = null;
 
   protected readonly tab = signal<MobileTab>('dashboard');
+  protected readonly railOpen = signal(false);
+  protected readonly swipeState = signal<{ notificationId: string; offset: number } | null>(null);
   protected readonly notifications = this.center.history;
   protected readonly unreadCount = computed(
     () => this.notifications().filter((notification) => !notification.read).length,
@@ -505,13 +720,30 @@ export class Mobile {
 
   constructor() {
     void this.refresh();
+    void onBackButtonPress(({ canGoBack }) => {
+      if (this.railOpen()) {
+        this.closeRail();
+      } else if (this.tab() !== 'dashboard') {
+        this.tab.set('dashboard');
+      } else if (canGoBack) {
+        window.history.back();
+      }
+    })
+      .then((listener) => this.destroyRef.onDestroy(() => void listener.unregister()))
+      .catch(() => undefined);
   }
 
   protected async refresh(): Promise<void> {
     this.vaultStatus.set(await this.tauri.vaultStatus());
   }
 
-  protected openNotification(notification: NotificationRecord): void {
+  protected openNotification(notification: NotificationRecord, event?: MouseEvent): void {
+    if (event && this.suppressClickFor === notification.notificationId) {
+      event.preventDefault();
+      event.stopPropagation();
+      this.suppressClickFor = null;
+      return;
+    }
     this.center.markRead(notification.notificationId);
     void this.tauri.notificationsMarkRead([notification.notificationId]);
 
@@ -523,4 +755,109 @@ export class Mobile {
     this.center.clearHistory();
     void this.tauri.notificationsClear();
   }
+
+  protected toggleRail(): void {
+    this.railOpen.update((open) => !open);
+  }
+
+  protected closeRail(): void {
+    this.railOpen.set(false);
+  }
+
+  protected selectTab(tab: MobileTab): void {
+    this.tab.set(tab);
+    this.closeRail();
+  }
+
+  protected startRailGesture(event: PointerEvent): void {
+    if (!event.isPrimary || event.pointerType === 'mouse') return;
+    const edgeSwipe = !this.railOpen() && event.clientX <= 28;
+    const closeSwipe = this.railOpen() && event.clientX > 288;
+    if (!edgeSwipe && !closeSwipe) return;
+    this.railGesture = { pointerId: event.pointerId, startX: event.clientX, startY: event.clientY };
+    (event.currentTarget as HTMLElement).setPointerCapture(event.pointerId);
+  }
+
+  protected moveRailGesture(event: PointerEvent): void {
+    if (!this.railGesture || event.pointerId !== this.railGesture.pointerId) return;
+    if (
+      Math.abs(event.clientX - this.railGesture.startX) >
+      Math.abs(event.clientY - this.railGesture.startY)
+    ) {
+      event.preventDefault();
+    }
+  }
+
+  protected endRailGesture(event: PointerEvent): void {
+    if (!this.railGesture || event.pointerId !== this.railGesture.pointerId) return;
+    const deltaX = event.clientX - this.railGesture.startX;
+    const deltaY = event.clientY - this.railGesture.startY;
+    const open = mobileSwipeAction(deltaX, deltaY) === 'open-rail';
+    const close = deltaX <= -72 && Math.abs(deltaX) > Math.abs(deltaY);
+    if (open || close) this.railOpen.set(open);
+    this.cancelRailGesture();
+  }
+
+  protected cancelRailGesture(): void {
+    this.railGesture = null;
+  }
+
+  protected startNotificationSwipe(event: PointerEvent, notificationId: string): void {
+    if (!event.isPrimary || event.pointerType === 'mouse') return;
+    this.notificationSwipe = {
+      notificationId,
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      startY: event.clientY,
+    };
+    if (event.currentTarget instanceof HTMLElement) {
+      event.currentTarget.setPointerCapture(event.pointerId);
+    }
+  }
+
+  protected moveNotificationSwipe(event: PointerEvent): void {
+    if (!this.notificationSwipe || event.pointerId !== this.notificationSwipe.pointerId) return;
+    const deltaX = event.clientX - this.notificationSwipe.startX;
+    const deltaY = event.clientY - this.notificationSwipe.startY;
+    if (Math.abs(deltaX) <= Math.abs(deltaY)) return;
+    event.preventDefault();
+    this.swipeState.set({
+      notificationId: this.notificationSwipe.notificationId,
+      offset: Math.max(-120, Math.min(0, deltaX)),
+    });
+  }
+
+  protected endNotificationSwipe(event: PointerEvent): void {
+    if (!this.notificationSwipe || event.pointerId !== this.notificationSwipe.pointerId) return;
+    const deltaX = event.clientX - this.notificationSwipe.startX;
+    const deltaY = event.clientY - this.notificationSwipe.startY;
+    if (mobileSwipeAction(deltaX, deltaY) === 'mark-read') {
+      this.suppressClickFor = this.notificationSwipe.notificationId;
+      this.center.markRead(this.notificationSwipe.notificationId);
+      void this.tauri.notificationsMarkRead([this.notificationSwipe.notificationId]);
+    }
+    this.cancelNotificationSwipe();
+  }
+
+  protected cancelNotificationSwipe(): void {
+    this.notificationSwipe = null;
+    this.swipeState.set(null);
+  }
+
+  protected swipeOffset(notificationId: string): number {
+    const state = this.swipeState();
+    return state?.notificationId === notificationId ? state.offset : 0;
+  }
+
+  protected isSwiping(notificationId: string): boolean {
+    return this.swipeState()?.notificationId === notificationId;
+  }
+}
+
+export function mobileSwipeAction(
+  deltaX: number,
+  deltaY: number,
+): 'open-rail' | 'mark-read' | null {
+  if (Math.abs(deltaX) <= Math.abs(deltaY) || Math.abs(deltaX) < 72) return null;
+  return deltaX > 0 ? 'open-rail' : 'mark-read';
 }
