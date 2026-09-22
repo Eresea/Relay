@@ -163,7 +163,7 @@ function connectorErrorMessage(error: unknown): string {
                   (click)="copyCode(auth)"
                   [attr.aria-label]="codeCopied() ? 'Copied user code' : 'Copy user code'"
                 >
-                  {{ codeCopied() ? 'Copied!' : 'Copy code' }}
+                  {{ codeCopied() ? 'Copied' : 'Copy code' }}
                 </button>
               </div>
               <button type="button" class="link" (click)="cancelConnect(auth)">Cancel</button>
@@ -755,6 +755,7 @@ export class Github {
   protected async connect(): Promise<void> {
     this.error.set('');
     this.blockedMessage = '';
+    this.codeCopied.set(false);
     this.busy.set(true);
     try {
       const auth = await this.tauri.githubConnectStart();
@@ -780,15 +781,25 @@ export class Github {
     void this.tauri.openUrl(auth.verificationUri);
   }
 
-  protected copyCode(auth: DeviceAuthorization): void {
-    void navigator.clipboard.writeText(auth.userCode);
+  protected async copyCode(auth: DeviceAuthorization): Promise<void> {
     if (this.copyCodeTimeout) clearTimeout(this.copyCodeTimeout);
+    this.copyCodeTimeout = null;
+    this.codeCopied.set(false);
+    try {
+      await navigator.clipboard.writeText(auth.userCode);
+    } catch {
+      return;
+    }
     this.codeCopied.set(true);
-    this.copyCodeTimeout = setTimeout(() => this.codeCopied.set(false), 2000);
+    this.copyCodeTimeout = setTimeout(() => {
+      this.codeCopied.set(false);
+      this.copyCodeTimeout = null;
+    }, 2000);
   }
 
   protected async cancelConnect(auth: DeviceAuthorization): Promise<void> {
     this.stopConnectFallbackPoll();
+    this.codeCopied.set(false);
     await this.tauri.cancelJob(auth.jobId);
     this.deviceAuth.set(null);
     this.status.set('disconnected');
