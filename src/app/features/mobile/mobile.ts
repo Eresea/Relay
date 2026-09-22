@@ -13,13 +13,14 @@ import type { NotificationRecord } from '@core/events';
 import { TauriBridge, type VaultStatus } from '@core/tauri';
 import { Vault } from '@features/vault/vault';
 import { Icon } from '@shared/icon';
+import { MobileConnections } from './mobile-connections';
 
-type MobileTab = 'dashboard' | 'notifications' | 'vault';
+type MobileTab = 'dashboard' | 'notifications' | 'vault' | 'connections';
 
 @Component({
   selector: 'rl-mobile',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [Icon, Vault],
+  imports: [Icon, MobileConnections, Vault],
   template: `
     <div
       class="mobile-shell"
@@ -102,6 +103,15 @@ type MobileTab = 'dashboard' | 'notifications' | 'vault';
             <rl-icon name="lock" [size]="16" />
             <span>Password vault</span>
           </button>
+          <button
+            type="button"
+            class="rail-item"
+            [class.active]="tab() === 'connections'"
+            (click)="selectTab('connections')"
+          >
+            <rl-icon name="settings" [size]="16" />
+            <span>Connections</span>
+          </button>
         </aside>
       }
 
@@ -122,6 +132,11 @@ type MobileTab = 'dashboard' | 'notifications' | 'vault';
               <span class="summary-icon"><rl-icon name="lock" [size]="16" /></span>
               <span class="summary-value">{{ vaultLabel() }}</span>
               <span class="summary-label">Password vault</span>
+            </button>
+            <button type="button" class="summary-card" (click)="selectTab('connections')">
+              <span class="summary-icon"><rl-icon name="settings" [size]="16" /></span>
+              <span class="summary-value">{{ connectionSummary() }}</span>
+              <span class="summary-label">Connections</span>
             </button>
           </div>
 
@@ -203,9 +218,13 @@ type MobileTab = 'dashboard' | 'notifications' | 'vault';
               </div>
             }
           </section>
-        } @else {
+        } @else if (tab() === 'vault') {
           <section class="section full-section vault-section">
             <rl-vault />
+          </section>
+        } @else {
+          <section class="section full-section connections-section">
+            <rl-mobile-connections />
           </section>
         }
       </main>
@@ -434,7 +453,7 @@ type MobileTab = 'dashboard' | 'notifications' | 'vault';
 
     .summary-grid {
       display: grid;
-      grid-template-columns: repeat(2, minmax(0, 1fr));
+      grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
       gap: var(--space-3);
     }
 
@@ -626,6 +645,11 @@ type MobileTab = 'dashboard' | 'notifications' | 'vault';
       display: block;
     }
 
+    .connections-section {
+      margin-inline: calc(var(--space-5) * -1);
+      margin-block-start: calc(var(--space-5) * -1);
+    }
+
     .mobile-nav {
       display: grid;
       grid-template-columns: repeat(3, 1fr);
@@ -680,6 +704,10 @@ type MobileTab = 'dashboard' | 'notifications' | 'vault';
       .vault-section {
         margin-inline: calc(var(--space-8) * -1);
       }
+
+      .connections-section {
+        margin-inline: calc(var(--space-8) * -1);
+      }
     }
   `,
 })
@@ -706,12 +734,15 @@ export class Mobile {
   );
   protected readonly recentNotifications = computed(() => this.notifications().slice(0, 4));
   protected readonly vaultStatus = signal<VaultStatus>({ exists: false, unlocked: false });
+  protected readonly connectionSummary = signal('Not connected');
   protected readonly tabTitle = computed(() =>
     this.tab() === 'dashboard'
       ? 'Your dashboard'
       : this.tab() === 'notifications'
         ? 'Notifications'
-        : 'Password vault',
+        : this.tab() === 'vault'
+          ? 'Password vault'
+          : 'Connections',
   );
   protected readonly vaultLabel = computed(() => {
     const status = this.vaultStatus();
@@ -734,7 +765,14 @@ export class Mobile {
   }
 
   protected async refresh(): Promise<void> {
-    this.vaultStatus.set(await this.tauri.vaultStatus());
+    const [vaultStatus, githubStatus, gmailStatus] = await Promise.all([
+      this.tauri.vaultStatus(),
+      this.tauri.githubStatus(),
+      this.tauri.gmailStatus(),
+    ]);
+    this.vaultStatus.set(vaultStatus);
+    const connected = Number(githubStatus.connected) + Number(gmailStatus.connected);
+    this.connectionSummary.set(connected === 0 ? 'Not connected' : `${connected}/2 connected`);
   }
 
   protected openNotification(notification: NotificationRecord, event?: MouseEvent): void {
