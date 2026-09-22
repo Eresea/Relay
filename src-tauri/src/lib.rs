@@ -59,6 +59,11 @@ pub fn run() {
                 .build(),
         );
 
+    #[cfg(mobile)]
+    {
+        builder = builder.plugin(tauri_plugin_notification::init());
+    }
+
     #[cfg(desktop)]
     {
         builder = builder

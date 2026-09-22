@@ -177,6 +177,9 @@ impl EventSink for tauri::AppHandle {
             log::error!("failed to persist notification: {error}");
         }
 
+        #[cfg(mobile)]
+        show_mobile_notification(self, &event);
+
         // The HUD window is created hidden and nothing else ever shows it, so
         // without this a notification renders into a window the user never
         // sees — the whole pipeline runs correctly and silently. Bring it on
@@ -190,6 +193,60 @@ impl EventSink for tauri::AppHandle {
         if let Err(error) = tauri::Emitter::emit(self, CHANNEL, &event) {
             log::error!("failed to emit an app event: {error}");
         }
+    }
+}
+
+#[cfg(mobile)]
+fn show_mobile_notification(app: &tauri::AppHandle, event: &AppEvent) {
+    use tauri_plugin_notification::NotificationExt;
+
+    let AppEvent::Notification {
+        notification_id,
+        title,
+        detail,
+        actions,
+        ..
+    } = event
+    else {
+        return;
+    };
+
+    let mut builder = app
+        .notification()
+        .builder()
+        .id(native_notification_id(notification_id))
+        .channel_id("relay-events")
+        .title(title)
+        .action_type_id("relay-notification")
+        .extra("notificationId", notification_id)
+        .auto_cancel();
+
+    if let Some(detail) = detail {
+        builder = builder.body(detail);
+    }
+    if let Some(url) = actions.iter().find_map(|action| match action {
+        NotificationAction::Open { url, .. } => Some(url),
+        NotificationAction::Cancel { .. } => None,
+    }) {
+        builder = builder.extra("openUrl", url);
+    }
+
+    if let Err(error) = builder.show() {
+        log::error!("failed to show mobile notification: {error}");
+    }
+}
+
+#[cfg(mobile)]
+fn native_notification_id(value: &str) -> i32 {
+    let mut hash = 0x811c9dc5u32;
+    for byte in value.bytes() {
+        hash = (hash ^ u32::from(byte)).wrapping_mul(0x01000193);
+    }
+    let id = (hash & 0x7fff_ffff) as i32;
+    if id == 0 {
+        1
+    } else {
+        id
     }
 }
 
@@ -274,5 +331,14 @@ mod tests {
             json,
             r#"{"type":"updateChanged","state":"downloading","currentVersion":"0.1.0","version":"0.2.0","downloadedBytes":50,"contentLength":100}"#
         );
+    }
+
+    #[cfg(mobile)]
+    #[test]
+    fn native_notification_ids_are_positive_and_stable() {
+        let first = native_notification_id("notification-1");
+        assert!(first > 0);
+        assert_eq!(first, native_notification_id("notification-1"));
+        assert_ne!(first, native_notification_id("notification-2"));
     }
 }
