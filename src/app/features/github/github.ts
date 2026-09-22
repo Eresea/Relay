@@ -157,7 +157,14 @@ function connectorErrorMessage(error: unknown): string {
                 <button type="button" class="primary" (click)="openVerification(auth)">
                   Open on GitHub
                 </button>
-                <button type="button" class="link" (click)="copyCode(auth)">Copy code</button>
+                <button
+                  type="button"
+                  class="link"
+                  (click)="copyCode(auth)"
+                  [attr.aria-label]="codeCopied() ? 'Copied user code' : 'Copy user code'"
+                >
+                  {{ codeCopied() ? 'Copied' : 'Copy code' }}
+                </button>
               </div>
               <button type="button" class="link" (click)="cancelConnect(auth)">Cancel</button>
               @if (error()) {
@@ -605,6 +612,9 @@ export class Github {
   protected readonly muted = signal<string[]>([]);
   protected readonly newMuteKey = signal('');
 
+  protected readonly codeCopied = signal(false);
+  private copyCodeTimeout: ReturnType<typeof setTimeout> | null = null;
+
   constructor() {
     void this.refreshStatus();
 
@@ -637,7 +647,10 @@ export class Github {
         this.destroyRef.onDestroy(unlisten);
       });
 
-    this.destroyRef.onDestroy(() => this.stopConnectFallbackPoll());
+    this.destroyRef.onDestroy(() => {
+      this.stopConnectFallbackPoll();
+      if (this.copyCodeTimeout) clearTimeout(this.copyCodeTimeout);
+    });
   }
 
   private startConnectFallbackPoll(jobId: string): void {
@@ -742,6 +755,7 @@ export class Github {
   protected async connect(): Promise<void> {
     this.error.set('');
     this.blockedMessage = '';
+    this.codeCopied.set(false);
     this.busy.set(true);
     try {
       const auth = await this.tauri.githubConnectStart();
@@ -767,12 +781,25 @@ export class Github {
     void this.tauri.openUrl(auth.verificationUri);
   }
 
-  protected copyCode(auth: DeviceAuthorization): void {
-    void navigator.clipboard.writeText(auth.userCode);
+  protected async copyCode(auth: DeviceAuthorization): Promise<void> {
+    if (this.copyCodeTimeout) clearTimeout(this.copyCodeTimeout);
+    this.copyCodeTimeout = null;
+    this.codeCopied.set(false);
+    try {
+      await navigator.clipboard.writeText(auth.userCode);
+    } catch {
+      return;
+    }
+    this.codeCopied.set(true);
+    this.copyCodeTimeout = setTimeout(() => {
+      this.codeCopied.set(false);
+      this.copyCodeTimeout = null;
+    }, 2000);
   }
 
   protected async cancelConnect(auth: DeviceAuthorization): Promise<void> {
     this.stopConnectFallbackPoll();
+    this.codeCopied.set(false);
     await this.tauri.cancelJob(auth.jobId);
     this.deviceAuth.set(null);
     this.status.set('disconnected');
