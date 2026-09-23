@@ -327,6 +327,49 @@ export class TauriBridge {
     return (await this.invoke<string>('vault_export')) ?? '';
   }
 
+  async openCloudStatus(): Promise<OpenCloudStatus> {
+    return (
+      (await this.invoke<OpenCloudStatus>('opencloud_status')) ?? {
+        connected: false,
+        webdavUrl: null,
+        username: null,
+      }
+    );
+  }
+
+  async openCloudConnect(webdavUrl: string, username: string, appToken: string): Promise<void> {
+    await this.invoke('opencloud_connect', { webdavUrl, username, appToken });
+  }
+
+  async openCloudDisconnect(): Promise<void> {
+    await this.invoke('opencloud_disconnect');
+  }
+
+  async openCloudList(path: string): Promise<readonly OpenCloudItem[]> {
+    return (await this.invoke<OpenCloudItem[]>('opencloud_list', { path })) ?? [];
+  }
+
+  async openCloudCreateFolder(path: string, name: string): Promise<void> {
+    await this.invoke('opencloud_create_folder', { path, name });
+  }
+
+  async openCloudUpload(
+    path: string,
+    name: string,
+    mediaType: string,
+    contentBase64: string,
+  ): Promise<void> {
+    await this.invoke('opencloud_upload', { path, name, mediaType, contentBase64 });
+  }
+
+  async openCloudDelete(path: string): Promise<void> {
+    await this.invoke('opencloud_delete', { path });
+  }
+
+  async openCloudDownload(path: string): Promise<string> {
+    return (await this.invoke<string>('opencloud_download', { path })) ?? '';
+  }
+
   /** Whether a GitHub account is connected. Only reads the keychain. */
   async githubStatus(): Promise<GithubStatus> {
     return (
@@ -408,6 +451,21 @@ export interface MobileUpdate {
   readonly latestVersion: string;
   readonly apkUrl: string;
   readonly releaseUrl: string;
+}
+
+export interface OpenCloudStatus {
+  readonly connected: boolean;
+  readonly webdavUrl: string | null;
+  readonly username: string | null;
+}
+
+export interface OpenCloudItem {
+  readonly path: string;
+  readonly name: string;
+  readonly isFolder: boolean;
+  readonly size: number;
+  readonly modified: string | null;
+  readonly mediaType: string | null;
 }
 
 /** A local Git clone discovered by the bounded workspace scanner. */

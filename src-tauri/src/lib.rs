@@ -8,6 +8,7 @@ mod jobs;
 #[allow(dead_code)]
 mod mobile_updates;
 mod notifications;
+mod opencloud;
 mod overlay;
 #[cfg(desktop)]
 mod shortcuts;
@@ -89,6 +90,14 @@ pub fn run() {
                 commands::vault_reveal_password,
                 commands::vault_delete_entry,
                 commands::vault_export,
+                opencloud::opencloud_connect,
+                opencloud::opencloud_disconnect,
+                opencloud::opencloud_status,
+                opencloud::opencloud_list,
+                opencloud::opencloud_create_folder,
+                opencloud::opencloud_upload,
+                opencloud::opencloud_delete,
+                opencloud::opencloud_download,
                 commands::github_status,
                 commands::github_repositories,
                 commands::github_pull_requests,
@@ -132,6 +141,14 @@ pub fn run() {
             commands::vault_reveal_password,
             commands::vault_delete_entry,
             commands::vault_export,
+            opencloud::opencloud_connect,
+            opencloud::opencloud_disconnect,
+            opencloud::opencloud_status,
+            opencloud::opencloud_list,
+            opencloud::opencloud_create_folder,
+            opencloud::opencloud_upload,
+            opencloud::opencloud_delete,
+            opencloud::opencloud_download,
             commands::github_status,
             commands::github_repositories,
             commands::github_pull_requests,

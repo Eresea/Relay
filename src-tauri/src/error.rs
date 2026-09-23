@@ -70,6 +70,9 @@ pub enum Error {
     #[error("could not access the system keychain: {0}")]
     TokenStore(String),
 
+    #[error("OpenCloud request failed: {0}")]
+    OpenCloud(String),
+
     #[error("the Gmail connector needs RELAY_GMAIL_CLIENT_ID set before it can connect")]
     GmailClientNotConfigured,
 
