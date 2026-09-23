@@ -106,6 +106,16 @@ pub enum Error {
     #[error("Gmail API request failed: {0}")]
     GmailApi(String),
 
+    #[cfg(any(mobile, test))]
+    #[allow(dead_code)]
+    #[error("mobile update version is invalid: {0}")]
+    MobileUpdateVersion(String),
+
+    #[cfg(any(mobile, test))]
+    #[allow(dead_code)]
+    #[error("the latest release does not contain an Android APK")]
+    MobileUpdateApkMissing,
+
     #[error("the stored Gmail history checkpoint has expired")]
     #[allow(
         dead_code,

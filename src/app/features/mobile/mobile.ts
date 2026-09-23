@@ -10,7 +10,7 @@ import {
 
 import { NotificationCenter } from '@core/notification-center';
 import type { NotificationRecord } from '@core/events';
-import { TauriBridge, type VaultStatus } from '@core/tauri';
+import { TauriBridge, type MobileUpdate, type VaultStatus } from '@core/tauri';
 import { Vault } from '@features/vault/vault';
 import { Icon } from '@shared/icon';
 import { MobileConnections } from './mobile-connections';
@@ -139,6 +139,24 @@ type MobileTab = 'dashboard' | 'notifications' | 'vault' | 'connections';
               <span class="summary-label">Connections</span>
             </button>
           </div>
+
+          @if (mobileUpdate(); as update) {
+            <section class="mobile-update">
+              <div>
+                <p class="eyebrow">Update available</p>
+                <h2>Relay {{ update.latestVersion }}</h2>
+                <p class="section-copy">A newer Android build is ready to install.</p>
+              </div>
+              <button
+                type="button"
+                class="text-button"
+                [disabled]="updateBusy()"
+                (click)="installUpdate(update)"
+              >
+                {{ updateBusy() ? 'Opening…' : 'Install' }}
+              </button>
+            </section>
+          }
 
           <section class="section">
             <div class="section-heading">
@@ -480,6 +498,22 @@ type MobileTab = 'dashboard' | 'notifications' | 'vault' | 'connections';
       border-color: var(--border-strong);
     }
 
+    .mobile-update {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: var(--space-4);
+      margin-block-start: var(--space-4);
+      padding: var(--space-4);
+      border: 1px solid var(--primary);
+      background: var(--tint-selected);
+      border-radius: var(--radius-lg);
+    }
+
+    .mobile-update h2 {
+      margin-block-start: var(--space-1);
+    }
+
     .summary-icon {
       display: grid;
       place-items: center;
@@ -735,6 +769,8 @@ export class Mobile {
   protected readonly recentNotifications = computed(() => this.notifications().slice(0, 4));
   protected readonly vaultStatus = signal<VaultStatus>({ exists: false, unlocked: false });
   protected readonly connectionSummary = signal('Not connected');
+  protected readonly mobileUpdate = signal<MobileUpdate | null>(null);
+  protected readonly updateBusy = signal(false);
   protected readonly tabTitle = computed(() =>
     this.tab() === 'dashboard'
       ? 'Your dashboard'
@@ -751,6 +787,7 @@ export class Mobile {
 
   constructor() {
     void this.refresh();
+    void this.checkForUpdate();
     void onBackButtonPress(({ canGoBack }) => {
       if (this.railOpen()) {
         this.closeRail();
@@ -773,6 +810,25 @@ export class Mobile {
     this.vaultStatus.set(vaultStatus);
     const connected = Number(githubStatus.connected) + Number(gmailStatus.connected);
     this.connectionSummary.set(connected === 0 ? 'Not connected' : `${connected}/2 connected`);
+  }
+
+  private async checkForUpdate(): Promise<void> {
+    if (!/Android/i.test(navigator.userAgent)) return;
+    try {
+      this.mobileUpdate.set(await this.tauri.mobileUpdateCheck());
+    } catch (error: unknown) {
+      console.warn('[relay] mobile update check failed', error);
+    }
+  }
+
+  protected async installUpdate(update: MobileUpdate): Promise<void> {
+    if (this.updateBusy()) return;
+    this.updateBusy.set(true);
+    try {
+      await this.tauri.openUrl(update.apkUrl);
+    } finally {
+      this.updateBusy.set(false);
+    }
   }
 
   protected openNotification(notification: NotificationRecord, event?: MouseEvent): void {

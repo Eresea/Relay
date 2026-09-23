@@ -17,6 +17,7 @@ and device testing. The release workflow expects these GitHub secrets:
 - `ANDROID_KEY_ALIAS` — upload key alias
 - `ANDROID_KEY_PASSWORD` — keystore/key password
 
-The first Play upload and Play Console registration remain manual. Android
-updates are delivered through Google Play; Relay's Tauri updater remains a
-desktop updater and is not used for APK/AAB updates.
+The first Play upload and Play Console registration remain manual. Outside
+Google Play, the mobile dashboard checks the latest GitHub release and opens
+its signed APK for Android's package installer. Android still requires the
+user's final install confirmation; Tauri's built-in updater remains desktop-only.

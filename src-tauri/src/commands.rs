@@ -27,6 +27,8 @@ use crate::github::{
 };
 use crate::gmail::{self, GmailSettings, GmailState, GmailStatus, HttpGoogleApi, OsKeyStore};
 use crate::jobs::{JobId, JobRegistry};
+#[cfg(mobile)]
+use crate::mobile_updates;
 use crate::notifications::NotificationRecord;
 use crate::overlay;
 #[cfg(desktop)]
@@ -333,6 +335,12 @@ pub fn notifications_mark_read(app: AppHandle, notification_ids: Vec<String>) ->
 #[tauri::command]
 pub fn notifications_clear(app: AppHandle) -> Result<()> {
     crate::notifications::clear(&app)
+}
+
+#[cfg(mobile)]
+#[tauri::command]
+pub async fn mobile_update_check() -> Result<Option<mobile_updates::MobileUpdate>> {
+    mobile_updates::check().await
 }
 
 /// Discovers a small, bounded set of local Git clones across mounted disks.
