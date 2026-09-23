@@ -3573,6 +3573,8 @@ dependencies = [
  "http",
  "keyring",
  "log",
+ "percent-encoding",
+ "quick-xml",
  "rand 0.8.8",
  "reqwest 0.12.28",
  "rusqlite",

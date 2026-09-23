@@ -36,6 +36,7 @@ const SALT_LEN: usize = 16;
 const NONCE_LEN: usize = 12;
 const KEY_LEN: usize = 32;
 const MIN_MASTER_PASSWORD_LEN: usize = 8;
+const VAULT_FILE_MAGIC: &[u8] = b"RLYENC1\0";
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct VaultEntry {
@@ -283,6 +284,50 @@ pub fn unlock(app: &AppHandle, state: &VaultState, master_password: &str) -> Res
 pub fn lock(state: &VaultState) -> Result<()> {
     *state.0.lock().unwrap() = None;
     Ok(())
+}
+
+pub fn ensure_unlocked(state: &VaultState) -> Result<()> {
+    if state.0.lock().unwrap().is_some() {
+        Ok(())
+    } else {
+        Err(Error::VaultLocked)
+    }
+}
+
+pub fn encrypt_file_content(state: &VaultState, content: &[u8]) -> Result<Vec<u8>> {
+    let guard = state.0.lock().unwrap();
+    let unlocked = guard.as_ref().ok_or(Error::VaultLocked)?;
+    let cipher = Aes256Gcm::new_from_slice(&unlocked.key).map_err(|_| Error::Crypto)?;
+    let mut nonce = [0u8; NONCE_LEN];
+    OsRng.fill_bytes(&mut nonce);
+    let ciphertext = cipher
+        .encrypt(Nonce::from_slice(&nonce), content)
+        .map_err(|_| Error::Crypto)?;
+    let mut encrypted = Vec::with_capacity(VAULT_FILE_MAGIC.len() + NONCE_LEN + ciphertext.len());
+    encrypted.extend_from_slice(VAULT_FILE_MAGIC);
+    encrypted.extend_from_slice(&nonce);
+    encrypted.extend_from_slice(&ciphertext);
+    Ok(encrypted)
+}
+
+pub fn decrypt_file_content(state: &VaultState, content: &[u8]) -> Result<Vec<u8>> {
+    let guard = state.0.lock().unwrap();
+    let unlocked = guard.as_ref().ok_or(Error::VaultLocked)?;
+    if !content.starts_with(VAULT_FILE_MAGIC) {
+        return Ok(content.to_vec());
+    }
+    let start = VAULT_FILE_MAGIC.len();
+    let nonce_end = start + NONCE_LEN;
+    let nonce = content
+        .get(start..nonce_end)
+        .ok_or_else(|| Error::VaultCorrupt("encrypted file header is incomplete".into()))?;
+    let ciphertext = content
+        .get(nonce_end..)
+        .ok_or_else(|| Error::VaultCorrupt("encrypted file data is incomplete".into()))?;
+    let cipher = Aes256Gcm::new_from_slice(&unlocked.key).map_err(|_| Error::Crypto)?;
+    cipher
+        .decrypt(Nonce::from_slice(nonce), ciphertext)
+        .map_err(|_| Error::Crypto)
 }
 
 pub fn add_entry(
