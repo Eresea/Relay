@@ -9,6 +9,11 @@ on:
         description: Existing version tag to rebuild
         required: true
         type: string
+      mobile_only:
+        description: Skip desktop builds and rebuild Android only
+        required: false
+        default: false
+        type: boolean
 
 permissions:
   contents: read
@@ -69,6 +74,7 @@ jobs:
   build:
     name: Build (${{ matrix.os }})
     needs: release
+    if: ${{ inputs.mobile_only != true }}
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -159,6 +165,8 @@ jobs:
           cache: npm
 
       - uses: android-actions/setup-android@v3
+        with:
+          packages: platform-tools
 
       - name: Install Android build dependencies
         shell: bash
