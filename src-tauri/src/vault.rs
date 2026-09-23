@@ -172,6 +172,18 @@ fn write_file(app: &AppHandle, file: &VaultFile) -> Result<()> {
     Ok(())
 }
 
+fn encode_sync_ciphertext(file: &VaultFile) -> Result<String> {
+    let raw = serde_json::to_vec(file).map_err(|e| Error::VaultCorrupt(e.to_string()))?;
+    Ok(BASE64.encode(raw))
+}
+
+/// Encodes the complete encrypted vault envelope in Nexus's opaque document
+/// format. The serialized envelope contains only salt, nonce, and ciphertext.
+pub fn sync_ciphertext(app: &AppHandle) -> Result<String> {
+    let file = read_file(app)?.ok_or(Error::VaultNotFound)?;
+    encode_sync_ciphertext(&file)
+}
+
 fn derive_key(master_password: &str, salt: &[u8; SALT_LEN]) -> Result<[u8; KEY_LEN]> {
     let mut key = [0u8; KEY_LEN];
     Argon2::default()
@@ -555,5 +567,37 @@ mod tests {
         let (nonce_a, _) = encrypt_entries(&key, &[]).unwrap();
         let (nonce_b, _) = encrypt_entries(&key, &[]).unwrap();
         assert_ne!(nonce_a, nonce_b);
+    }
+
+    #[test]
+    fn sync_ciphertext_is_the_encrypted_vault_file_not_plaintext() {
+        let password = "vault-secret-for-test";
+        let key = [7u8; KEY_LEN];
+        let entries = vec![VaultEntry {
+            id: "entry-1".into(),
+            label: "Example".into(),
+            username: "user@example.com".into(),
+            password: password.into(),
+            url: None,
+            notes: None,
+            created_at: 1,
+            updated_at: 1,
+        }];
+        let (nonce, ciphertext) = encrypt_entries(&key, &entries).unwrap();
+        let file = VaultFile {
+            version: 1,
+            salt: BASE64.encode([1u8; SALT_LEN]),
+            nonce,
+            ciphertext,
+        };
+
+        let encoded = encode_sync_ciphertext(&file).unwrap();
+        let raw = BASE64.decode(encoded).unwrap();
+        let serialized = String::from_utf8(raw.clone()).unwrap();
+        assert!(!serialized.contains(password));
+
+        let decoded: VaultFile = serde_json::from_slice(&raw).unwrap();
+        let decrypted = decrypt_entries(&key, &decoded.nonce, &decoded.ciphertext).unwrap();
+        assert_eq!(decrypted[0].password, password);
     }
 }

@@ -138,7 +138,7 @@ const RAIL_EXPANDED_SETTING_KEY = 'rail.expanded';
       justify-content: space-between;
       flex: none;
       block-size: var(--titlebar-height);
-      padding-inline-start: var(--space-4);
+      padding-inline-start: var(--space-3);
       border-block-end: 1px solid var(--border-subtle);
       background: var(--bg-sunken);
     }
