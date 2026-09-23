@@ -4,10 +4,10 @@ mod events;
 mod github;
 mod gmail;
 mod jobs;
-pub mod nexus_sync;
 #[cfg(any(mobile, test))]
 #[allow(dead_code)]
 mod mobile_updates;
+pub mod nexus_sync;
 mod notifications;
 mod opencloud;
 mod overlay;
