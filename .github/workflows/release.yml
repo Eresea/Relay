@@ -174,7 +174,6 @@ jobs:
           set -euo pipefail
           sdkmanager "platforms;android-36" "platform-tools" "build-tools;36.0.0" "ndk;${NDK_VERSION}"
           echo "NDK_HOME=${ANDROID_HOME}/ndk/${NDK_VERSION}" >> "$GITHUB_ENV"
-          yes | sdkmanager --licenses >/dev/null
 
       - run: rustup target add aarch64-linux-android armv7-linux-androideabi i686-linux-android x86_64-linux-android
       - run: npm ci
