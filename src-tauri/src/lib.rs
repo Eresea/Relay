@@ -4,6 +4,9 @@ mod events;
 mod github;
 mod gmail;
 mod jobs;
+#[cfg(any(mobile, test))]
+#[allow(dead_code)]
+mod mobile_updates;
 mod notifications;
 mod overlay;
 #[cfg(desktop)]
@@ -143,6 +146,7 @@ pub fn run() {
             commands::notifications_list,
             commands::notifications_mark_read,
             commands::notifications_clear,
+            commands::mobile_update_check,
             commands::scan_workspaces,
             commands::open_terminal,
             commands::project_action,

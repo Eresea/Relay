@@ -126,6 +126,10 @@ export class TauriBridge {
     await this.invoke('notifications_clear');
   }
 
+  async mobileUpdateCheck(): Promise<MobileUpdate | null> {
+    return this.invoke<MobileUpdate>('mobile_update_check');
+  }
+
   async updateStatus(): Promise<UpdateSnapshot> {
     return (
       (await this.invoke<UpdateSnapshot>('update_status')) ?? {
@@ -397,6 +401,13 @@ export interface CoreCommandMeta {
 export interface VaultStatus {
   readonly exists: boolean;
   readonly unlocked: boolean;
+}
+
+export interface MobileUpdate {
+  readonly currentVersion: string;
+  readonly latestVersion: string;
+  readonly apkUrl: string;
+  readonly releaseUrl: string;
 }
 
 /** A local Git clone discovered by the bounded workspace scanner. */
