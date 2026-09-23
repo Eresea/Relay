@@ -1,4 +1,13 @@
-import { ChangeDetectionStrategy, Component, input, output, viewChild } from '@angular/core';
+import {
+  ChangeDetectionStrategy,
+  Component,
+  DestroyRef,
+  inject,
+  input,
+  output,
+  signal,
+  viewChild,
+} from '@angular/core';
 
 import { AppPopover, PopoverContent, PopoverTrigger } from '@shared/app-popover';
 import { Icon } from '@shared/icon';
@@ -45,8 +54,15 @@ export type ProjectAction =
             <button type="button" role="menuitem" (click)="select({ id: 'terminal' })">
               Open terminal
             </button>
-            <button type="button" role="menuitem" (click)="select({ id: 'copyPath' })">
-              Copy path
+            <button
+              type="button"
+              role="menuitem"
+              (click)="select({ id: 'copyPath' })"
+              [attr.aria-label]="
+                copiedAction() === 'copyPath' ? 'Path copied to clipboard' : 'Copy path'
+              "
+            >
+              {{ copiedAction() === 'copyPath' ? 'Path copied!' : 'Copy path' }}
             </button>
           }
           @if (project().githubUrl) {
@@ -58,8 +74,15 @@ export type ProjectAction =
                 Pull requests
               </button>
             }
-            <button type="button" role="menuitem" (click)="select({ id: 'copyUrl' })">
-              Copy GitHub URL
+            <button
+              type="button"
+              role="menuitem"
+              (click)="select({ id: 'copyUrl' })"
+              [attr.aria-label]="
+                copiedAction() === 'copyUrl' ? 'GitHub URL copied to clipboard' : 'Copy GitHub URL'
+              "
+            >
+              {{ copiedAction() === 'copyUrl' ? 'URL copied!' : 'Copy GitHub URL' }}
             </button>
           }
         </section>
@@ -179,8 +202,29 @@ export class ProjectActionsMenu {
   readonly project = input.required<ProjectSummary>();
   readonly action = output<ProjectAction>();
   private readonly popover = viewChild.required(AppPopover);
+  private readonly destroyRef = inject(DestroyRef);
+
+  protected readonly copiedAction = signal<'copyPath' | 'copyUrl' | null>(null);
+  private copyTimeout: ReturnType<typeof setTimeout> | null = null;
+
+  constructor() {
+    this.destroyRef.onDestroy(() => {
+      if (this.copyTimeout) clearTimeout(this.copyTimeout);
+    });
+  }
 
   protected select(action: ProjectAction): void {
+    if (action.id === 'copyPath' || action.id === 'copyUrl') {
+      this.action.emit(action);
+      if (this.copyTimeout) clearTimeout(this.copyTimeout);
+      this.copiedAction.set(action.id);
+      this.copyTimeout = setTimeout(() => {
+        this.copiedAction.set(null);
+        this.popover().close();
+      }, 1500);
+      return;
+    }
+
     this.action.emit(action);
     this.popover().close();
   }
