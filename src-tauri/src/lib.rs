@@ -5,6 +5,9 @@ mod github;
 mod gmail;
 mod jobs;
 pub mod nexus_sync;
+#[cfg(any(mobile, test))]
+#[allow(dead_code)]
+mod mobile_updates;
 mod notifications;
 mod opencloud;
 mod overlay;
@@ -60,6 +63,11 @@ pub fn run() {
                 .level(log::LevelFilter::Info)
                 .build(),
         );
+
+    #[cfg(mobile)]
+    {
+        builder = builder.plugin(tauri_plugin_notification::init());
+    }
 
     #[cfg(desktop)]
     {
@@ -156,6 +164,7 @@ pub fn run() {
             commands::notifications_list,
             commands::notifications_mark_read,
             commands::notifications_clear,
+            commands::mobile_update_check,
             commands::scan_workspaces,
             commands::open_terminal,
             commands::project_action,
