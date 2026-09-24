@@ -1149,8 +1149,8 @@ export class Runtime implements OnDestroy {
     }
     if (this.nexusHealthState() === 'stale' && observation) {
       const result = observation.ready
-        ? `Last readiness response was ready (HTTP ${observation.statusCode})`
-        : `Last readiness response was not ready (HTTP ${observation.statusCode})`;
+        ? `Last probe confirmed readiness (HTTP ${observation.statusCode})`
+        : `Last probe did not confirm readiness (HTTP ${observation.statusCode})`;
       const reason = this.nexusHealthError()
         ? `Latest check failed: ${this.nexusHealthError()}`
         : 'No successful refresh arrived within the freshness window.';
@@ -1162,7 +1162,7 @@ export class Runtime implements OnDestroy {
     if (observation) {
       const readiness = observation.ready
         ? 'Nexus HTTP and PostgreSQL readiness are confirmed from this Relay client.'
-        : 'Nexus reports that it is not ready.';
+        : 'This response did not confirm Nexus readiness.';
       return `HTTP ${observation.statusCode} · checked ${this.checkedAtLabel(observation.checkedAt)} (${this.checkedAgeLabel(observation.checkedAt)}) · ${readiness} This does not prove Leaf-to-Nexus connectivity.`;
     }
     return 'No readiness observation yet.';

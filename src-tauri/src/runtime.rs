@@ -442,14 +442,18 @@ pub async fn runtime_nexus_readiness() -> Result<NexusReadinessObservation> {
         .map_err(|_| Error::NexusReadinessRequestFailed)?;
     let status = response.status();
     let status_code = status.as_u16();
-    let body = response
-        .json::<NexusReadinessResponse>()
-        .await
-        .map_err(|_| Error::NexusReadinessResponseInvalid)?;
-    let ready = match (status.is_success(), body.status.as_str()) {
-        (true, "ready") => true,
-        (_, "not_ready") => false,
-        _ => return Err(Error::NexusReadinessResponseInvalid),
+    let ready = if status.is_success() {
+        let body = response
+            .json::<NexusReadinessResponse>()
+            .await
+            .map_err(|_| Error::NexusReadinessResponseInvalid)?;
+        match body.status.as_str() {
+            "ready" => true,
+            "not_ready" => false,
+            _ => return Err(Error::NexusReadinessResponseInvalid),
+        }
+    } else {
+        false
     };
 
     Ok(NexusReadinessObservation {

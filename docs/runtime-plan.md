@@ -110,9 +110,9 @@ Nexus API and PostgreSQL readiness from the Relay client, not from Leaf's
 network path. A failed refresh keeps the last successful response visibly stale
 instead of green. A successful observation also becomes stale after 90 seconds
 without a newer success, so a suspended or stalled poll loop cannot leave an
-old green state indefinitely. A non-success Leaf HTTP response is a current
-Not ready observation; a transport failure keeps the last observation stale,
-or Unknown when none exists.
+old green state indefinitely. A non-success HTTP response from either direct
+probe is a current Not ready observation; transport or invalid-payload
+failures keep the last observation stale, or Unknown when none exists.
 
 Polling happens only while Runtime is open and the Relay window is visible in
 the first release; returning to a visible window triggers an immediate refresh.
