@@ -46,6 +46,8 @@ later phase.
 The overview should show:
 
 - Overall state and active alert/incident count.
+- Until an alert source is mapped, keep the header rollup limited to direct
+  probe states; do not imply that Relay knows the active incident count.
 - One row per component, with an optional column per environment or region.
 - A clear state, one useful current number, and the observation time in each
   cell. Example: `Degraded · 2/3 instances · 1.8% errors · updated 12s ago`.

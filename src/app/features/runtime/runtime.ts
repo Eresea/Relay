@@ -56,13 +56,7 @@ const RUNTIME_STATUS_STALE_AFTER_MS = 90_000;
             <h2 id="overview-title">Leaf · Production</h2>
             <p>Direct production probes</p>
           </div>
-          <span class="overview-updated">
-            @if (leafHealth(); as observation) {
-              Leaf API last success {{ checkedAtLabel(observation.checkedAt) }}
-            } @else {
-              No successful Leaf API check yet
-            }
-          </span>
+          <span class="overview-updated">{{ probeSummary() }}</span>
         </div>
         <div class="status-grid-scroll">
           <table class="status-grid">
@@ -1102,6 +1096,15 @@ export class Runtime implements OnDestroy {
       case 'unavailable':
         return 'Unavailable';
     }
+  }
+
+  protected probeSummary(): string {
+    const states = [this.leafHealthState(), this.nexusHealthState()];
+    const responding = states.filter((state) => state === 'reachable' || state === 'ready').length;
+    const notReady = states.filter((state) => state === 'not-ready').length;
+    const stale = states.filter((state) => state === 'stale').length;
+    const unknown = states.length - responding - notReady - stale;
+    return `${responding} responding · ${notReady} not ready · ${stale} stale · ${unknown} unknown`;
   }
 
   protected nexusHealthDetail(): string {
