@@ -97,7 +97,9 @@ only; they are not Leaf health signals. Leaf already exposes an unauthenticated
 `GET /api/version/health`; Relay checks this every 30 seconds while the Runtime
 view is mounted. It only proves the endpoint returned its healthy response, not
 database readiness, request performance, or Nexus health. A failed refresh
-keeps the last successful response visibly stale instead of green.
+keeps the last successful response visibly stale instead of green. A successful
+observation also becomes stale after 90 seconds without a newer success, so a
+suspended or stalled poll loop cannot leave an old green state indefinitely.
 
 Polling happens only while Runtime is open in the first release. Keep the last
 successful observation and its timestamp so a failed refresh can show stale

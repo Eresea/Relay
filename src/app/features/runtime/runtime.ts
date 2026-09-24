@@ -10,6 +10,9 @@ import {
 } from '@core/tauri';
 import { Icon } from '@shared/icon';
 
+const LEAF_HEALTH_POLL_INTERVAL_MS = 30_000;
+const LEAF_HEALTH_STALE_AFTER_MS = 90_000;
+
 @Component({
   selector: 'rl-runtime',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -860,7 +863,13 @@ export class Runtime implements OnDestroy {
     void this.restore();
     if (this.tauri.available) {
       void this.refreshLeafHealth();
-      this.leafHealthTimer = setInterval(() => void this.refreshLeafHealth(), 30_000);
+      this.leafHealthTimer = setInterval(() => {
+        const observation = this.leafHealth();
+        if (observation && Date.now() - observation.checkedAt >= LEAF_HEALTH_STALE_AFTER_MS) {
+          this.leafHealthState.set('stale');
+        }
+        void this.refreshLeafHealth();
+      }, LEAF_HEALTH_POLL_INTERVAL_MS);
     } else {
       this.leafHealthState.set('unavailable');
       this.leafHealthTimer = null;
@@ -956,7 +965,11 @@ export class Runtime implements OnDestroy {
       return 'Checking Leaf’s HTTP liveness endpoint…';
     }
     if (this.leafHealthState() === 'stale' && observation) {
-      return `Last successful response HTTP ${observation.statusCode} at ${this.checkedAtLabel(observation.checkedAt)}. Latest check failed: ${this.leafHealthError()}`;
+      const age = this.checkedAgeLabel(observation.checkedAt);
+      const reason = this.leafHealthError()
+        ? `Latest check failed: ${this.leafHealthError()}`
+        : 'No successful refresh arrived within the freshness window.';
+      return `Last successful response HTTP ${observation.statusCode} at ${this.checkedAtLabel(observation.checkedAt)} (${age}). ${reason}`;
     }
     if (this.leafHealthState() === 'unknown') {
       return `No successful liveness response yet. ${this.leafHealthError()}`;
@@ -969,6 +982,11 @@ export class Runtime implements OnDestroy {
 
   protected checkedAtLabel(timestamp: number): string {
     return new Date(timestamp).toLocaleTimeString();
+  }
+
+  private checkedAgeLabel(timestamp: number): string {
+    const seconds = Math.max(0, Math.floor((Date.now() - timestamp) / 1000));
+    return seconds < 60 ? `${seconds}s ago` : `${Math.floor(seconds / 60)}m ago`;
   }
 
   protected async saveSettings(): Promise<void> {
