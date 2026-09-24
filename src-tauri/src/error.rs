@@ -130,6 +130,14 @@ pub enum Error {
     #[error("Leaf API health endpoint returned an unexpected response")]
     LeafHealthResponseInvalid,
 
+    #[cfg(desktop)]
+    #[error("could not reach the Nexus readiness endpoint")]
+    NexusReadinessRequestFailed,
+
+    #[cfg(desktop)]
+    #[error("Nexus readiness endpoint returned an unexpected response")]
+    NexusReadinessResponseInvalid,
+
     #[error("OpenCloud request failed: {0}")]
     OpenCloud(String),
 

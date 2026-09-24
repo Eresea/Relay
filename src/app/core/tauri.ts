@@ -226,6 +226,10 @@ export class TauriBridge {
     return this.invoke<LeafHealthObservation>('runtime_leaf_health');
   }
 
+  async runtimeNexusReadiness(): Promise<NexusReadinessObservation | null> {
+    return this.invoke<NexusReadinessObservation>('runtime_nexus_readiness');
+  }
+
   private settingsStore: LazyStore | null = null;
 
   /**
@@ -506,6 +510,12 @@ export interface LeafHealthObservation {
   readonly checkedAt: number;
   readonly serverTime: string;
   readonly statusCode: number;
+}
+
+export interface NexusReadinessObservation {
+  readonly checkedAt: number;
+  readonly statusCode: number;
+  readonly ready: boolean;
 }
 
 /** What the palette displays for a core-contributed row. Mirrors `CoreCommandMeta`. */

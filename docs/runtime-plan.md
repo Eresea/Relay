@@ -49,7 +49,8 @@ The overview should show:
 - One row per component, with an optional column per environment or region.
 - A clear state, one useful current number, and the observation time in each
   cell. Example: `Degraded · 2/3 instances · 1.8% errors · updated 12s ago`.
-- A Nexus dependency indicator when a reliable signal exists.
+- A standalone Nexus readiness signal with its probe location. Label it as a
+  Leaf dependency only when a Leaf-facing signal exists.
 - A deep link to the relevant Grafana dashboard or panel.
 
 The detail view can add a short time range, a few agreed metrics, deployment
@@ -96,10 +97,13 @@ coverage before adding metric queries. These checks confirm access to Grafana
 only; they are not Leaf health signals. Leaf already exposes an unauthenticated
 `GET /api/version/health`; Relay checks this every 30 seconds while the Runtime
 view is mounted. It only proves the endpoint returned its healthy response, not
-database readiness, request performance, or Nexus health. A failed refresh
-keeps the last successful response visibly stale instead of green. A successful
-observation also becomes stale after 90 seconds without a newer success, so a
-suspended or stalled poll loop cannot leave an old green state indefinitely.
+database readiness, request performance, or Leaf-to-Nexus connectivity. Relay
+also checks Nexus's public `/readyz` endpoint every 30 seconds; that confirms
+Nexus API and PostgreSQL readiness from the Relay client, not from Leaf's
+network path. A failed refresh keeps the last successful response visibly stale
+instead of green. A successful observation also becomes stale after 90 seconds
+without a newer success, so a suspended or stalled poll loop cannot leave an
+old green state indefinitely.
 
 Polling happens only while Runtime is open in the first release. Keep the last
 successful observation and its timestamp so a failed refresh can show stale
@@ -204,7 +208,8 @@ Keep product-specific meaning and thresholds close to each product's owner.
 
 - Leaf production has a readable current state, selected metric values, units,
   and observation time.
-- Nexus appears only when there is a dependable Leaf-facing health signal.
+- Nexus readiness is labeled as a direct Relay-client probe; it is not presented
+  as proof of Leaf-to-Nexus connectivity.
 - Missing, stale, failed, and maintenance data cannot appear as healthy.
 - A user can reach the existing Grafana view from the relevant row.
 - Grafana credentials stay out of the Angular UI, settings JSON, and logs.

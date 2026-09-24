@@ -16,6 +16,7 @@ const DASHBOARD_LIMIT: usize = 50;
 const PANEL_LIMIT: usize = 200;
 const PANEL_DEPTH_LIMIT: usize = 8;
 const LEAF_HEALTH_URL: &str = "https://leaf.eresea.net/api/version/health";
+const NEXUS_READINESS_URL: &str = "https://nexus.eresea.net/readyz";
 
 #[derive(Debug, Default, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -102,11 +103,24 @@ pub struct LeafHealthObservation {
     pub status_code: u16,
 }
 
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct NexusReadinessObservation {
+    pub checked_at: u64,
+    pub status_code: u16,
+    pub ready: bool,
+}
+
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct LeafHealthResponse {
     status: String,
     timestamp: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct NexusReadinessResponse {
+    status: String,
 }
 
 struct GrafanaAccess {
@@ -405,6 +419,40 @@ pub async fn runtime_leaf_health() -> Result<LeafHealthObservation> {
             .as_millis() as u64,
         server_time: body.timestamp,
         status_code,
+    })
+}
+
+#[tauri::command]
+pub async fn runtime_nexus_readiness() -> Result<NexusReadinessObservation> {
+    let client = reqwest::Client::builder()
+        .timeout(Duration::from_secs(5))
+        .redirect(reqwest::redirect::Policy::none())
+        .build()
+        .map_err(|_| Error::NexusReadinessRequestFailed)?;
+    let response = client
+        .get(NEXUS_READINESS_URL)
+        .send()
+        .await
+        .map_err(|_| Error::NexusReadinessRequestFailed)?;
+    let status = response.status();
+    let status_code = status.as_u16();
+    let body = response
+        .json::<NexusReadinessResponse>()
+        .await
+        .map_err(|_| Error::NexusReadinessResponseInvalid)?;
+    let ready = match (status.is_success(), body.status.as_str()) {
+        (true, "ready") => true,
+        (_, "not_ready") => false,
+        _ => return Err(Error::NexusReadinessResponseInvalid),
+    };
+
+    Ok(NexusReadinessObservation {
+        checked_at: SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_millis() as u64,
+        status_code,
+        ready,
     })
 }
 

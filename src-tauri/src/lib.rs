@@ -124,6 +124,7 @@ pub fn run() {
                 runtime::runtime_grafana_check,
                 runtime::runtime_grafana_dashboard_panels,
                 runtime::runtime_leaf_health,
+                runtime::runtime_nexus_readiness,
                 commands::update_status,
                 commands::update_check,
                 commands::update_download,

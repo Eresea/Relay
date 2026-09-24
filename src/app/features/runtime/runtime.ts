@@ -7,11 +7,12 @@ import {
   type RuntimeGrafanaDashboard,
   type RuntimeGrafanaSettings,
   type RuntimeGrafanaPanelInventory,
+  type NexusReadinessObservation,
 } from '@core/tauri';
 import { Icon } from '@shared/icon';
 
-const LEAF_HEALTH_POLL_INTERVAL_MS = 30_000;
-const LEAF_HEALTH_STALE_AFTER_MS = 90_000;
+const RUNTIME_STATUS_POLL_INTERVAL_MS = 30_000;
+const RUNTIME_STATUS_STALE_AFTER_MS = 90_000;
 
 @Component({
   selector: 'rl-runtime',
@@ -23,16 +24,20 @@ const LEAF_HEALTH_STALE_AFTER_MS = 90_000;
         <div>
           <p class="u-caption">Operations</p>
           <h1 id="runtime-title">Runtime</h1>
-          <p class="page-description">Service status for Leaf and its dependencies.</p>
+          <p class="page-description">Leaf production status and a direct Nexus readiness check.</p>
         </div>
         <div class="page-actions">
           <button
             type="button"
             class="secondary-button"
-            [disabled]="leafRefreshing() || leafHealthState() === 'unavailable'"
-            (click)="refreshLeafHealth()"
+            [disabled]="
+              leafRefreshing() ||
+              nexusRefreshing() ||
+              (leafHealthState() === 'unavailable' && nexusHealthState() === 'unavailable')
+            "
+            (click)="refreshRuntimeStatus()"
           >
-            {{ leafRefreshing() ? 'Refreshing…' : 'Refresh status' }}
+            {{ leafRefreshing() || nexusRefreshing() ? 'Refreshing…' : 'Refresh status' }}
           </button>
           <button
             type="button"
@@ -53,9 +58,9 @@ const LEAF_HEALTH_STALE_AFTER_MS = 90_000;
           </div>
           <span class="overview-updated">
             @if (leafHealth(); as observation) {
-              Last success {{ checkedAtLabel(observation.checkedAt) }}
+              Leaf API last success {{ checkedAtLabel(observation.checkedAt) }}
             } @else {
-              No successful checks yet
+              No successful Leaf API check yet
             }
           </span>
         </div>
@@ -92,14 +97,23 @@ const LEAF_HEALTH_STALE_AFTER_MS = 90_000;
               </tr>
               <tr>
                 <th scope="row">
-                  <span>Nexus</span>
-                  <small>Leaf upstream dependency</small>
+                  <span>Nexus API</span>
+                  <small>Public API and database readiness</small>
                 </th>
                 <td>
                   <div class="signal-cell">
                     <span class="u-sr-only">Production status:</span>
-                    <span class="state unknown">Unknown</span>
-                    <p>No Leaf-facing health signal is configured.</p>
+                    <span
+                      class="state"
+                      [class.operational]="nexusHealthState() === 'ready'"
+                      [class.stale]="nexusHealthState() === 'stale'"
+                      [style.color]="
+                        nexusHealthState() === 'not-ready' ? 'var(--danger-ink)' : null
+                      "
+                    >
+                      {{ nexusHealthLabel() }}
+                    </span>
+                    <p role="status">{{ nexusHealthDetail() }}</p>
                   </div>
                 </td>
               </tr>
@@ -114,7 +128,8 @@ const LEAF_HEALTH_STALE_AFTER_MS = 90_000;
           <h2 id="setup-title">Runtime signal coverage is partial</h2>
           <p>
             Leaf HTTP liveness is checked directly. It does not validate application dependencies;
-            Grafana metrics and Nexus health remain unknown until their signals are mapped.
+            Nexus readiness is checked from this Relay client and does not prove Leaf can reach it.
+            Grafana metrics remain unmapped until the datasource is confirmed.
           </p>
         </div>
       </section>
@@ -833,7 +848,7 @@ const LEAF_HEALTH_STALE_AFTER_MS = 90_000;
 })
 export class Runtime implements OnDestroy {
   private readonly tauri = inject(TauriBridge);
-  private readonly leafHealthTimer: ReturnType<typeof setInterval> | null;
+  private readonly runtimeHealthTimer: ReturnType<typeof setInterval> | null;
 
   protected readonly grafanaUrl = signal('');
   protected readonly dashboardUrl = signal('');
@@ -857,27 +872,44 @@ export class Runtime implements OnDestroy {
   >('checking');
   protected readonly leafHealthError = signal('');
   protected readonly leafRefreshing = signal(false);
+  protected readonly nexusHealth = signal<NexusReadinessObservation | null>(null);
+  protected readonly nexusHealthState = signal<
+    'checking' | 'ready' | 'not-ready' | 'stale' | 'unknown' | 'unavailable'
+  >('checking');
+  protected readonly nexusHealthError = signal('');
+  protected readonly nexusRefreshing = signal(false);
   protected readonly error = signal('');
   protected readonly notice = signal('');
   constructor() {
     void this.restore();
     if (this.tauri.available) {
-      void this.refreshLeafHealth();
-      this.leafHealthTimer = setInterval(() => {
-        const observation = this.leafHealth();
-        if (observation && Date.now() - observation.checkedAt >= LEAF_HEALTH_STALE_AFTER_MS) {
+      void this.refreshRuntimeStatus();
+      this.runtimeHealthTimer = setInterval(() => {
+        const leafObservation = this.leafHealth();
+        if (
+          leafObservation &&
+          Date.now() - leafObservation.checkedAt >= RUNTIME_STATUS_STALE_AFTER_MS
+        ) {
           this.leafHealthState.set('stale');
         }
-        void this.refreshLeafHealth();
-      }, LEAF_HEALTH_POLL_INTERVAL_MS);
+        const nexusObservation = this.nexusHealth();
+        if (
+          nexusObservation &&
+          Date.now() - nexusObservation.checkedAt >= RUNTIME_STATUS_STALE_AFTER_MS
+        ) {
+          this.nexusHealthState.set('stale');
+        }
+        void this.refreshRuntimeStatus();
+      }, RUNTIME_STATUS_POLL_INTERVAL_MS);
     } else {
       this.leafHealthState.set('unavailable');
-      this.leafHealthTimer = null;
+      this.nexusHealthState.set('unavailable');
+      this.runtimeHealthTimer = null;
     }
   }
 
   ngOnDestroy(): void {
-    if (this.leafHealthTimer !== null) clearInterval(this.leafHealthTimer);
+    if (this.runtimeHealthTimer !== null) clearInterval(this.runtimeHealthTimer);
   }
 
   private async restore(): Promise<void> {
@@ -941,6 +973,30 @@ export class Runtime implements OnDestroy {
     }
   }
 
+  protected async refreshRuntimeStatus(): Promise<void> {
+    await Promise.all([this.refreshLeafHealth(), this.refreshNexusReadiness()]);
+  }
+
+  protected async refreshNexusReadiness(): Promise<void> {
+    if (!this.tauri.available || this.nexusRefreshing()) return;
+
+    this.nexusRefreshing.set(true);
+    try {
+      const observation = await this.tauri.runtimeNexusReadiness();
+      if (!observation) throw new Error('No readiness observation returned.');
+      this.nexusHealth.set(observation);
+      this.nexusHealthError.set('');
+      this.nexusHealthState.set(observation.ready ? 'ready' : 'not-ready');
+    } catch (error: unknown) {
+      this.nexusHealthError.set(
+        typeof error === 'string' ? error : 'Could not confirm Nexus readiness.',
+      );
+      this.nexusHealthState.set(this.nexusHealth() ? 'stale' : 'unknown');
+    } finally {
+      this.nexusRefreshing.set(false);
+    }
+  }
+
   protected leafHealthLabel(): string {
     switch (this.leafHealthState()) {
       case 'checking':
@@ -978,6 +1034,52 @@ export class Runtime implements OnDestroy {
       return `HTTP ${observation.statusCode} · checked ${this.checkedAtLabel(observation.checkedAt)} · liveness only; database and Nexus are not checked.`;
     }
     return 'No liveness observation yet.';
+  }
+
+  protected nexusHealthLabel(): string {
+    switch (this.nexusHealthState()) {
+      case 'checking':
+        return 'Checking';
+      case 'ready':
+        return 'Ready';
+      case 'not-ready':
+        return 'Not ready';
+      case 'stale':
+        return 'Stale';
+      case 'unknown':
+        return 'Unknown';
+      case 'unavailable':
+        return 'Unavailable';
+    }
+  }
+
+  protected nexusHealthDetail(): string {
+    const observation = this.nexusHealth();
+    if (this.nexusHealthState() === 'unavailable') {
+      return 'Live checks run in the Relay desktop app.';
+    }
+    if (this.nexusHealthState() === 'checking' && !observation) {
+      return 'Checking Nexus HTTP and database readiness from Relay…';
+    }
+    if (this.nexusHealthState() === 'stale' && observation) {
+      const result = observation.ready
+        ? `Last readiness response was ready (HTTP ${observation.statusCode})`
+        : `Last readiness response was not ready (HTTP ${observation.statusCode})`;
+      const reason = this.nexusHealthError()
+        ? `Latest check failed: ${this.nexusHealthError()}`
+        : 'No successful refresh arrived within the freshness window.';
+      return `${result} at ${this.checkedAtLabel(observation.checkedAt)} (${this.checkedAgeLabel(observation.checkedAt)}). ${reason} The probe runs from this Relay client; it does not prove Leaf-to-Nexus connectivity.`;
+    }
+    if (this.nexusHealthState() === 'unknown') {
+      return `No successful readiness response yet. ${this.nexusHealthError()}`;
+    }
+    if (observation) {
+      const readiness = observation.ready
+        ? 'Nexus HTTP and PostgreSQL readiness are confirmed from this Relay client.'
+        : 'Nexus reports that it is not ready.';
+      return `HTTP ${observation.statusCode} · checked ${this.checkedAtLabel(observation.checkedAt)} · ${readiness} This does not prove Leaf-to-Nexus connectivity.`;
+    }
+    return 'No readiness observation yet.';
   }
 
   protected checkedAtLabel(timestamp: number): string {
