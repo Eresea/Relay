@@ -124,7 +124,7 @@ const POPOVER_CLOSE_DELAY_MS = 200;
       block-size: 6px;
       flex: none;
       border-radius: var(--radius-pill);
-      background: var(--status-idle);
+      background: var(--status-done);
     }
 
     [data-state='checking'] .dot,

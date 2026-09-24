@@ -181,7 +181,7 @@ fn summary(path: &Path) -> WorkspaceSummary {
 }
 
 fn run_command<const N: usize>(path: &Path, program: &str, args: [&str; N]) -> Result<()> {
-    let status = Command::new(program)
+    let status = hidden_command(program)
         .current_dir(path)
         .args(args)
         .status()?;
@@ -198,7 +198,7 @@ fn run_command<const N: usize>(path: &Path, program: &str, args: [&str; N]) -> R
 }
 
 fn git_lines(path: &Path, args: &[&str]) -> Vec<String> {
-    let Ok(output) = Command::new("git").current_dir(path).args(args).output() else {
+    let Ok(output) = hidden_command("git").current_dir(path).args(args).output() else {
         return Vec::new();
     };
     if !output.status.success() {
@@ -210,6 +210,16 @@ fn git_lines(path: &Path, args: &[&str]) -> Vec<String> {
         .filter(|line| !line.is_empty())
         .map(str::to_owned)
         .collect()
+}
+
+fn hidden_command(program: &str) -> Command {
+    let mut command = Command::new(program);
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        command.creation_flags(0x08000000); // CREATE_NO_WINDOW
+    }
+    command
 }
 
 fn current_branch(path: &Path) -> Option<String> {
