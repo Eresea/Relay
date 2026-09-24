@@ -1135,8 +1135,19 @@ export class Runtime implements OnDestroy {
     const responding = states.filter((state) => state === 'reachable' || state === 'ready').length;
     const notReady = states.filter((state) => state === 'not-ready').length;
     const stale = states.filter((state) => state === 'stale').length;
-    const unknown = states.length - responding - notReady - stale;
-    return `${responding} responding · ${notReady} not ready · ${stale} stale · ${unknown} unknown`;
+    const checking = states.filter((state) => state === 'checking').length;
+    const unknown = states.filter((state) => state === 'unknown').length;
+    const unavailable = states.filter((state) => state === 'unavailable').length;
+    return [
+      responding && `${responding} responding`,
+      notReady && `${notReady} not ready`,
+      stale && `${stale} stale`,
+      checking && `${checking} checking`,
+      unknown && `${unknown} unknown`,
+      unavailable && `${unavailable} unavailable`,
+    ]
+      .filter(Boolean)
+      .join(' · ');
   }
 
   protected nexusHealthDetail(): string {
