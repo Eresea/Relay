@@ -335,9 +335,13 @@ const RUNTIME_STATUS_STALE_AFTER_MS = 90_000;
                       <li>
                         <span>{{ panel.title || 'Untitled panel' }}</span>
                         <small>
-                          #{{ panel.id ?? '—' }} · {{ panel.kind || 'Unknown type' }}
-                          @if (panel.datasource) {
-                            · {{ panel.datasource }}
+                          #{{ panel.id ?? '—' }} · {{ panel.kind || 'Unknown type' }} ·
+                          {{ panel.targetCount }} targets
+                          @if (panel.datasourceType) {
+                            · {{ panel.datasourceType }}
+                          }
+                          @if (panel.datasourceUid) {
+                            · {{ panel.datasourceUid }}
                           }
                         </small>
                       </li>

@@ -47,7 +47,9 @@ pub struct GrafanaDashboardPanel {
     pub id: Option<i64>,
     pub title: String,
     pub kind: String,
-    pub datasource: Option<String>,
+    pub datasource_type: Option<String>,
+    pub datasource_uid: Option<String>,
+    pub target_count: usize,
 }
 
 #[derive(Debug, Serialize)]
@@ -77,6 +79,8 @@ struct GrafanaPanelSpec {
     #[serde(rename = "type", default)]
     kind: String,
     datasource: Option<Value>,
+    #[serde(default)]
+    targets: Vec<serde::de::IgnoredAny>,
     #[serde(default)]
     panels: Vec<GrafanaPanelSpec>,
 }
@@ -365,19 +369,24 @@ fn collect_panels(
             return true;
         }
         if panel.kind != "row" {
+            let (datasource_type, datasource_uid) = match panel.datasource.as_ref() {
+                Some(Value::String(uid)) => (None, Some(uid.clone())),
+                Some(Value::Object(source)) => (
+                    source
+                        .get("type")
+                        .and_then(Value::as_str)
+                        .map(str::to_owned),
+                    source.get("uid").and_then(Value::as_str).map(str::to_owned),
+                ),
+                _ => (None, None),
+            };
             panels.push(GrafanaDashboardPanel {
                 id: panel.id,
                 title: panel.title.clone(),
                 kind: panel.kind.clone(),
-                datasource: panel.datasource.as_ref().and_then(|value| match value {
-                    Value::String(name) => Some(name.clone()),
-                    Value::Object(source) => source
-                        .get("uid")
-                        .or_else(|| source.get("type"))
-                        .and_then(Value::as_str)
-                        .map(str::to_owned),
-                    _ => None,
-                }),
+                datasource_type,
+                datasource_uid,
+                target_count: panel.targets.len(),
             });
         }
         if collect_panels(&panel.panels, depth + 1, panels) {

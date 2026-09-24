@@ -88,8 +88,9 @@ and stored in the OS credential store. All fields start blank; no Grafana
 metric queries run until the datasource and panels are identified. A manual connection
 check now reads Grafana's health endpoint and lists up to 50 dashboards
 available to the saved credential; a discovered dashboard can be saved as the
-default Grafana destination. Relay can also inspect a dashboard's panel IDs,
-titles, types, and datasource labels without reading metric values. Panel
+default Grafana destination. Relay can also inspect panel IDs, titles,
+visualization types, datasource type/UID, and query-target counts without
+displaying query text or metric values. Panel
 inventory tries Grafana's newer dashboard read route first and falls back to
 the legacy route when the newer route is unsupported or its default namespace
 does not contain the dashboard. Confirm Grafana version, namespace, and folder

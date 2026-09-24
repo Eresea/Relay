@@ -498,7 +498,9 @@ export interface RuntimeGrafanaPanel {
   readonly id: number | null;
   readonly title: string;
   readonly kind: string;
-  readonly datasource: string | null;
+  readonly datasourceType: string | null;
+  readonly datasourceUid: string | null;
+  readonly targetCount: number;
 }
 
 export interface RuntimeGrafanaPanelInventory {
