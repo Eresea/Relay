@@ -527,8 +527,9 @@ export interface RuntimeGrafanaPanelInventory {
 
 export interface LeafHealthObservation {
   readonly checkedAt: number;
-  readonly serverTime: string;
+  readonly serverTime: string | null;
   readonly statusCode: number;
+  readonly healthy: boolean;
 }
 
 export interface NexusReadinessObservation {

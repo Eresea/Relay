@@ -97,8 +97,9 @@ struct GrafanaDashboardResponse {
 #[serde(rename_all = "camelCase")]
 pub struct LeafHealthObservation {
     pub checked_at: u64,
-    pub server_time: String,
+    pub server_time: Option<String>,
     pub status_code: u16,
+    pub healthy: bool,
 }
 
 #[derive(Debug, Serialize)]
@@ -401,25 +402,29 @@ pub async fn runtime_leaf_health() -> Result<LeafHealthObservation> {
         .await
         .map_err(|_| Error::LeafHealthRequestFailed)?;
     let status_code = response.status().as_u16();
-    if !response.status().is_success() {
-        return Err(Error::LeafHealthStatus(status_code));
-    }
-
-    let body = response
-        .json::<LeafHealthResponse>()
-        .await
-        .map_err(|_| Error::LeafHealthResponseInvalid)?;
-    if body.status != "healthy" {
-        return Err(Error::LeafHealthResponseInvalid);
-    }
+    let checked_at = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_millis() as u64;
+    let body = if response.status().is_success() {
+        Some(
+            response
+                .json::<LeafHealthResponse>()
+                .await
+                .map_err(|_| Error::LeafHealthResponseInvalid)?,
+        )
+    } else {
+        None
+    };
+    let healthy = body
+        .as_ref()
+        .is_some_and(|body| body.status == "healthy" && (200..300).contains(&status_code));
 
     Ok(LeafHealthObservation {
-        checked_at: SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap_or_default()
-            .as_millis() as u64,
-        server_time: body.timestamp,
+        checked_at,
+        server_time: body.map(|body| body.timestamp),
         status_code,
+        healthy,
     })
 }
 

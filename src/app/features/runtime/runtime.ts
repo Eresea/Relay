@@ -82,6 +82,7 @@ const RUNTIME_STATUS_STALE_AFTER_MS = 90_000;
                       class="state"
                       [class.operational]="leafHealthState() === 'reachable'"
                       [class.stale]="leafHealthState() === 'stale'"
+                      [style.color]="leafHealthState() === 'not-ready' ? 'var(--danger)' : null"
                     >
                       {{ leafHealthLabel() }} · HTTP {{ leafHealth()?.statusCode ?? '—' }}
                     </span>
@@ -894,7 +895,7 @@ export class Runtime implements OnDestroy {
   protected readonly panelInventoryError = signal('');
   protected readonly leafHealth = signal<LeafHealthObservation | null>(null);
   protected readonly leafHealthState = signal<
-    'checking' | 'reachable' | 'stale' | 'unknown' | 'unavailable'
+    'checking' | 'reachable' | 'not-ready' | 'stale' | 'unknown' | 'unavailable'
   >('checking');
   protected readonly leafHealthError = signal('');
   protected readonly leafRefreshing = signal(false);
@@ -917,7 +918,13 @@ export class Runtime implements OnDestroy {
     const lastStatus = this.tauri.runtimeStatusSnapshot();
     if (lastStatus.leaf) {
       this.leafHealth.set(lastStatus.leaf);
-      this.leafHealthState.set(this.isStale(lastStatus.leaf.checkedAt) ? 'stale' : 'reachable');
+      this.leafHealthState.set(
+        this.isStale(lastStatus.leaf.checkedAt)
+          ? 'stale'
+          : lastStatus.leaf.healthy
+            ? 'reachable'
+            : 'not-ready',
+      );
     }
     if (lastStatus.nexus) {
       this.nexusHealth.set(lastStatus.nexus);
@@ -1020,7 +1027,7 @@ export class Runtime implements OnDestroy {
       if (!observation) throw new Error('No health observation returned.');
       this.leafHealth.set(observation);
       this.leafHealthError.set('');
-      this.leafHealthState.set('reachable');
+      this.leafHealthState.set(observation.healthy ? 'reachable' : 'not-ready');
     } catch (error: unknown) {
       this.leafHealthError.set(
         typeof error === 'string' ? error : 'Could not confirm Leaf API liveness.',
@@ -1067,6 +1074,8 @@ export class Runtime implements OnDestroy {
         return 'Checking';
       case 'reachable':
         return 'Reachable';
+      case 'not-ready':
+        return 'Not ready';
       case 'stale':
         return 'Stale';
       case 'unknown':
@@ -1086,10 +1095,14 @@ export class Runtime implements OnDestroy {
     }
     if (this.leafHealthState() === 'stale' && observation) {
       const age = this.checkedAgeLabel(observation.checkedAt);
+      const previousState = observation.healthy ? 'healthy' : 'not ready';
       const reason = this.leafHealthError()
         ? `Latest check failed: ${this.leafHealthError()}`
         : 'No successful refresh arrived within the freshness window.';
-      return `Last successful response HTTP ${observation.statusCode} at ${this.checkedAtLabel(observation.checkedAt)} (${age}). ${reason}`;
+      return `Last response was ${previousState} (HTTP ${observation.statusCode}) at ${this.checkedAtLabel(observation.checkedAt)} (${age}). ${reason}`;
+    }
+    if (this.leafHealthState() === 'not-ready' && observation) {
+      return `Leaf health probe returned HTTP ${observation.statusCode} without a healthy response at ${this.checkedAtLabel(observation.checkedAt)} (${this.checkedAgeLabel(observation.checkedAt)}).`;
     }
     if (this.leafHealthState() === 'unknown') {
       return `No successful liveness response yet. ${this.leafHealthError()}`;

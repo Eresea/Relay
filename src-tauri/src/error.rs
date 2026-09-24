@@ -119,10 +119,6 @@ pub enum Error {
     LeafHealthRequestFailed,
 
     #[cfg(desktop)]
-    #[error("Leaf API health endpoint returned HTTP {0}")]
-    LeafHealthStatus(u16),
-
-    #[cfg(desktop)]
     #[error("Leaf API health endpoint returned an unexpected response")]
     LeafHealthResponseInvalid,
 
