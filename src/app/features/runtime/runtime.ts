@@ -54,7 +54,7 @@ const RUNTIME_STATUS_STALE_AFTER_MS = 90_000;
         <div class="overview-heading">
           <div>
             <h2 id="overview-title">Leaf · Production</h2>
-            <p>Current reachability by component</p>
+            <p>Direct production probes</p>
           </div>
           <span class="overview-updated">
             @if (leafHealth(); as observation) {
@@ -71,7 +71,7 @@ const RUNTIME_STATUS_STALE_AFTER_MS = 90_000;
             </caption>
             <thead>
               <tr>
-                <th scope="col">Component</th>
+                <th scope="col">Signal</th>
                 <th scope="col">Production</th>
               </tr>
             </thead>
@@ -89,7 +89,7 @@ const RUNTIME_STATUS_STALE_AFTER_MS = 90_000;
                       [class.operational]="leafHealthState() === 'reachable'"
                       [class.stale]="leafHealthState() === 'stale'"
                     >
-                      {{ leafHealthLabel() }}
+                      {{ leafHealthLabel() }} · HTTP {{ leafHealth()?.statusCode ?? '—' }}
                     </span>
                     <p role="status">{{ leafHealthDetail() }}</p>
                     <button
@@ -120,7 +120,7 @@ const RUNTIME_STATUS_STALE_AFTER_MS = 90_000;
                         nexusHealthState() === 'not-ready' ? 'var(--danger-ink)' : null
                       "
                     >
-                      {{ nexusHealthLabel() }}
+                      {{ nexusHealthLabel() }} · HTTP {{ nexusHealth()?.statusCode ?? '—' }}
                     </span>
                     <p role="status">{{ nexusHealthDetail() }}</p>
                     <button

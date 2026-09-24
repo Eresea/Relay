@@ -49,6 +49,8 @@ The overview should show:
 - One row per component, with an optional column per environment or region.
 - A clear state, one useful current number, and the observation time in each
   cell. Example: `Degraded · 2/3 instances · 1.8% errors · updated 12s ago`.
+- Until a useful service metric is mapped, show the probe's HTTP response code
+  as raw evidence; do not present it as a performance or availability metric.
 - A standalone Nexus readiness signal with its probe location. Label it as a
   Leaf dependency only when a Leaf-facing signal exists.
 - A deep link to the relevant Grafana dashboard or panel.
