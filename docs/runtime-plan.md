@@ -121,9 +121,11 @@ as uptime monitoring.
    or dashboard links plus a smaller native status source. Verify returned
    values, units, freshness, and failure behavior before designing the grid
    around them. If Grafana has only host/container metrics, add the smallest
-   Leaf-side request telemetry needed by the existing metrics stack; the
-   existing HTTP endpoint supplies liveness only. Relay must not query Leaf's
-   database directly.
+   Leaf-side request telemetry needed by the existing metrics stack. The
+   inspected Leaf API and deployment trees contain no application-level HTTP
+   request metrics setup; that does not rule out external host/container
+   collectors. The existing HTTP endpoint supplies liveness only. Relay must
+   not query Leaf's database directly.
 3. **Ship Leaf's overview.** Add the Runtime entry and a single-project,
    production-first grid. Show the chosen health state and a few metrics,
    timestamps, stale/unknown states, and Grafana deep links. Keep polling
