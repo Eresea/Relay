@@ -1,8 +1,9 @@
 # Runtime module plan
 
-**Status:** in progress; Grafana health, dashboard and panel metadata discovery
-are implemented, and Leaf API liveness is polled. Metric mapping awaits the
-configured Grafana inventory.
+**Status:** the basic Leaf overview is implemented with direct Leaf and Nexus
+probes, visible-window polling, a session-only last-observation cache, and
+explicit stale/not-ready states. Grafana health, dashboard and panel metadata
+discovery work; metric mapping awaits the configured inventory.
 
 ## Goal
 
@@ -103,16 +104,16 @@ does not contain the dashboard. Confirm Grafana version, namespace, and folder
 coverage before adding metric queries. These checks confirm access to Grafana
 only; they are not Leaf health signals. Leaf already exposes an unauthenticated
 `GET /api/version/health`; Relay checks this every 30 seconds while the Runtime
-view is mounted. It only proves the endpoint returned its healthy response, not
-database readiness, request performance, or Leaf-to-Nexus connectivity. Relay
-also checks Nexus's public `/readyz` endpoint every 30 seconds; that confirms
-Nexus API and PostgreSQL readiness from the Relay client, not from Leaf's
-network path. A failed refresh keeps the last successful response visibly stale
-instead of green. A successful observation also becomes stale after 90 seconds
-without a newer success, so a suspended or stalled poll loop cannot leave an
-old green state indefinitely. A non-success HTTP response from either direct
-probe is a current Not ready observation; transport or invalid-payload
-failures keep the last observation stale, or Unknown when none exists.
+view is mounted and visible. A healthy 2xx response confirms endpoint liveness
+only, not database readiness, request performance, or Leaf-to-Nexus
+connectivity. Relay also checks Nexus's public `/readyz` endpoint every 30
+seconds; a ready response confirms Nexus API and PostgreSQL readiness from the
+Relay client, not from Leaf's network path. A non-success HTTP response from
+either probe is a current Not ready observation. A transport failure or invalid
+success payload keeps the last observation visibly stale, or Unknown when none
+exists. Successful probe observations become stale after 90 seconds without a
+newer success, so a suspended or stalled poll loop cannot leave an old green
+state indefinitely.
 
 Polling happens only while Runtime is open and the Relay window is visible in
 the first release; returning to a visible window triggers an immediate refresh.
