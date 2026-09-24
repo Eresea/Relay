@@ -58,7 +58,8 @@ pub struct GrafanaDashboardPanelInventory {
 
 #[derive(Debug, Deserialize)]
 struct GrafanaDashboardBody {
-    dashboard: GrafanaDashboardSpec,
+    dashboard: Option<GrafanaDashboardSpec>,
+    spec: Option<GrafanaDashboardSpec>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -295,16 +296,32 @@ pub async fn runtime_grafana_dashboard_panels(
     let access = grafana_access(&app)?;
     let dashboard_url = access
         .base_url
-        .join(&format!("api/dashboards/uid/{uid}"))
+        .join(&format!(
+            "apis/dashboard.grafana.app/v1/namespaces/default/dashboards/{uid}"
+        ))
         .map_err(|_| Error::GrafanaUrlInvalid)?;
     let mut request = access.client.get(dashboard_url);
-    if let Some(token) = access.token {
-        request = request.header(AUTHORIZATION, token);
+    if let Some(token) = access.token.as_ref() {
+        request = request.header(AUTHORIZATION, token.clone());
     }
-    let response = request
+    let mut response = request
         .send()
         .await
         .map_err(|_| Error::GrafanaDashboardRequestFailed)?;
+    if matches!(response.status().as_u16(), 400 | 404 | 405) {
+        let legacy_url = access
+            .base_url
+            .join(&format!("api/dashboards/uid/{uid}"))
+            .map_err(|_| Error::GrafanaUrlInvalid)?;
+        let mut legacy_request = access.client.get(legacy_url);
+        if let Some(token) = access.token.as_ref() {
+            legacy_request = legacy_request.header(AUTHORIZATION, token.clone());
+        }
+        response = legacy_request
+            .send()
+            .await
+            .map_err(|_| Error::GrafanaDashboardRequestFailed)?;
+    }
     if !response.status().is_success() {
         return Err(Error::GrafanaDashboardStatus(response.status().as_u16()));
     }
@@ -312,8 +329,12 @@ pub async fn runtime_grafana_dashboard_panels(
         .json::<GrafanaDashboardBody>()
         .await
         .map_err(|_| Error::GrafanaDashboardResponseInvalid)?;
+    let dashboard = body
+        .spec
+        .or(body.dashboard)
+        .ok_or(Error::GrafanaDashboardResponseInvalid)?;
     let mut panels = Vec::new();
-    let truncated = collect_panels(&body.dashboard.panels, 0, &mut panels);
+    let truncated = collect_panels(&dashboard.panels, 0, &mut panels);
     Ok(GrafanaDashboardPanelInventory { panels, truncated })
 }
 
