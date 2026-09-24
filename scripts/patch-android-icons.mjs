@@ -11,7 +11,7 @@ try {
     [
       resolve('node_modules/@tauri-apps/cli/tauri.js'),
       'icon',
-      resolve('src-tauri/icons/icon.png'),
+      resolve('src-tauri/icons/android-icon.json'),
       '--output',
       output,
     ],
