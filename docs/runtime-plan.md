@@ -200,22 +200,6 @@ into a server-health dashboard:
 The shared concept is **operational signal**, not a universal metric schema.
 Keep product-specific meaning and thresholds close to each product's owner.
 
-## Future use across apps
-
-Reuse the overview and common states where they fit; keep each app's signals
-specific to its work:
-
-- **Leaf:** API availability, latency/error rates, database health, and the
-  Leaf-to-Nexus dependency.
-- **Nexus:** API availability and aggregate auth/sync failures or conflicts;
-  never expose credentials, vault contents, or per-user payloads.
-- **Bellum:** simulation tick time, queued or stalled work, and persistence
-  lag.
-- **Relay:** connector/job health, update availability, and release build
-  status.
-- **LogOS:** build and boot/test results by target, which fit a validation
-  matrix better than a live-service metrics chart.
-
 ## Pilot acceptance
 
 - Leaf production has a readable current state, selected metric values, units,
