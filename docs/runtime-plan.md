@@ -121,6 +121,12 @@ as uptime monitoring.
    fast-status question. Prefer deployment SHA/version events already available
    from GitHub Actions. Where possible, correlate deploys with error and
    latency changes without implying causation.
+
+   Do not treat Leaf's `/api/version` response as a release marker until its
+   production configuration is verified: the controller defaults `version` to
+   `1.0.0` and synthesizes a fresh `buildTimestamp` on every request when that
+   setting is absent. Prefer an immutable CI commit or image digest.
+
 5. **Add incident operations.** Display alert state, acknowledgement/owner,
    maintenance windows, and links to the existing runbook or source. Keep
    alert lifecycle and maintenance ownership with the existing monitoring
