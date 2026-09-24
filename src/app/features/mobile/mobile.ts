@@ -10,24 +10,26 @@ import {
 
 import { NotificationCenter } from '@core/notification-center';
 import type { NotificationRecord } from '@core/events';
+import { ThemeService } from '@core/theme';
 import { TauriBridge, type MobileUpdate, type VaultStatus } from '@core/tauri';
+import { Settings } from '@features/settings/settings';
 import { Vault } from '@features/vault/vault';
 import { Icon } from '@shared/icon';
 import { MobileConnections } from './mobile-connections';
 
-type MobileTab = 'dashboard' | 'notifications' | 'vault' | 'connections';
+type MobileTab = 'dashboard' | 'notifications' | 'vault' | 'connections' | 'settings';
 
 @Component({
   selector: 'rl-mobile',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [Icon, MobileConnections, Vault],
+  imports: [Icon, MobileConnections, Settings, Vault],
   template: `
     <div
       class="mobile-shell"
       (pointerdown)="startRailGesture($event)"
       (pointermove)="moveRailGesture($event)"
       (pointerup)="endRailGesture($event)"
-      (pointercancel)="cancelRailGesture()"
+      (pointercancel)="cancelRailGesture($event)"
     >
       <header class="mobile-header">
         <button
@@ -47,10 +49,13 @@ type MobileTab = 'dashboard' | 'notifications' | 'vault' | 'connections';
         <button
           type="button"
           class="header-button"
-          (click)="refresh()"
-          aria-label="Refresh dashboard"
+          (click)="theme.toggle()"
+          [attr.aria-label]="
+            theme.theme() === 'dark' ? 'Switch to light theme' : 'Switch to dark theme'
+          "
+          [attr.title]="theme.theme() === 'dark' ? 'Switch to light theme' : 'Switch to dark theme'"
         >
-          <rl-icon name="loader-circle" [size]="16" />
+          <rl-icon [name]="theme.theme() === 'dark' ? 'sun' : 'moon'" [size]="16" />
         </button>
       </header>
 
@@ -112,6 +117,17 @@ type MobileTab = 'dashboard' | 'notifications' | 'vault' | 'connections';
             <rl-icon name="settings" [size]="16" />
             <span>Connections</span>
           </button>
+          <div class="rail-settings">
+            <button
+              type="button"
+              class="rail-item"
+              [class.active]="tab() === 'settings'"
+              (click)="selectTab('settings')"
+            >
+              <rl-icon name="settings" [size]="16" />
+              <span>Settings</span>
+            </button>
+          </div>
         </aside>
       }
 
@@ -236,6 +252,8 @@ type MobileTab = 'dashboard' | 'notifications' | 'vault' | 'connections';
               </div>
             }
           </section>
+        } @else if (tab() === 'settings') {
+          <rl-settings />
         } @else if (tab() === 'vault') {
           <section class="section full-section vault-section">
             <rl-vault />
@@ -434,8 +452,14 @@ type MobileTab = 'dashboard' | 'notifications' | 'vault' | 'connections';
     }
 
     .rail-item.active {
-      color: var(--primary-ink);
+      color: var(--text-strong);
       background: var(--tint-selected);
+    }
+
+    .rail-settings {
+      margin-block-start: auto;
+      padding-block-start: var(--space-3);
+      border-block-start: 1px solid var(--border-subtle);
     }
 
     .rail-badge {
@@ -520,7 +544,7 @@ type MobileTab = 'dashboard' | 'notifications' | 'vault' | 'connections';
       inline-size: 36px;
       block-size: 36px;
       margin-block-end: var(--space-4);
-      color: var(--primary-ink);
+      color: var(--accent);
       background: var(--tint-selected);
       border-radius: var(--radius-md);
     }
@@ -706,7 +730,7 @@ type MobileTab = 'dashboard' | 'notifications' | 'vault' | 'connections';
     }
 
     .mobile-nav button.active {
-      color: var(--primary-ink);
+      color: var(--text-strong);
       background: var(--tint-selected);
     }
 
@@ -748,6 +772,7 @@ type MobileTab = 'dashboard' | 'notifications' | 'vault' | 'connections';
 export class Mobile {
   private readonly center = inject(NotificationCenter);
   private readonly tauri = inject(TauriBridge);
+  protected readonly theme = inject(ThemeService);
   private readonly destroyRef = inject(DestroyRef);
 
   private railGesture: { pointerId: number; startX: number; startY: number } | null = null;
@@ -757,6 +782,7 @@ export class Mobile {
     startX: number;
     startY: number;
   } | null = null;
+  private pendingRailBackAt = 0;
   private suppressClickFor: string | null = null;
 
   protected readonly tab = signal<MobileTab>('dashboard');
@@ -778,7 +804,9 @@ export class Mobile {
         ? 'Notifications'
         : this.tab() === 'vault'
           ? 'Password vault'
-          : 'Connections',
+          : this.tab() === 'settings'
+            ? 'Settings'
+            : 'Connections',
   );
   protected readonly vaultLabel = computed(() => {
     const status = this.vaultStatus();
@@ -789,7 +817,11 @@ export class Mobile {
     void this.refresh();
     void this.checkForUpdate();
     void onBackButtonPress(({ canGoBack }) => {
-      if (this.railOpen()) {
+      const edgeSwipe = Date.now() - this.pendingRailBackAt < 700;
+      this.pendingRailBackAt = 0;
+      if (edgeSwipe && !this.railOpen()) {
+        this.railOpen.set(true);
+      } else if (this.railOpen()) {
         this.closeRail();
       } else if (this.tab() !== 'dashboard') {
         this.tab.set('dashboard');
@@ -864,8 +896,8 @@ export class Mobile {
   }
 
   protected startRailGesture(event: PointerEvent): void {
-    if (!event.isPrimary || event.pointerType === 'mouse') return;
-    const edgeSwipe = !this.railOpen() && event.clientX <= 28;
+    if (!event.isPrimary) return;
+    const edgeSwipe = !this.railOpen() && event.clientX <= 96;
     const closeSwipe = this.railOpen() && event.clientX > 288;
     if (!edgeSwipe && !closeSwipe) return;
     this.railGesture = { pointerId: event.pointerId, startX: event.clientX, startY: event.clientY };
@@ -892,7 +924,12 @@ export class Mobile {
     this.cancelRailGesture();
   }
 
-  protected cancelRailGesture(): void {
+  protected cancelRailGesture(event?: PointerEvent): void {
+    const gesture = this.railGesture;
+    if (gesture && event && !this.railOpen() && gesture.startX <= 32) {
+      // ponytail: pair edge pointercancel with Android Back; use native exclusion rectangles if unreliable.
+      this.pendingRailBackAt = Date.now();
+    }
     this.railGesture = null;
   }
 
