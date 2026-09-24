@@ -1,6 +1,11 @@
-import { ChangeDetectionStrategy, Component, inject, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, inject, OnDestroy, signal } from '@angular/core';
 
-import { TauriBridge, type RuntimeGrafanaCheck, type RuntimeGrafanaSettings } from '@core/tauri';
+import {
+  TauriBridge,
+  type LeafHealthObservation,
+  type RuntimeGrafanaCheck,
+  type RuntimeGrafanaSettings,
+} from '@core/tauri';
 import { Icon } from '@shared/icon';
 
 @Component({
@@ -15,23 +20,96 @@ import { Icon } from '@shared/icon';
           <h1 id="runtime-title">Runtime</h1>
           <p class="page-description">Service status for Leaf and its dependencies.</p>
         </div>
-        <button
-          type="button"
-          class="open-button"
-          [disabled]="loading() || (!dashboardUrl().trim() && !grafanaUrl().trim())"
-          (click)="openGrafana()"
-        >
-          Open Grafana
-        </button>
+        <div class="page-actions">
+          <button
+            type="button"
+            class="secondary-button"
+            [disabled]="leafRefreshing() || leafHealthState() === 'unavailable'"
+            (click)="refreshLeafHealth()"
+          >
+            {{ leafRefreshing() ? 'Refreshing…' : 'Refresh status' }}
+          </button>
+          <button
+            type="button"
+            class="open-button"
+            [disabled]="loading() || (!dashboardUrl().trim() && !grafanaUrl().trim())"
+            (click)="openGrafana()"
+          >
+            Open Grafana
+          </button>
+        </div>
       </header>
+
+      <section class="overview" aria-labelledby="overview-title">
+        <div class="overview-heading">
+          <div>
+            <h2 id="overview-title">Leaf · Production</h2>
+            <p>Current reachability by component</p>
+          </div>
+          <span class="overview-updated">
+            @if (leafHealth(); as observation) {
+              Last success {{ checkedAtLabel(observation.checkedAt) }}
+            } @else {
+              No successful checks yet
+            }
+          </span>
+        </div>
+        <div class="status-grid-scroll">
+          <table class="status-grid">
+            <caption class="u-sr-only">
+              Leaf production runtime status
+            </caption>
+            <thead>
+              <tr>
+                <th scope="col">Component</th>
+                <th scope="col">Production</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <th scope="row">
+                  <span>Leaf API</span>
+                  <small>Public HTTP liveness</small>
+                </th>
+                <td>
+                  <div class="signal-cell">
+                    <span class="u-sr-only">Production status:</span>
+                    <span
+                      class="state"
+                      [class.operational]="leafHealthState() === 'reachable'"
+                      [class.stale]="leafHealthState() === 'stale'"
+                    >
+                      {{ leafHealthLabel() }}
+                    </span>
+                    <p role="status">{{ leafHealthDetail() }}</p>
+                  </div>
+                </td>
+              </tr>
+              <tr>
+                <th scope="row">
+                  <span>Nexus</span>
+                  <small>Leaf upstream dependency</small>
+                </th>
+                <td>
+                  <div class="signal-cell">
+                    <span class="u-sr-only">Production status:</span>
+                    <span class="state unknown">Unknown</span>
+                    <p>No Leaf-facing health signal is configured.</p>
+                  </div>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
 
       <section class="setup-notice" role="status" aria-labelledby="setup-title">
         <span class="notice-icon"><rl-icon name="info" [size]="16" /></span>
         <div>
-          <h2 id="setup-title">No runtime signals configured</h2>
+          <h2 id="setup-title">Runtime signal coverage is partial</h2>
           <p>
-            URLs and a token can be saved below. Status remains unknown until the Leaf datasource
-            and dashboard panels are mapped.
+            Leaf HTTP liveness is checked directly. It does not validate application dependencies;
+            Grafana metrics and Nexus health remain unknown until their signals are mapped.
           </p>
         </div>
       </section>
@@ -150,8 +228,8 @@ import { Icon } from '@shared/icon';
                 @if (result.version) {
                   Version {{ result.version }} ·
                 }
-                Checked {{ checkedAtLabel(result) }}. This confirms Grafana access only; it does not
-                indicate Leaf health.
+                Checked {{ grafanaCheckedAtLabel(result) }}. This confirms Grafana access only; it
+                does not indicate Leaf health.
               </p>
             </div>
             <span class="dashboard-count">
@@ -179,30 +257,6 @@ import { Icon } from '@shared/icon';
           }
         </section>
       }
-
-      <section class="services" aria-label="Leaf production services">
-        <article class="service-card">
-          <div class="service-heading">
-            <div>
-              <h2>Leaf API</h2>
-              <p>Production service</p>
-            </div>
-            <span class="state unknown">Unknown</span>
-          </div>
-          <p class="service-detail">No health signal configured.</p>
-        </article>
-
-        <article class="service-card">
-          <div class="service-heading">
-            <div>
-              <h2>Nexus dependency</h2>
-              <p>Leaf's upstream service</p>
-            </div>
-            <span class="state unknown">Unknown</span>
-          </div>
-          <p class="service-detail">No Leaf-facing health signal configured.</p>
-        </article>
-      </section>
     </section>
   `,
   styles: `
@@ -226,6 +280,13 @@ import { Icon } from '@shared/icon';
       border-block-end: 1px solid var(--border-subtle);
     }
 
+    .page-actions {
+      display: flex;
+      flex: none;
+      flex-wrap: wrap;
+      gap: var(--space-2);
+    }
+
     h1,
     h2,
     p {
@@ -244,6 +305,95 @@ import { Icon } from '@shared/icon';
       margin-block-start: var(--space-2);
       color: var(--text-muted);
       font-size: var(--text-13);
+    }
+
+    .overview {
+      padding-block: var(--space-5);
+      border-block-end: 1px solid var(--border-subtle);
+    }
+
+    .overview-heading {
+      display: flex;
+      align-items: flex-end;
+      justify-content: space-between;
+      gap: var(--space-4);
+      margin-block-end: var(--space-3);
+    }
+
+    .overview-heading h2 {
+      color: var(--text-body);
+      font-size: var(--text-14);
+      font-weight: var(--weight-medium);
+    }
+
+    .overview-heading p,
+    .overview-updated {
+      margin-block-start: var(--space-1);
+      color: var(--text-muted);
+      font-size: var(--text-11);
+    }
+
+    .overview-updated {
+      flex: none;
+      margin-block-start: 0;
+      text-align: end;
+    }
+
+    .status-grid-scroll {
+      overflow-x: auto;
+    }
+
+    .status-grid {
+      inline-size: 100%;
+      border-collapse: collapse;
+      text-align: start;
+    }
+
+    .status-grid thead th {
+      padding: var(--space-2) var(--space-3);
+      color: var(--text-subtle);
+      font-size: var(--text-11);
+      font-weight: var(--weight-medium);
+      text-align: start;
+      text-transform: uppercase;
+      letter-spacing: var(--tracking-caps);
+      border-block-end: 1px solid var(--border-subtle);
+    }
+
+    .status-grid tbody th,
+    .status-grid tbody td {
+      padding: var(--space-4) var(--space-3);
+      vertical-align: top;
+      border-block-end: 1px solid var(--border-subtle);
+    }
+
+    .status-grid tbody th {
+      inline-size: 34%;
+      color: var(--text-body);
+      font-size: var(--text-12);
+      font-weight: var(--weight-medium);
+      text-align: start;
+    }
+
+    .status-grid tbody th small {
+      display: block;
+      margin-block-start: var(--space-1);
+      color: var(--text-muted);
+      font-size: var(--text-11);
+      font-weight: var(--weight-regular);
+    }
+
+    .signal-cell {
+      display: flex;
+      align-items: flex-start;
+      gap: var(--space-3);
+    }
+
+    .signal-cell p {
+      padding-block-start: var(--space-1);
+      color: var(--text-muted);
+      font-size: var(--text-12);
+      line-height: 1.5;
     }
 
     .open-button,
@@ -313,9 +463,7 @@ import { Icon } from '@shared/icon';
       font-weight: var(--weight-medium);
     }
 
-    .setup-notice p,
-    .service-heading p,
-    .service-detail {
+    .setup-notice p {
       margin-block-start: var(--space-2);
       color: var(--text-muted);
       font-size: var(--text-12);
@@ -492,38 +640,6 @@ import { Icon } from '@shared/icon';
       color: var(--text-muted);
     }
 
-    .services {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(min(100%, 320px), 1fr));
-      gap: var(--space-4);
-      margin-block-start: var(--space-5);
-    }
-
-    .service-card {
-      min-inline-size: 0;
-      padding: var(--space-5);
-      border: 1px solid var(--border-subtle);
-      border-radius: var(--radius-md);
-      background: var(--bg-raised);
-    }
-
-    .service-heading {
-      display: flex;
-      align-items: flex-start;
-      justify-content: space-between;
-      gap: var(--space-4);
-    }
-
-    .service-heading h2 {
-      color: var(--text-body);
-      font-size: var(--text-13);
-      font-weight: var(--weight-medium);
-    }
-
-    .service-heading p {
-      font-size: var(--text-11);
-    }
-
     .state {
       flex: none;
       padding: var(--space-1) var(--space-2);
@@ -534,9 +650,16 @@ import { Icon } from '@shared/icon';
       font-weight: var(--weight-medium);
     }
 
-    .service-detail {
-      padding-block-start: var(--space-4);
-      border-block-start: 1px solid var(--border-subtle);
+    .state.operational {
+      color: var(--text-body);
+      border-color: var(--success);
+      background: var(--success-tint);
+    }
+
+    .state.stale {
+      color: var(--text-body);
+      border-color: var(--warning);
+      background: var(--warning-tint);
     }
 
     @media (max-width: 620px) {
@@ -557,14 +680,73 @@ import { Icon } from '@shared/icon';
         flex-direction: column;
       }
 
+      .page-header {
+        flex-direction: column;
+      }
+
+      .overview-heading {
+        align-items: flex-start;
+        flex-direction: column;
+      }
+
+      .overview-updated {
+        text-align: start;
+      }
+
+      .status-grid thead {
+        position: absolute;
+        inline-size: 1px;
+        block-size: 1px;
+        padding: 0;
+        overflow: hidden;
+        clip: rect(0, 0, 0, 0);
+        white-space: nowrap;
+        border: 0;
+      }
+
+      .status-grid,
+      .status-grid tbody {
+        display: block;
+      }
+
+      .status-grid tbody tr {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr);
+        padding-block: var(--space-2);
+        border-block-end: 1px solid var(--border-subtle);
+      }
+
+      .status-grid tbody th,
+      .status-grid tbody td {
+        inline-size: auto;
+        padding: var(--space-2) 0;
+        border: 0;
+      }
+
+      .status-grid tbody td::before {
+        display: block;
+        margin-block-end: var(--space-2);
+        color: var(--text-subtle);
+        content: 'Production';
+        font-size: var(--text-11);
+        font-weight: var(--weight-medium);
+        text-transform: uppercase;
+        letter-spacing: var(--tracking-caps);
+      }
+
+      .signal-cell {
+        flex-wrap: wrap;
+      }
+
       .token-input-row {
         flex-wrap: wrap;
       }
     }
   `,
 })
-export class Runtime {
+export class Runtime implements OnDestroy {
   private readonly tauri = inject(TauriBridge);
+  private readonly leafHealthTimer: ReturnType<typeof setInterval> | null;
 
   protected readonly grafanaUrl = signal('');
   protected readonly dashboardUrl = signal('');
@@ -575,10 +757,27 @@ export class Runtime {
   protected readonly saving = signal(false);
   protected readonly checking = signal(false);
   protected readonly checkResult = signal<RuntimeGrafanaCheck | null>(null);
+  protected readonly leafHealth = signal<LeafHealthObservation | null>(null);
+  protected readonly leafHealthState = signal<
+    'checking' | 'reachable' | 'stale' | 'unknown' | 'unavailable'
+  >('checking');
+  protected readonly leafHealthError = signal('');
+  protected readonly leafRefreshing = signal(false);
   protected readonly error = signal('');
   protected readonly notice = signal('');
   constructor() {
     void this.restore();
+    if (this.tauri.available) {
+      void this.refreshLeafHealth();
+      this.leafHealthTimer = setInterval(() => void this.refreshLeafHealth(), 30_000);
+    } else {
+      this.leafHealthState.set('unavailable');
+      this.leafHealthTimer = null;
+    }
+  }
+
+  ngOnDestroy(): void {
+    if (this.leafHealthTimer !== null) clearInterval(this.leafHealthTimer);
   }
 
   private async restore(): Promise<void> {
@@ -611,6 +810,65 @@ export class Runtime {
 
   protected setTokenInput(event: Event): void {
     if (event.target instanceof HTMLInputElement) this.tokenInput.set(event.target.value);
+  }
+
+  protected async refreshLeafHealth(): Promise<void> {
+    if (!this.tauri.available || this.leafRefreshing()) return;
+
+    this.leafRefreshing.set(true);
+    try {
+      const observation = await this.tauri.runtimeLeafHealth();
+      if (!observation) throw new Error('No health observation returned.');
+      this.leafHealth.set(observation);
+      this.leafHealthError.set('');
+      this.leafHealthState.set('reachable');
+    } catch (error: unknown) {
+      this.leafHealthError.set(
+        typeof error === 'string' ? error : 'Could not confirm Leaf API liveness.',
+      );
+      this.leafHealthState.set(this.leafHealth() ? 'stale' : 'unknown');
+    } finally {
+      this.leafRefreshing.set(false);
+    }
+  }
+
+  protected leafHealthLabel(): string {
+    switch (this.leafHealthState()) {
+      case 'checking':
+        return 'Checking';
+      case 'reachable':
+        return 'Reachable';
+      case 'stale':
+        return 'Stale';
+      case 'unknown':
+        return 'Unknown';
+      case 'unavailable':
+        return 'Unavailable';
+    }
+  }
+
+  protected leafHealthDetail(): string {
+    const observation = this.leafHealth();
+    if (this.leafHealthState() === 'unavailable') {
+      return 'Live checks run in the Relay desktop app.';
+    }
+    if (this.leafHealthState() === 'checking' && !observation) {
+      return 'Checking Leaf’s HTTP liveness endpoint…';
+    }
+    if (this.leafHealthState() === 'stale' && observation) {
+      return `Last successful response HTTP ${observation.statusCode} at ${this.checkedAtLabel(observation.checkedAt)}. Latest check failed: ${this.leafHealthError()}`;
+    }
+    if (this.leafHealthState() === 'unknown') {
+      return `No successful liveness response yet. ${this.leafHealthError()}`;
+    }
+    if (observation) {
+      return `HTTP ${observation.statusCode} · checked ${this.checkedAtLabel(observation.checkedAt)} · liveness only; database and Nexus are not checked.`;
+    }
+    return 'No liveness observation yet.';
+  }
+
+  protected checkedAtLabel(timestamp: number): string {
+    return new Date(timestamp).toLocaleTimeString();
   }
 
   protected async saveSettings(): Promise<void> {
@@ -717,7 +975,7 @@ export class Runtime {
     }
   }
 
-  protected checkedAtLabel(result: RuntimeGrafanaCheck): string {
+  protected grafanaCheckedAtLabel(result: RuntimeGrafanaCheck): string {
     return new Date(result.checkedAt).toLocaleTimeString();
   }
 

@@ -1,7 +1,7 @@
 # Runtime module plan
 
 **Status:** in progress; Grafana health and dashboard discovery are implemented,
-while live metric mapping waits for the Leaf Grafana inventory.
+Leaf API liveness is polled, and metric mapping waits for the Grafana inventory.
 
 ## Goal
 
@@ -87,7 +87,11 @@ queries run until the datasource and panels are identified. A manual connection
 check now reads Grafana's health endpoint and lists up to 50 dashboards
 available to the saved credential. This confirms access to Grafana only; it is
 not used as Leaf's health signal. API route selection will be revisited after
-the Grafana instance version is known.
+the Grafana instance version is known. Leaf already exposes an unauthenticated
+`GET /api/version/health`; Relay checks this every 30 seconds while the Runtime
+view is mounted. It only proves the endpoint returned its healthy response, not
+database readiness, request performance, or Nexus health. A failed refresh
+keeps the last successful response visibly stale instead of green.
 
 Polling happens only while Runtime is open in the first release. Keep the last
 successful observation and its timestamp so a failed refresh can show stale
@@ -105,9 +109,9 @@ as uptime monitoring.
    or dashboard links plus a smaller native status source. Verify returned
    values, units, freshness, and failure behavior before designing the grid
    around them. If Grafana has only host/container metrics, add the smallest
-   Leaf-side health and request telemetry needed by the existing metrics stack
-   before building the native overview. Relay must not query Leaf's database
-   directly.
+   Leaf-side request telemetry needed by the existing metrics stack; the
+   existing HTTP endpoint supplies liveness only. Relay must not query Leaf's
+   database directly.
 3. **Ship Leaf's overview.** Add the Runtime entry and a single-project,
    production-first grid. Show the chosen health state and a few metrics,
    timestamps, stale/unknown states, and Grafana deep links. Keep polling

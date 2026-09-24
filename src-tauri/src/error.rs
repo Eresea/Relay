@@ -102,6 +102,18 @@ pub enum Error {
     #[error("Grafana health endpoint returned HTTP {0}")]
     GrafanaHealthStatus(u16),
 
+    #[cfg(desktop)]
+    #[error("could not reach the Leaf API health endpoint")]
+    LeafHealthRequestFailed,
+
+    #[cfg(desktop)]
+    #[error("Leaf API health endpoint returned HTTP {0}")]
+    LeafHealthStatus(u16),
+
+    #[cfg(desktop)]
+    #[error("Leaf API health endpoint returned an unexpected response")]
+    LeafHealthResponseInvalid,
+
     #[error("OpenCloud request failed: {0}")]
     OpenCloud(String),
 

@@ -12,6 +12,7 @@ const SERVICE: &str = "relay-runtime-grafana";
 const ACCOUNT: &str = "service-account-token";
 const SETTINGS_KEY: &str = "runtime.grafana";
 const DASHBOARD_LIMIT: usize = 50;
+const LEAF_HEALTH_URL: &str = "https://leaf.eresea.net/api/version/health";
 
 #[derive(Debug, Default, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -48,6 +49,21 @@ struct GrafanaDashboardResponse {
     url: String,
     #[serde(rename = "type")]
     kind: String,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LeafHealthObservation {
+    pub checked_at: u64,
+    pub server_time: String,
+    pub status_code: u16,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct LeafHealthResponse {
+    status: String,
+    timestamp: String,
 }
 
 fn entry() -> Result<keyring::Entry> {
@@ -200,6 +216,41 @@ pub async fn runtime_grafana_check(app: AppHandle) -> Result<GrafanaCheck> {
             .as_millis() as u64,
         dashboards,
         dashboard_error,
+    })
+}
+
+#[tauri::command]
+pub async fn runtime_leaf_health() -> Result<LeafHealthObservation> {
+    let client = reqwest::Client::builder()
+        .timeout(Duration::from_secs(5))
+        .redirect(reqwest::redirect::Policy::none())
+        .build()
+        .map_err(|_| Error::LeafHealthRequestFailed)?;
+    let response = client
+        .get(LEAF_HEALTH_URL)
+        .send()
+        .await
+        .map_err(|_| Error::LeafHealthRequestFailed)?;
+    let status_code = response.status().as_u16();
+    if !response.status().is_success() {
+        return Err(Error::LeafHealthStatus(status_code));
+    }
+
+    let body = response
+        .json::<LeafHealthResponse>()
+        .await
+        .map_err(|_| Error::LeafHealthResponseInvalid)?;
+    if body.status != "healthy" {
+        return Err(Error::LeafHealthResponseInvalid);
+    }
+
+    Ok(LeafHealthObservation {
+        checked_at: SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_millis() as u64,
+        server_time: body.timestamp,
+        status_code,
     })
 }
 

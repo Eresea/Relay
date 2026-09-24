@@ -218,6 +218,10 @@ export class TauriBridge {
     return this.invoke<RuntimeGrafanaCheck>('runtime_grafana_check');
   }
 
+  async runtimeLeafHealth(): Promise<LeafHealthObservation | null> {
+    return this.invoke<LeafHealthObservation>('runtime_leaf_health');
+  }
+
   private settingsStore: LazyStore | null = null;
 
   /**
@@ -480,6 +484,12 @@ export interface RuntimeGrafanaDashboard {
   readonly uid: string;
   readonly title: string;
   readonly url: string;
+}
+
+export interface LeafHealthObservation {
+  readonly checkedAt: number;
+  readonly serverTime: string;
+  readonly statusCode: number;
 }
 
 /** What the palette displays for a core-contributed row. Mirrors `CoreCommandMeta`. */
