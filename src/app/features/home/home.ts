@@ -9,6 +9,7 @@ import { BackgroundTaskIndicator } from '@shared/background-task-indicator';
 import { Icon } from '@shared/icon';
 import { NotificationPopover } from '@shared/notification-popover';
 import { Projects } from '@features/projects/projects';
+import { Runtime } from '@features/runtime/runtime';
 
 const RAIL_EXPANDED_SETTING_KEY = 'rail.expanded';
 
@@ -28,6 +29,7 @@ const RAIL_EXPANDED_SETTING_KEY = 'rail.expanded';
     Icon,
     NotificationPopover,
     Projects,
+    Runtime,
     Settings,
     UpdateStatusBar,
     Vault,
@@ -89,6 +91,16 @@ const RAIL_EXPANDED_SETTING_KEY = 'rail.expanded';
             <span class="rail-icon"><rl-icon name="library" [size]="16" /></span>
             <span class="rail-label">Projects</span>
           </button>
+          <button
+            type="button"
+            class="rail-item"
+            [class.active]="view() === 'runtime'"
+            (click)="view.set('runtime')"
+            aria-label="Runtime"
+          >
+            <span class="rail-icon"><rl-icon name="info" [size]="16" /></span>
+            <span class="rail-label">Runtime</span>
+          </button>
         </div>
 
         <div class="rail-bottom">
@@ -110,6 +122,8 @@ const RAIL_EXPANDED_SETTING_KEY = 'rail.expanded';
           <rl-settings [initialTab]="settingsTab()" />
         } @else if (view() === 'vault') {
           <rl-vault />
+        } @else if (view() === 'runtime') {
+          <rl-runtime />
         } @else {
           <rl-projects />
         }
@@ -343,7 +357,7 @@ const RAIL_EXPANDED_SETTING_KEY = 'rail.expanded';
 })
 export class Home {
   protected readonly theme = inject(ThemeService);
-  protected readonly view = signal<'home' | 'settings' | 'vault'>('home');
+  protected readonly view = signal<'home' | 'settings' | 'vault' | 'runtime'>('home');
   /** Starts collapsed — the safe default while the persisted value (below) is
    * still loading — then reconciles with whatever the user last left it as. */
   protected readonly railExpanded = signal(false);
@@ -377,6 +391,7 @@ export class Home {
           this.settingsTab.set('general');
         }
         if (event.type === 'openVaultRequested') this.view.set('vault');
+        if (event.type === 'openRuntimeRequested') this.view.set('runtime');
         if (event.type === 'openGithubRequested') {
           this.view.set('settings');
           this.settingsTab.set('github');

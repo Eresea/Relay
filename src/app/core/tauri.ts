@@ -429,6 +429,7 @@ export type CoreCommand =
   | { readonly id: 'hide_hud' }
   | { readonly id: 'open_vault' }
   | { readonly id: 'open_github' }
+  | { readonly id: 'open_runtime' }
   | { readonly id: 'quit' };
 
 /** What the palette displays for a core-contributed row. Mirrors `CoreCommandMeta`. */

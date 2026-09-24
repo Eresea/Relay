@@ -48,6 +48,7 @@ export type AppEvent =
   | { readonly type: 'openSettingsRequested' }
   | { readonly type: 'openVaultRequested' }
   | { readonly type: 'openGithubRequested' }
+  | { readonly type: 'openRuntimeRequested' }
   | ({ readonly type: 'notification' } & NotificationPayload)
   | { readonly type: 'notificationDone'; readonly jobId: string; readonly ok: boolean }
   | ({ readonly type: 'updateChanged' } & UpdateSnapshot);

@@ -81,6 +81,7 @@ pub enum CoreCommand {
     HideHud,
     OpenVault,
     OpenGithub,
+    OpenRuntime,
     Quit,
 }
 
@@ -102,6 +103,11 @@ pub fn run_core_command(app: AppHandle, command: CoreCommand) -> Result<()> {
         CoreCommand::OpenGithub => {
             overlay::show_main(&app)?;
             app.emit(AppEvent::OpenGithubRequested);
+            Ok(())
+        }
+        CoreCommand::OpenRuntime => {
+            overlay::show_main(&app)?;
+            app.emit(AppEvent::OpenRuntimeRequested);
             Ok(())
         }
         CoreCommand::Quit => {

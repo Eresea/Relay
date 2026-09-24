@@ -25,6 +25,15 @@ export function registerDefaultCommands(): () => void {
       run: () => tauri.runCoreCommand({ id: 'open_main' }),
     },
     {
+      id: 'relay.runtime.open',
+      title: 'Open Runtime',
+      hint: 'Review Leaf service health and metrics',
+      group: 'Project',
+      icon: 'info',
+      keywords: ['runtime', 'status', 'health', 'grafana', 'metrics', 'leaf'],
+      run: () => tauri.runCoreCommand({ id: 'open_runtime' }),
+    },
+    {
       id: 'relay.theme.toggle',
       title: 'Toggle theme',
       hint: 'Switch between dark and light',
