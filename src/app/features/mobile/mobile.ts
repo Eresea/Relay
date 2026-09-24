@@ -59,77 +59,89 @@ type MobileTab = 'dashboard' | 'notifications' | 'vault' | 'connections' | 'sett
         </button>
       </header>
 
-      @if (railOpen()) {
+      <button
+        type="button"
+        class="rail-backdrop"
+        [class.open]="railOpen()"
+        [class.dragging]="railGestureActive()"
+        [style.opacity]="railProgress()"
+        [attr.aria-hidden]="!railOpen()"
+        [attr.inert]="railOpen() ? null : ''"
+        (click)="closeRail()"
+        aria-label="Close navigation"
+      ></button>
+      <aside
+        id="mobile-rail"
+        class="mobile-rail"
+        [class.open]="railOpen()"
+        [class.dragging]="railGestureActive()"
+        [style.transform]="'translate3d(' + (railProgress() - 1) * 100 + '%, 0, 0)'"
+        [attr.aria-hidden]="!railOpen()"
+        [attr.inert]="railOpen() ? null : ''"
+        aria-label="Relay navigation"
+      >
+        <div class="rail-heading">
+          <span class="eyebrow">Relay</span>
+          <button
+            type="button"
+            class="rail-close"
+            (click)="closeRail()"
+            aria-label="Close navigation"
+          >
+            <rl-icon name="x" [size]="16" />
+          </button>
+        </div>
         <button
           type="button"
-          class="rail-backdrop"
-          (click)="closeRail()"
-          aria-label="Close navigation"
-        ></button>
-        <aside id="mobile-rail" class="mobile-rail" aria-label="Relay navigation">
-          <div class="rail-heading">
-            <span class="eyebrow">Relay</span>
-            <button
-              type="button"
-              class="rail-close"
-              (click)="closeRail()"
-              aria-label="Close navigation"
-            >
-              <rl-icon name="x" [size]="16" />
-            </button>
-          </div>
+          class="rail-item"
+          [class.active]="tab() === 'dashboard'"
+          (click)="selectTab('dashboard')"
+        >
+          <rl-icon name="house" [size]="16" />
+          <span>Dashboard</span>
+        </button>
+        <button
+          type="button"
+          class="rail-item"
+          [class.active]="tab() === 'notifications'"
+          (click)="selectTab('notifications')"
+        >
+          <rl-icon name="inbox" [size]="16" />
+          <span>Notifications</span>
+          @if (unreadCount() > 0) {
+            <span class="rail-badge">{{ unreadCount() }}</span>
+          }
+        </button>
+        <button
+          type="button"
+          class="rail-item"
+          [class.active]="tab() === 'vault'"
+          (click)="selectTab('vault')"
+        >
+          <rl-icon name="lock" [size]="16" />
+          <span>Password vault</span>
+        </button>
+        <button
+          type="button"
+          class="rail-item"
+          [class.active]="tab() === 'connections'"
+          (click)="selectTab('connections')"
+        >
+          <rl-icon name="settings" [size]="16" />
+          <span>Connections</span>
+        </button>
+        <div class="rail-settings">
           <button
             type="button"
             class="rail-item"
-            [class.active]="tab() === 'dashboard'"
-            (click)="selectTab('dashboard')"
-          >
-            <rl-icon name="house" [size]="16" />
-            <span>Dashboard</span>
-          </button>
-          <button
-            type="button"
-            class="rail-item"
-            [class.active]="tab() === 'notifications'"
-            (click)="selectTab('notifications')"
-          >
-            <rl-icon name="inbox" [size]="16" />
-            <span>Notifications</span>
-            @if (unreadCount() > 0) {
-              <span class="rail-badge">{{ unreadCount() }}</span>
-            }
-          </button>
-          <button
-            type="button"
-            class="rail-item"
-            [class.active]="tab() === 'vault'"
-            (click)="selectTab('vault')"
-          >
-            <rl-icon name="lock" [size]="16" />
-            <span>Password vault</span>
-          </button>
-          <button
-            type="button"
-            class="rail-item"
-            [class.active]="tab() === 'connections'"
-            (click)="selectTab('connections')"
+            [class.active]="tab() === 'settings'"
+            (click)="selectTab('settings')"
           >
             <rl-icon name="settings" [size]="16" />
-            <span>Connections</span>
+            <span>Settings</span>
           </button>
-          <div class="rail-settings">
-            <button
-              type="button"
-              class="rail-item"
-              [class.active]="tab() === 'settings'"
-              (click)="selectTab('settings')"
-            >
-              <rl-icon name="settings" [size]="16" />
-              <span>Settings</span>
-            </button>
-          </div>
-        </aside>
-      }
+        </div>
+      </aside>
 
       <main class="mobile-content">
         @if (tab() === 'dashboard') {
@@ -385,6 +397,17 @@ type MobileTab = 'dashboard' | 'notifications' | 'vault' | 'connections' | 'sett
       z-index: 4;
       inset: 0;
       background: color-mix(in srgb, var(--bg-app) 48%, transparent);
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 220ms cubic-bezier(0.2, 0, 0, 1);
+    }
+
+    .rail-backdrop.open {
+      pointer-events: auto;
+    }
+
+    .rail-backdrop.dragging {
+      transition: none;
     }
 
     .mobile-rail {
@@ -401,18 +424,20 @@ type MobileTab = 'dashboard' | 'notifications' | 'vault' | 'connections' | 'sett
       background: var(--bg-sunken);
       border-inline-end: 1px solid var(--border-subtle);
       box-shadow: var(--shadow-lg);
-      animation: mobile-rail-in 160ms var(--ease-standard);
+      visibility: hidden;
+      transition:
+        transform 220ms cubic-bezier(0.2, 0, 0, 1),
+        visibility 0s linear 220ms;
     }
 
-    @keyframes mobile-rail-in {
-      from {
-        opacity: 0;
-        transform: translateX(-16px);
-      }
-      to {
-        opacity: 1;
-        transform: translateX(0);
-      }
+    .mobile-rail.open,
+    .mobile-rail.dragging {
+      visibility: visible;
+      transition: transform 220ms cubic-bezier(0.2, 0, 0, 1);
+    }
+
+    .mobile-rail.dragging {
+      transition: none;
     }
 
     .rail-heading {
@@ -479,6 +504,7 @@ type MobileTab = 'dashboard' | 'notifications' | 'vault' | 'connections' | 'sett
       min-block-size: 0;
       overflow-y: auto;
       padding: var(--space-5);
+      touch-action: pan-y;
     }
 
     .welcome {
@@ -775,7 +801,14 @@ export class Mobile {
   protected readonly theme = inject(ThemeService);
   private readonly destroyRef = inject(DestroyRef);
 
-  private railGesture: { pointerId: number; startX: number; startY: number } | null = null;
+  private railGesture: {
+    pointerId: number;
+    startX: number;
+    startY: number;
+    startTime: number;
+    startedOpen: boolean;
+    intent: boolean;
+  } | null = null;
   private notificationSwipe: {
     notificationId: string;
     pointerId: number;
@@ -787,6 +820,8 @@ export class Mobile {
 
   protected readonly tab = signal<MobileTab>('dashboard');
   protected readonly railOpen = signal(false);
+  protected readonly railProgress = signal(0);
+  protected readonly railGestureActive = signal(false);
   protected readonly swipeState = signal<{ notificationId: string; offset: number } | null>(null);
   protected readonly notifications = this.center.history;
   protected readonly unreadCount = computed(
@@ -820,7 +855,7 @@ export class Mobile {
       const edgeSwipe = Date.now() - this.pendingRailBackAt < 700;
       this.pendingRailBackAt = 0;
       if (edgeSwipe && !this.railOpen()) {
-        this.railOpen.set(true);
+        this.setRailOpen(true);
       } else if (this.railOpen()) {
         this.closeRail();
       } else if (this.tab() !== 'dashboard') {
@@ -883,11 +918,11 @@ export class Mobile {
   }
 
   protected toggleRail(): void {
-    this.railOpen.update((open) => !open);
+    this.setRailOpen(!this.railOpen());
   }
 
   protected closeRail(): void {
-    this.railOpen.set(false);
+    this.setRailOpen(false);
   }
 
   protected selectTab(tab: MobileTab): void {
@@ -897,31 +932,61 @@ export class Mobile {
 
   protected startRailGesture(event: PointerEvent): void {
     if (!event.isPrimary) return;
-    const edgeSwipe = !this.railOpen() && event.clientX <= 96;
-    const closeSwipe = this.railOpen() && event.clientX > 288;
-    if (!edgeSwipe && !closeSwipe) return;
-    this.railGesture = { pointerId: event.pointerId, startX: event.clientX, startY: event.clientY };
-    (event.currentTarget as HTMLElement).setPointerCapture(event.pointerId);
+    this.railGesture = {
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      startY: event.clientY,
+      startTime: event.timeStamp,
+      startedOpen: this.railOpen(),
+      intent: false,
+    };
   }
 
   protected moveRailGesture(event: PointerEvent): void {
-    if (!this.railGesture || event.pointerId !== this.railGesture.pointerId) return;
-    if (
-      Math.abs(event.clientX - this.railGesture.startX) >
-      Math.abs(event.clientY - this.railGesture.startY)
-    ) {
-      event.preventDefault();
+    const gesture = this.railGesture;
+    if (!gesture || event.pointerId !== gesture.pointerId) return;
+
+    const deltaX = event.clientX - gesture.startX;
+    const deltaY = event.clientY - gesture.startY;
+    if (!gesture.intent) {
+      if (Math.max(Math.abs(deltaX), Math.abs(deltaY)) < 10) return;
+      if (Math.abs(deltaX) <= Math.abs(deltaY) * 1.15) {
+        this.railGesture = null;
+        return;
+      }
+      if (gesture.startedOpen ? deltaX >= 0 : deltaX <= 0) {
+        this.railGesture = null;
+        return;
+      }
+
+      gesture.intent = true;
+      this.railGestureActive.set(true);
+      this.railOpen.set(true);
     }
+
+    event.preventDefault();
+    const width = Math.min(window.innerWidth * 0.82, 288);
+    const progress = Math.max(0, Math.min(1, (gesture.startedOpen ? 1 : 0) + deltaX / width));
+    this.railProgress.set(progress);
   }
 
   protected endRailGesture(event: PointerEvent): void {
-    if (!this.railGesture || event.pointerId !== this.railGesture.pointerId) return;
-    const deltaX = event.clientX - this.railGesture.startX;
-    const deltaY = event.clientY - this.railGesture.startY;
-    const open = mobileSwipeAction(deltaX, deltaY) === 'open-rail';
-    const close = deltaX <= -72 && Math.abs(deltaX) > Math.abs(deltaY);
-    if (open || close) this.railOpen.set(open);
-    this.cancelRailGesture();
+    const gesture = this.railGesture;
+    if (!gesture || event.pointerId !== gesture.pointerId) return;
+    if (!gesture.intent) {
+      this.railGesture = null;
+      return;
+    }
+
+    const deltaX = event.clientX - gesture.startX;
+    const duration = Math.max(1, event.timeStamp - gesture.startTime);
+    const velocity = deltaX / duration;
+    const width = Math.min(window.innerWidth * 0.82, 288);
+    const progress = Math.max(0, Math.min(1, (gesture.startedOpen ? 1 : 0) + deltaX / width));
+    const open = gesture.startedOpen
+      ? !(progress < 0.62 || (deltaX <= -56 && velocity < -0.55))
+      : progress >= 0.34 || (deltaX >= 56 && velocity > 0.55);
+    this.setRailOpen(open);
   }
 
   protected cancelRailGesture(event?: PointerEvent): void {
@@ -930,7 +995,14 @@ export class Mobile {
       // ponytail: pair edge pointercancel with Android Back; use native exclusion rectangles if unreliable.
       this.pendingRailBackAt = Date.now();
     }
+    if (gesture) this.setRailOpen(gesture.startedOpen);
+  }
+
+  private setRailOpen(open: boolean): void {
     this.railGesture = null;
+    this.railGestureActive.set(false);
+    this.railOpen.set(open);
+    this.railProgress.set(open ? 1 : 0);
   }
 
   protected startNotificationSwipe(event: PointerEvent, notificationId: string): void {
