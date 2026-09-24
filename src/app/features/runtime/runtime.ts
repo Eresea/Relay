@@ -92,6 +92,15 @@ const RUNTIME_STATUS_STALE_AFTER_MS = 90_000;
                       {{ leafHealthLabel() }}
                     </span>
                     <p role="status">{{ leafHealthDetail() }}</p>
+                    <button
+                      type="button"
+                      class="secondary-button"
+                      [disabled]="leafHealthState() === 'unavailable'"
+                      aria-label="Open Leaf API liveness endpoint"
+                      (click)="openHealthSource('https://leaf.eresea.net/api/version/health')"
+                    >
+                      View source
+                    </button>
                   </div>
                 </td>
               </tr>
@@ -114,6 +123,15 @@ const RUNTIME_STATUS_STALE_AFTER_MS = 90_000;
                       {{ nexusHealthLabel() }}
                     </span>
                     <p role="status">{{ nexusHealthDetail() }}</p>
+                    <button
+                      type="button"
+                      class="secondary-button"
+                      [disabled]="nexusHealthState() === 'unavailable'"
+                      aria-label="Open Nexus readiness endpoint"
+                      (click)="openHealthSource('https://nexus.eresea.net/readyz')"
+                    >
+                      View source
+                    </button>
                   </div>
                 </td>
               </tr>
@@ -1259,6 +1277,14 @@ export class Runtime implements OnDestroy {
       await this.tauri.openUrl(url);
     } catch {
       this.error.set('Could not open the Grafana dashboard.');
+    }
+  }
+
+  protected async openHealthSource(url: string): Promise<void> {
+    try {
+      await this.tauri.openUrl(url);
+    } catch {
+      this.error.set('Could not open the health endpoint.');
     }
   }
 
