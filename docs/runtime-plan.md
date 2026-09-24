@@ -1,7 +1,8 @@
 # Runtime module plan
 
-**Status:** in progress; Grafana health and dashboard discovery are implemented,
-Leaf API liveness is polled, and metric mapping waits for the Grafana inventory.
+**Status:** in progress; Grafana health, dashboard and panel metadata discovery
+are implemented, and Leaf API liveness is polled. Metric mapping awaits the
+configured Grafana inventory.
 
 ## Goal
 
@@ -83,12 +84,15 @@ real data source needs to fit the same seam.
 The initial setup screen stores Grafana and dashboard URLs under
 `runtime.grafana` in Relay's existing settings store. The API token is optional
 and stored in the OS credential store. All fields start blank; no Grafana
-queries run until the datasource and panels are identified. A manual connection
+metric queries run until the datasource and panels are identified. A manual connection
 check now reads Grafana's health endpoint and lists up to 50 dashboards
 available to the saved credential; a discovered dashboard can be saved as the
-default Grafana destination. This confirms access to Grafana only; it is not
-used as Leaf's health signal. API route selection will be revisited after the
-Grafana instance version is known. Leaf already exposes an unauthenticated
+default Grafana destination. Relay can also inspect a dashboard's panel IDs,
+titles, types, and datasource labels without reading metric values. The panel
+inventory uses Grafana's legacy dashboard read route for compatibility;
+confirm Grafana version and folder coverage before adding metric queries or
+depending on a newer route. These checks confirm access to Grafana only; they
+are not Leaf health signals. Leaf already exposes an unauthenticated
 `GET /api/version/health`; Relay checks this every 30 seconds while the Runtime
 view is mounted. It only proves the endpoint returned its healthy response, not
 database readiness, request performance, or Nexus health. A failed refresh
@@ -102,7 +106,7 @@ as uptime monitoring.
 ## Delivery plan
 
 1. **Inventory Grafana.** Confirm its URL and edition/version, the datasource
-   type, the Leaf dashboard/panels, existing alert rules, the metrics available
+   type and UID, the Leaf dashboard/panels, existing alert rules, the metrics available
    for Nexus, and whether Relay can reach Grafana directly. Select the narrowest
    read-only authentication option. Do not send credentials in chat.
 2. **Prove one read-only query.** Choose the integration route from the

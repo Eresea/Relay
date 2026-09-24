@@ -2,6 +2,7 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use reqwest::header::{HeaderValue, AUTHORIZATION};
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 use tauri::AppHandle;
 use tauri_plugin_store::StoreExt;
 use url::Url;
@@ -12,6 +13,8 @@ const SERVICE: &str = "relay-runtime-grafana";
 const ACCOUNT: &str = "service-account-token";
 const SETTINGS_KEY: &str = "runtime.grafana";
 const DASHBOARD_LIMIT: usize = 50;
+const PANEL_LIMIT: usize = 200;
+const PANEL_DEPTH_LIMIT: usize = 8;
 const LEAF_HEALTH_URL: &str = "https://leaf.eresea.net/api/version/health";
 
 #[derive(Debug, Default, Deserialize)]
@@ -35,6 +38,45 @@ pub struct GrafanaDashboard {
     pub uid: String,
     pub title: String,
     pub url: String,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GrafanaDashboardPanel {
+    pub id: Option<i64>,
+    pub title: String,
+    pub kind: String,
+    pub datasource: Option<String>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GrafanaDashboardPanelInventory {
+    pub panels: Vec<GrafanaDashboardPanel>,
+    pub truncated: bool,
+}
+
+#[derive(Debug, Deserialize)]
+struct GrafanaDashboardBody {
+    dashboard: GrafanaDashboardSpec,
+}
+
+#[derive(Debug, Deserialize)]
+struct GrafanaDashboardSpec {
+    #[serde(default)]
+    panels: Vec<GrafanaPanelSpec>,
+}
+
+#[derive(Debug, Deserialize)]
+struct GrafanaPanelSpec {
+    id: Option<i64>,
+    #[serde(default)]
+    title: String,
+    #[serde(rename = "type", default)]
+    kind: String,
+    datasource: Option<Value>,
+    #[serde(default)]
+    panels: Vec<GrafanaPanelSpec>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -64,6 +106,42 @@ pub struct LeafHealthObservation {
 struct LeafHealthResponse {
     status: String,
     timestamp: String,
+}
+
+struct GrafanaAccess {
+    base_url: Url,
+    client: reqwest::Client,
+    token: Option<HeaderValue>,
+}
+
+fn grafana_access(app: &AppHandle) -> Result<GrafanaAccess> {
+    let store = app
+        .store("settings.json")
+        .map_err(|_| Error::GrafanaSettingsUnavailable)?;
+    let settings = store
+        .get(SETTINGS_KEY)
+        .and_then(|value| serde_json::from_value::<GrafanaSettings>(value).ok())
+        .unwrap_or_default();
+    let base_url = grafana_base_url(&settings.grafana_url)?;
+    let client = reqwest::Client::builder()
+        .timeout(Duration::from_secs(8))
+        .redirect(reqwest::redirect::Policy::none())
+        .build()
+        .map_err(|_| Error::GrafanaHttpClient)?;
+    let token = match entry()?.get_password() {
+        Ok(token) => {
+            let header = format!("Bearer {token}");
+            Some(HeaderValue::from_str(&header).map_err(|_| Error::GrafanaTokenInvalid)?)
+        }
+        Err(keyring::Error::NoEntry) => None,
+        Err(error) => return Err(Error::TokenStore(error.to_string())),
+    };
+
+    Ok(GrafanaAccess {
+        base_url,
+        client,
+        token,
+    })
 }
 
 fn entry() -> Result<keyring::Entry> {
@@ -103,34 +181,13 @@ pub fn runtime_grafana_clear_token() -> Result<()> {
 
 #[tauri::command]
 pub async fn runtime_grafana_check(app: AppHandle) -> Result<GrafanaCheck> {
-    let store = app
-        .store("settings.json")
-        .map_err(|_| Error::GrafanaSettingsUnavailable)?;
-    let settings = store
-        .get(SETTINGS_KEY)
-        .and_then(|value| serde_json::from_value::<GrafanaSettings>(value).ok())
-        .unwrap_or_default();
-    let base_url = grafana_base_url(&settings.grafana_url)?;
-    let health_url = base_url
+    let access = grafana_access(&app)?;
+    let health_url = access
+        .base_url
         .join("api/health")
         .map_err(|_| Error::GrafanaUrlInvalid)?;
-
-    let client = reqwest::Client::builder()
-        .timeout(Duration::from_secs(8))
-        .redirect(reqwest::redirect::Policy::none())
-        .build()
-        .map_err(|_| Error::GrafanaHttpClient)?;
-    let token = match entry()?.get_password() {
-        Ok(token) => {
-            let header = format!("Bearer {token}");
-            Some(HeaderValue::from_str(&header).map_err(|_| Error::GrafanaTokenInvalid)?)
-        }
-        Err(keyring::Error::NoEntry) => None,
-        Err(error) => return Err(Error::TokenStore(error.to_string())),
-    };
-
-    let mut health_request = client.get(health_url);
-    if let Some(token) = token.as_ref() {
+    let mut health_request = access.client.get(health_url);
+    if let Some(token) = access.token.as_ref() {
         health_request = health_request.header(AUTHORIZATION, token.clone());
     }
     let response = health_request
@@ -146,13 +203,15 @@ pub async fn runtime_grafana_check(app: AppHandle) -> Result<GrafanaCheck> {
         .ok()
         .and_then(|health| health.version);
 
-    let dashboards_url = base_url
+    let dashboards_url = access
+        .base_url
         .join("api/search")
         .map_err(|_| Error::GrafanaUrlInvalid)?;
-    let mut dashboard_request = client
+    let mut dashboard_request = access
+        .client
         .get(dashboards_url)
         .query(&[("type", "dash-db"), ("limit", "50")]);
-    if let Some(token) = token.as_ref() {
+    if let Some(token) = access.token.as_ref() {
         dashboard_request = dashboard_request.header(AUTHORIZATION, token.clone());
     }
 
@@ -164,8 +223,8 @@ pub async fn runtime_grafana_check(app: AppHandle) -> Result<GrafanaCheck> {
                         .into_iter()
                         .filter(|item| item.kind == "dash-db")
                         .filter_map(|item| {
-                            let url = base_url.join(&item.url).ok()?;
-                            if url.origin() != base_url.origin()
+                            let url = access.base_url.join(&item.url).ok()?;
+                            if url.origin() != access.base_url.origin()
                                 || url.username() != ""
                                 || url.password().is_some()
                             {
@@ -217,6 +276,80 @@ pub async fn runtime_grafana_check(app: AppHandle) -> Result<GrafanaCheck> {
         dashboards,
         dashboard_error,
     })
+}
+
+#[tauri::command]
+pub async fn runtime_grafana_dashboard_panels(
+    app: AppHandle,
+    uid: String,
+) -> Result<GrafanaDashboardPanelInventory> {
+    if uid.is_empty()
+        || uid.len() > 40
+        || !uid
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || byte == b'_' || byte == b'-')
+    {
+        return Err(Error::GrafanaDashboardUidInvalid);
+    }
+
+    let access = grafana_access(&app)?;
+    let dashboard_url = access
+        .base_url
+        .join(&format!("api/dashboards/uid/{uid}"))
+        .map_err(|_| Error::GrafanaUrlInvalid)?;
+    let mut request = access.client.get(dashboard_url);
+    if let Some(token) = access.token {
+        request = request.header(AUTHORIZATION, token);
+    }
+    let response = request
+        .send()
+        .await
+        .map_err(|_| Error::GrafanaDashboardRequestFailed)?;
+    if !response.status().is_success() {
+        return Err(Error::GrafanaDashboardStatus(response.status().as_u16()));
+    }
+    let body = response
+        .json::<GrafanaDashboardBody>()
+        .await
+        .map_err(|_| Error::GrafanaDashboardResponseInvalid)?;
+    let mut panels = Vec::new();
+    let truncated = collect_panels(&body.dashboard.panels, 0, &mut panels);
+    Ok(GrafanaDashboardPanelInventory { panels, truncated })
+}
+
+fn collect_panels(
+    specs: &[GrafanaPanelSpec],
+    depth: usize,
+    panels: &mut Vec<GrafanaDashboardPanel>,
+) -> bool {
+    if depth > PANEL_DEPTH_LIMIT {
+        return !specs.is_empty();
+    }
+    for panel in specs {
+        if panels.len() >= PANEL_LIMIT {
+            return true;
+        }
+        if panel.kind != "row" {
+            panels.push(GrafanaDashboardPanel {
+                id: panel.id,
+                title: panel.title.clone(),
+                kind: panel.kind.clone(),
+                datasource: panel.datasource.as_ref().and_then(|value| match value {
+                    Value::String(name) => Some(name.clone()),
+                    Value::Object(source) => source
+                        .get("uid")
+                        .or_else(|| source.get("type"))
+                        .and_then(Value::as_str)
+                        .map(str::to_owned),
+                    _ => None,
+                }),
+            });
+        }
+        if collect_panels(&panel.panels, depth + 1, panels) {
+            return true;
+        }
+    }
+    false
 }
 
 #[tauri::command]

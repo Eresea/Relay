@@ -122,6 +122,7 @@ pub fn run() {
                 runtime::runtime_grafana_set_token,
                 runtime::runtime_grafana_clear_token,
                 runtime::runtime_grafana_check,
+                runtime::runtime_grafana_dashboard_panels,
                 runtime::runtime_leaf_health,
                 commands::update_status,
                 commands::update_check,

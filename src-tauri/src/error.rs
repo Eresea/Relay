@@ -103,6 +103,22 @@ pub enum Error {
     GrafanaHealthStatus(u16),
 
     #[cfg(desktop)]
+    #[error("Grafana dashboard UID is invalid")]
+    GrafanaDashboardUidInvalid,
+
+    #[cfg(desktop)]
+    #[error("could not reach the Grafana dashboard endpoint")]
+    GrafanaDashboardRequestFailed,
+
+    #[cfg(desktop)]
+    #[error("Grafana dashboard endpoint returned HTTP {0}")]
+    GrafanaDashboardStatus(u16),
+
+    #[cfg(desktop)]
+    #[error("Grafana dashboard endpoint returned an unexpected response")]
+    GrafanaDashboardResponseInvalid,
+
+    #[cfg(desktop)]
     #[error("could not reach the Leaf API health endpoint")]
     LeafHealthRequestFailed,
 

@@ -6,6 +6,7 @@ import {
   type RuntimeGrafanaCheck,
   type RuntimeGrafanaDashboard,
   type RuntimeGrafanaSettings,
+  type RuntimeGrafanaPanelInventory,
 } from '@core/tauri';
 import { Icon } from '@shared/icon';
 
@@ -267,11 +268,50 @@ import { Icon } from '@shared/icon';
                       Set default
                     </button>
                   }
+                  <button
+                    type="button"
+                    class="dashboard-use"
+                    [disabled]="saving() || inspectingPanels()"
+                    (click)="inspectDashboard(dashboard)"
+                  >
+                    Inspect
+                  </button>
                 </li>
               }
             </ul>
           } @else {
             <p class="dashboard-error" role="status">No dashboards were visible to this account.</p>
+          }
+          @if (inspectedDashboard(); as dashboard) {
+            <section class="panel-inventory" aria-label="Grafana dashboard panels">
+              <h2>{{ dashboard.title }} · panel inventory</h2>
+              @if (panelInventoryError()) {
+                <p class="dashboard-error" role="status">{{ panelInventoryError() }}</p>
+              } @else if (inspectingPanels()) {
+                <p role="status">Loading panel metadata…</p>
+              } @else {
+                @if (dashboardPanels().truncated) {
+                  <p role="status">Showing the first 200 panels.</p>
+                }
+                @if (dashboardPanels().panels.length) {
+                  <ul class="dashboard-list">
+                    @for (panel of dashboardPanels().panels; track panel.id ?? $index) {
+                      <li>
+                        <span>{{ panel.title || 'Untitled panel' }}</span>
+                        <small>
+                          #{{ panel.id ?? '—' }} · {{ panel.kind || 'Unknown type' }}
+                          @if (panel.datasource) {
+                            · {{ panel.datasource }}
+                          }
+                        </small>
+                      </li>
+                    }
+                  </ul>
+                } @else {
+                  <p>No panels were returned for this dashboard.</p>
+                }
+              }
+            </section>
           }
         </section>
       }
@@ -801,6 +841,13 @@ export class Runtime implements OnDestroy {
   protected readonly saving = signal(false);
   protected readonly checking = signal(false);
   protected readonly checkResult = signal<RuntimeGrafanaCheck | null>(null);
+  protected readonly inspectedDashboard = signal<RuntimeGrafanaDashboard | null>(null);
+  protected readonly dashboardPanels = signal<RuntimeGrafanaPanelInventory>({
+    panels: [],
+    truncated: false,
+  });
+  protected readonly inspectingPanels = signal(false);
+  protected readonly panelInventoryError = signal('');
   protected readonly leafHealth = signal<LeafHealthObservation | null>(null);
   protected readonly leafHealthState = signal<
     'checking' | 'reachable' | 'stale' | 'unknown' | 'unavailable'
@@ -850,6 +897,7 @@ export class Runtime implements OnDestroy {
     if (normalizeWebUrl(grafanaUrl) !== normalizeWebUrl(this.grafanaUrl())) {
       this.dashboardUrl.set('');
       this.checkResult.set(null);
+      this.clearPanelInventory();
       this.error.set('');
       this.notice.set('');
     }
@@ -968,6 +1016,7 @@ export class Runtime implements OnDestroy {
       this.tokenConfigured.set(true);
       this.tokenStatus.set('available');
       this.checkResult.set(null);
+      this.clearPanelInventory();
       this.notice.set('Grafana token stored in the OS credential store.');
     } catch {
       this.error.set('Could not store the Grafana token in the OS credential store.');
@@ -989,6 +1038,7 @@ export class Runtime implements OnDestroy {
       this.tokenConfigured.set(false);
       this.tokenInput.set('');
       this.checkResult.set(null);
+      this.clearPanelInventory();
       this.notice.set('Grafana token removed.');
     } catch {
       this.error.set('Could not remove the Grafana token.');
@@ -1050,6 +1100,34 @@ export class Runtime implements OnDestroy {
     } finally {
       this.saving.set(false);
     }
+  }
+
+  protected async inspectDashboard(dashboard: RuntimeGrafanaDashboard): Promise<void> {
+    if (!this.tauri.available) return;
+    this.inspectedDashboard.set(dashboard);
+    this.dashboardPanels.set({ panels: [], truncated: false });
+    this.panelInventoryError.set('');
+    this.inspectingPanels.set(true);
+    try {
+      this.dashboardPanels.set(
+        (await this.tauri.runtimeGrafanaDashboardPanels(dashboard.uid)) ?? {
+          panels: [],
+          truncated: false,
+        },
+      );
+    } catch {
+      this.panelInventoryError.set(
+        'Could not read panel metadata. Check the Grafana token permissions.',
+      );
+    } finally {
+      this.inspectingPanels.set(false);
+    }
+  }
+
+  private clearPanelInventory(): void {
+    this.inspectedDashboard.set(null);
+    this.dashboardPanels.set({ panels: [], truncated: false });
+    this.panelInventoryError.set('');
   }
 
   protected grafanaCheckedAtLabel(result: RuntimeGrafanaCheck): string {

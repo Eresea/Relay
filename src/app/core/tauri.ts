@@ -218,6 +218,10 @@ export class TauriBridge {
     return this.invoke<RuntimeGrafanaCheck>('runtime_grafana_check');
   }
 
+  async runtimeGrafanaDashboardPanels(uid: string): Promise<RuntimeGrafanaPanelInventory | null> {
+    return this.invoke<RuntimeGrafanaPanelInventory>('runtime_grafana_dashboard_panels', { uid });
+  }
+
   async runtimeLeafHealth(): Promise<LeafHealthObservation | null> {
     return this.invoke<LeafHealthObservation>('runtime_leaf_health');
   }
@@ -484,6 +488,18 @@ export interface RuntimeGrafanaDashboard {
   readonly uid: string;
   readonly title: string;
   readonly url: string;
+}
+
+export interface RuntimeGrafanaPanel {
+  readonly id: number | null;
+  readonly title: string;
+  readonly kind: string;
+  readonly datasource: string | null;
+}
+
+export interface RuntimeGrafanaPanelInventory {
+  readonly panels: readonly RuntimeGrafanaPanel[];
+  readonly truncated: boolean;
 }
 
 export interface LeafHealthObservation {
