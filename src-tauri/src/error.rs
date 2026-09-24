@@ -74,6 +74,34 @@ pub enum Error {
     #[error("Grafana API token cannot be empty")]
     GrafanaTokenEmpty,
 
+    #[cfg(desktop)]
+    #[error("Grafana API token contains invalid characters")]
+    GrafanaTokenInvalid,
+
+    #[cfg(desktop)]
+    #[error("Grafana settings could not be read")]
+    GrafanaSettingsUnavailable,
+
+    #[cfg(desktop)]
+    #[error("enter a valid Grafana HTTP or HTTPS URL")]
+    GrafanaUrlInvalid,
+
+    #[cfg(desktop)]
+    #[error("Grafana URL is not configured")]
+    GrafanaUrlMissing,
+
+    #[cfg(desktop)]
+    #[error("could not configure the Grafana HTTP client")]
+    GrafanaHttpClient,
+
+    #[cfg(desktop)]
+    #[error("could not reach Grafana health endpoint")]
+    GrafanaHealthRequestFailed,
+
+    #[cfg(desktop)]
+    #[error("Grafana health endpoint returned HTTP {0}")]
+    GrafanaHealthStatus(u16),
+
     #[error("OpenCloud request failed: {0}")]
     OpenCloud(String),
 

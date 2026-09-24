@@ -1,6 +1,7 @@
 # Runtime module plan
 
-**Status:** in progress; live metric mapping waits for the Leaf Grafana inventory.
+**Status:** in progress; Grafana health and dashboard discovery are implemented,
+while live metric mapping waits for the Leaf Grafana inventory.
 
 ## Goal
 
@@ -82,7 +83,11 @@ real data source needs to fit the same seam.
 The initial setup screen stores Grafana and dashboard URLs under
 `runtime.grafana` in Relay's existing settings store. The API token is optional
 and stored in the OS credential store. All fields start blank; no Grafana
-queries run until the datasource and panels are identified.
+queries run until the datasource and panels are identified. A manual connection
+check now reads Grafana's health endpoint and lists up to 50 dashboards
+available to the saved credential. This confirms access to Grafana only; it is
+not used as Leaf's health signal. API route selection will be revisited after
+the Grafana instance version is known.
 
 Polling happens only while Runtime is open in the first release. Keep the last
 successful observation and its timestamp so a failed refresh can show stale

@@ -121,6 +121,7 @@ pub fn run() {
                 runtime::runtime_grafana_token_configured,
                 runtime::runtime_grafana_set_token,
                 runtime::runtime_grafana_clear_token,
+                runtime::runtime_grafana_check,
                 commands::update_status,
                 commands::update_check,
                 commands::update_download,

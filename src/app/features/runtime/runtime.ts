@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, inject, signal } from '@angular/core';
 
-import { TauriBridge, type RuntimeGrafanaSettings } from '@core/tauri';
+import { TauriBridge, type RuntimeGrafanaCheck, type RuntimeGrafanaSettings } from '@core/tauri';
 import { Icon } from '@shared/icon';
 
 @Component({
@@ -67,7 +67,7 @@ import { Icon } from '@shared/icon';
               autocomplete="url"
               placeholder="https://grafana.example.net"
               [value]="grafanaUrl()"
-              [disabled]="loading() || saving()"
+              [disabled]="loading() || saving() || checking()"
               (input)="setGrafanaUrl($event)"
             />
           </label>
@@ -78,7 +78,7 @@ import { Icon } from '@shared/icon';
               autocomplete="url"
               placeholder="Leave blank until known"
               [value]="dashboardUrl()"
-              [disabled]="loading() || saving()"
+              [disabled]="loading() || saving() || checking()"
               (input)="setDashboardUrl($event)"
             />
           </label>
@@ -91,13 +91,13 @@ import { Icon } from '@shared/icon';
                 autocomplete="new-password"
                 placeholder="Leave blank until configured"
                 [value]="tokenInput()"
-                [disabled]="loading() || saving()"
+                [disabled]="loading() || saving() || checking()"
                 (input)="setTokenInput($event)"
               />
               <button
                 type="button"
                 class="secondary-button"
-                [disabled]="saving() || !tokenInput().trim()"
+                [disabled]="saving() || checking() || !tokenInput().trim()"
                 (click)="saveToken()"
               >
                 Store token
@@ -106,7 +106,7 @@ import { Icon } from '@shared/icon';
                 <button
                   type="button"
                   class="secondary-button"
-                  [disabled]="saving()"
+                  [disabled]="saving() || checking()"
                   (click)="clearToken()"
                 >
                   Remove
@@ -124,14 +124,61 @@ import { Icon } from '@shared/icon';
           <p>Metrics and thresholds will be mapped after the datasource and dashboard are known.</p>
           <button
             type="button"
+            class="secondary-button"
+            [disabled]="saving() || loading() || checking() || !grafanaUrl().trim()"
+            (click)="checkGrafana()"
+          >
+            {{ checking() ? 'Checking Grafana…' : 'Check connection' }}
+          </button>
+          <button
+            type="button"
             class="primary-button"
-            [disabled]="saving() || loading()"
+            [disabled]="saving() || loading() || checking()"
             (click)="saveSettings()"
           >
             Save URLs
           </button>
         </footer>
       </section>
+
+      @if (checkResult(); as result) {
+        <section class="connection-result" aria-labelledby="connection-result-title">
+          <header>
+            <div>
+              <h2 id="connection-result-title">Grafana is reachable</h2>
+              <p>
+                @if (result.version) {
+                  Version {{ result.version }} ·
+                }
+                Checked {{ checkedAtLabel(result) }}. This confirms Grafana access only; it does not
+                indicate Leaf health.
+              </p>
+            </div>
+            <span class="dashboard-count">
+              @if (result.dashboardError) {
+                Dashboard list unavailable
+              } @else {
+                {{ result.dashboards.length }} dashboards
+              }
+            </span>
+          </header>
+          @if (result.dashboardError) {
+            <p class="dashboard-error" role="status">{{ result.dashboardError }}</p>
+          } @else if (result.dashboards.length) {
+            <ul class="dashboard-list" aria-label="Grafana dashboards">
+              @for (dashboard of result.dashboards; track dashboard.uid) {
+                <li>
+                  <button type="button" (click)="openDashboard(dashboard.url)">
+                    {{ dashboard.title }}
+                  </button>
+                </li>
+              }
+            </ul>
+          } @else {
+            <p class="dashboard-error" role="status">No dashboards were visible to this account.</p>
+          }
+        </section>
+      }
 
       <section class="services" aria-label="Leaf production services">
         <article class="service-card">
@@ -372,6 +419,68 @@ import { Icon } from '@shared/icon';
       margin-block-start: 0;
     }
 
+    .connection-result {
+      margin-block-start: var(--space-5);
+      padding: var(--space-5);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-md);
+      background: var(--bg-raised);
+    }
+
+    .connection-result header {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: var(--space-5);
+    }
+
+    .connection-result h2 {
+      color: var(--text-body);
+      font-size: var(--text-13);
+      font-weight: var(--weight-medium);
+    }
+
+    .connection-result p,
+    .dashboard-count {
+      margin-block-start: var(--space-2);
+      color: var(--text-muted);
+      font-size: var(--text-12);
+      line-height: 1.5;
+    }
+
+    .dashboard-count {
+      flex: none;
+      margin-block-start: 0;
+    }
+
+    .dashboard-list {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr));
+      gap: var(--space-2);
+      margin: var(--space-4) 0 0;
+      padding: 0;
+      list-style: none;
+    }
+
+    .dashboard-list button {
+      inline-size: 100%;
+      padding: var(--space-3);
+      color: var(--text-body);
+      text-align: start;
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-sm);
+      background: var(--bg-sunken);
+      font: inherit;
+    }
+
+    .dashboard-list button:hover {
+      background: var(--tint-hover);
+    }
+
+    .dashboard-error {
+      margin-block-start: var(--space-4) !important;
+    }
+
     .error,
     .notice {
       margin-block-start: var(--space-4);
@@ -464,6 +573,8 @@ export class Runtime {
   protected readonly tokenStatus = signal<'loading' | 'available' | 'unavailable'>('loading');
   protected readonly loading = signal(true);
   protected readonly saving = signal(false);
+  protected readonly checking = signal(false);
+  protected readonly checkResult = signal<RuntimeGrafanaCheck | null>(null);
   protected readonly error = signal('');
   protected readonly notice = signal('');
   constructor() {
@@ -571,6 +682,50 @@ export class Runtime {
       this.error.set('Could not remove the Grafana token.');
     } finally {
       this.saving.set(false);
+    }
+  }
+
+  protected async checkGrafana(): Promise<void> {
+    if (!this.tauri.available) {
+      this.error.set('Grafana can only be checked in the Relay desktop app.');
+      return;
+    }
+    const grafanaUrl = normalizeWebUrl(this.grafanaUrl());
+    const dashboardUrl = normalizeWebUrl(this.dashboardUrl());
+    if (!grafanaUrl || dashboardUrl === null) {
+      this.error.set('Enter a valid Grafana URL before checking the connection.');
+      return;
+    }
+
+    this.checking.set(true);
+    this.error.set('');
+    this.notice.set('');
+    try {
+      const settings: RuntimeGrafanaSettings = { grafanaUrl, dashboardUrl };
+      await this.tauri.setRuntimeGrafanaSettings(settings);
+      this.grafanaUrl.set(grafanaUrl);
+      this.dashboardUrl.set(dashboardUrl);
+      const result = await this.tauri.checkRuntimeGrafana();
+      if (!result) throw new Error('Grafana check did not return a result.');
+      this.checkResult.set(result);
+      this.notice.set('Grafana connection checked. Leaf metrics are not mapped yet.');
+    } catch (error: unknown) {
+      this.checkResult.set(null);
+      this.error.set(typeof error === 'string' ? error : 'Could not check the Grafana connection.');
+    } finally {
+      this.checking.set(false);
+    }
+  }
+
+  protected checkedAtLabel(result: RuntimeGrafanaCheck): string {
+    return new Date(result.checkedAt).toLocaleTimeString();
+  }
+
+  protected async openDashboard(url: string): Promise<void> {
+    try {
+      await this.tauri.openUrl(url);
+    } catch {
+      this.error.set('Could not open the Grafana dashboard.');
     }
   }
 

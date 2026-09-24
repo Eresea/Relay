@@ -214,6 +214,10 @@ export class TauriBridge {
     await this.invoke('runtime_grafana_clear_token');
   }
 
+  async checkRuntimeGrafana(): Promise<RuntimeGrafanaCheck | null> {
+    return this.invoke<RuntimeGrafanaCheck>('runtime_grafana_check');
+  }
+
   private settingsStore: LazyStore | null = null;
 
   /**
@@ -463,6 +467,19 @@ export type CoreCommand =
 export interface RuntimeGrafanaSettings {
   readonly grafanaUrl: string;
   readonly dashboardUrl: string;
+}
+
+export interface RuntimeGrafanaCheck {
+  readonly version: string | null;
+  readonly checkedAt: number;
+  readonly dashboards: readonly RuntimeGrafanaDashboard[];
+  readonly dashboardError: string | null;
+}
+
+export interface RuntimeGrafanaDashboard {
+  readonly uid: string;
+  readonly title: string;
+  readonly url: string;
 }
 
 /** What the palette displays for a core-contributed row. Mirrors `CoreCommandMeta`. */
