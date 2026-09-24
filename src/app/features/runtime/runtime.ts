@@ -159,13 +159,15 @@ const RUNTIME_STATUS_STALE_AFTER_MS = 90_000;
             <p>Connection details are optional until the Leaf Grafana setup is confirmed.</p>
           </div>
           @if (tokenConfigured()) {
-            <span class="token-status">Token stored</span>
+            <span class="token-status">Token stored for this Grafana URL</span>
           } @else if (tokenStatus() === 'loading') {
             <span class="token-status">Checking credential store</span>
           } @else if (tokenStatus() === 'unavailable') {
             <span class="token-status">OS credential store unavailable</span>
+          } @else if (tokenStatus() === 'needs-url') {
+            <span class="token-status">Set Grafana URL to scope a token</span>
           } @else {
-            <span class="token-status">No token stored</span>
+            <span class="token-status">No token stored for this URL</span>
           }
         </header>
 
@@ -213,7 +215,13 @@ const RUNTIME_STATUS_STALE_AFTER_MS = 90_000;
               <button
                 type="button"
                 class="secondary-button"
-                [disabled]="saving() || checking() || !tokenInput().trim()"
+                [disabled]="
+                  saving() ||
+                  checking() ||
+                  tokenStatus() === 'loading' ||
+                  !tokenInput().trim() ||
+                  !grafanaUrl().trim()
+                "
                 (click)="saveToken()"
               >
                 Store token
@@ -230,8 +238,8 @@ const RUNTIME_STATUS_STALE_AFTER_MS = 90_000;
               }
             </div>
             <span class="field-hint">
-              Optional. Use a read-only token; Relay stores it in the OS credential store, never
-              settings.json.
+              Optional. Use a read-only token; Relay stores it in the OS credential store, scoped to
+              this Grafana URL and never in settings.json.
             </span>
           </div>
         </div>
@@ -876,7 +884,9 @@ export class Runtime implements OnDestroy {
   protected readonly dashboardUrl = signal('');
   protected readonly tokenInput = signal('');
   protected readonly tokenConfigured = signal(false);
-  protected readonly tokenStatus = signal<'loading' | 'available' | 'unavailable'>('loading');
+  protected readonly tokenStatus = signal<'loading' | 'available' | 'unavailable' | 'needs-url'>(
+    'needs-url',
+  );
   protected readonly loading = signal(true);
   protected readonly saving = signal(false);
   protected readonly checking = signal(false);
@@ -902,6 +912,7 @@ export class Runtime implements OnDestroy {
   protected readonly nexusRefreshing = signal(false);
   protected readonly error = signal('');
   protected readonly notice = signal('');
+  private tokenStatusRequest = 0;
   constructor() {
     void this.restore();
     if (this.tauri.available) {
@@ -943,15 +954,8 @@ export class Runtime implements OnDestroy {
       this.error.set('Could not load Grafana settings.');
     }
 
-    try {
-      if (!this.tauri.available) throw new Error('Runtime settings require the Relay desktop app.');
-      this.tokenConfigured.set(await this.tauri.runtimeGrafanaTokenConfigured());
-      this.tokenStatus.set('available');
-    } catch {
-      this.tokenStatus.set('unavailable');
-    } finally {
-      this.loading.set(false);
-    }
+    await this.refreshGrafanaTokenStatus(this.grafanaUrl());
+    this.loading.set(false);
   }
 
   protected setGrafanaUrl(event: Event): void {
@@ -965,6 +969,7 @@ export class Runtime implements OnDestroy {
       this.notice.set('');
     }
     this.grafanaUrl.set(grafanaUrl);
+    void this.refreshGrafanaTokenStatus(grafanaUrl);
   }
 
   protected setDashboardUrl(event: Event): void {
@@ -973,6 +978,30 @@ export class Runtime implements OnDestroy {
 
   protected setTokenInput(event: Event): void {
     if (event.target instanceof HTMLInputElement) this.tokenInput.set(event.target.value);
+  }
+
+  private async refreshGrafanaTokenStatus(grafanaUrl: string): Promise<void> {
+    const request = ++this.tokenStatusRequest;
+    const normalizedUrl = normalizeWebUrl(grafanaUrl);
+    this.tokenConfigured.set(false);
+    if (!this.tauri.available) {
+      this.tokenStatus.set('unavailable');
+      return;
+    }
+    if (!normalizedUrl) {
+      this.tokenStatus.set('needs-url');
+      return;
+    }
+
+    this.tokenStatus.set('loading');
+    try {
+      const configured = await this.tauri.runtimeGrafanaTokenConfigured(normalizedUrl);
+      if (request !== this.tokenStatusRequest) return;
+      this.tokenConfigured.set(configured);
+      this.tokenStatus.set('available');
+    } catch {
+      if (request === this.tokenStatusRequest) this.tokenStatus.set('unavailable');
+    }
   }
 
   protected async refreshLeafHealth(): Promise<void> {
@@ -1145,15 +1174,21 @@ export class Runtime implements OnDestroy {
   protected async saveToken(): Promise<void> {
     const token = this.tokenInput().trim();
     if (!token) return;
+    const grafanaUrl = normalizeWebUrl(this.grafanaUrl());
+    if (!grafanaUrl) {
+      this.error.set('Enter a valid Grafana URL before storing a token.');
+      return;
+    }
     if (!this.tauri.available) {
       this.error.set('Grafana tokens can only be stored in the Relay desktop app.');
       return;
     }
+    this.tokenStatusRequest++;
     this.saving.set(true);
     this.error.set('');
     this.notice.set('');
     try {
-      await this.tauri.setRuntimeGrafanaToken(token);
+      await this.tauri.setRuntimeGrafanaToken(token, grafanaUrl);
       this.tokenInput.set('');
       this.tokenConfigured.set(true);
       this.tokenStatus.set('available');
@@ -1172,11 +1207,17 @@ export class Runtime implements OnDestroy {
       this.error.set('Grafana tokens can only be removed in the Relay desktop app.');
       return;
     }
+    const grafanaUrl = normalizeWebUrl(this.grafanaUrl());
+    if (!grafanaUrl) {
+      this.error.set('Enter a valid Grafana URL before removing its token.');
+      return;
+    }
+    this.tokenStatusRequest++;
     this.saving.set(true);
     this.error.set('');
     this.notice.set('');
     try {
-      await this.tauri.clearRuntimeGrafanaToken();
+      await this.tauri.clearRuntimeGrafanaToken(grafanaUrl);
       this.tokenConfigured.set(false);
       this.tokenInput.set('');
       this.checkResult.set(null);

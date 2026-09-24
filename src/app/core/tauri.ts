@@ -202,16 +202,18 @@ export class TauriBridge {
     await this.setSetting('runtime.grafana', settings);
   }
 
-  async runtimeGrafanaTokenConfigured(): Promise<boolean> {
-    return (await this.invoke<boolean>('runtime_grafana_token_configured')) ?? false;
+  async runtimeGrafanaTokenConfigured(grafanaUrl: string): Promise<boolean> {
+    return (
+      (await this.invoke<boolean>('runtime_grafana_token_configured', { grafanaUrl })) ?? false
+    );
   }
 
-  async setRuntimeGrafanaToken(token: string): Promise<void> {
-    await this.invoke('runtime_grafana_set_token', { token });
+  async setRuntimeGrafanaToken(token: string, grafanaUrl: string): Promise<void> {
+    await this.invoke('runtime_grafana_set_token', { token, grafanaUrl });
   }
 
-  async clearRuntimeGrafanaToken(): Promise<void> {
-    await this.invoke('runtime_grafana_clear_token');
+  async clearRuntimeGrafanaToken(grafanaUrl: string): Promise<void> {
+    await this.invoke('runtime_grafana_clear_token', { grafanaUrl });
   }
 
   async checkRuntimeGrafana(grafanaUrl: string): Promise<RuntimeGrafanaCheck | null> {

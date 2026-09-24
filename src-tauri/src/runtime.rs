@@ -1,14 +1,17 @@
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
+use base64::engine::general_purpose::URL_SAFE_NO_PAD;
+use base64::Engine;
 use reqwest::header::{HeaderValue, AUTHORIZATION};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use sha2::{Digest, Sha256};
 use url::Url;
 
 use crate::error::{Error, Result};
 
 const SERVICE: &str = "relay-runtime-grafana";
-const ACCOUNT: &str = "service-account-token";
+const ACCOUNT_PREFIX: &str = "service-account-token-";
 const DASHBOARD_LIMIT: usize = 50;
 const PANEL_LIMIT: usize = 200;
 const PANEL_DEPTH_LIMIT: usize = 8;
@@ -131,7 +134,7 @@ fn grafana_access(grafana_url: &str) -> Result<GrafanaAccess> {
         .redirect(reqwest::redirect::Policy::none())
         .build()
         .map_err(|_| Error::GrafanaHttpClient)?;
-    let token = match entry()?.get_password() {
+    let token = match entry(grafana_url)?.get_password() {
         Ok(token) => {
             let header = format!("Bearer {token}");
             Some(HeaderValue::from_str(&header).map_err(|_| Error::GrafanaTokenInvalid)?)
@@ -147,13 +150,18 @@ fn grafana_access(grafana_url: &str) -> Result<GrafanaAccess> {
     })
 }
 
-fn entry() -> Result<keyring::Entry> {
-    keyring::Entry::new(SERVICE, ACCOUNT).map_err(|error| Error::TokenStore(error.to_string()))
+fn entry(grafana_url: &str) -> Result<keyring::Entry> {
+    let base_url = grafana_base_url(grafana_url)?;
+    let account = format!(
+        "{ACCOUNT_PREFIX}{}",
+        URL_SAFE_NO_PAD.encode(Sha256::digest(base_url.as_str().as_bytes()))
+    );
+    keyring::Entry::new(SERVICE, &account).map_err(|error| Error::TokenStore(error.to_string()))
 }
 
 #[tauri::command]
-pub fn runtime_grafana_token_configured() -> Result<bool> {
-    match entry()?.get_password() {
+pub fn runtime_grafana_token_configured(grafana_url: String) -> Result<bool> {
+    match entry(&grafana_url)?.get_password() {
         Ok(_) => Ok(true),
         Err(keyring::Error::NoEntry) => Ok(false),
         Err(error) => Err(Error::TokenStore(error.to_string())),
@@ -161,7 +169,7 @@ pub fn runtime_grafana_token_configured() -> Result<bool> {
 }
 
 #[tauri::command]
-pub fn runtime_grafana_set_token(token: String) -> Result<()> {
+pub fn runtime_grafana_set_token(token: String, grafana_url: String) -> Result<()> {
     let token = token.trim();
     if token.is_empty() {
         return Err(Error::GrafanaTokenEmpty);
@@ -169,14 +177,14 @@ pub fn runtime_grafana_set_token(token: String) -> Result<()> {
     let header = format!("Bearer {token}");
     HeaderValue::from_str(&header).map_err(|_| Error::GrafanaTokenInvalid)?;
 
-    entry()?
+    entry(&grafana_url)?
         .set_password(token)
         .map_err(|error| Error::TokenStore(error.to_string()))
 }
 
 #[tauri::command]
-pub fn runtime_grafana_clear_token() -> Result<()> {
-    match entry()?.delete_credential() {
+pub fn runtime_grafana_clear_token(grafana_url: String) -> Result<()> {
+    match entry(&grafana_url)?.delete_credential() {
         Ok(()) | Err(keyring::Error::NoEntry) => Ok(()),
         Err(error) => Err(Error::TokenStore(error.to_string())),
     }

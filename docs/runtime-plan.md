@@ -84,7 +84,8 @@ real data source needs to fit the same seam.
 
 The initial setup screen stores Grafana and dashboard URLs under
 `runtime.grafana` in Relay's existing settings store. The API token is optional
-and stored in the OS credential store. All fields start blank; no Grafana
+and stored in the OS credential store, scoped to the normalized Grafana URL.
+All fields start blank; no Grafana
 metric queries run until the datasource and panels are identified. A manual connection
 check reads Grafana's health endpoint and lists up to 50 dashboards available
 to the saved credential without persisting the entered URL; the separate Save
