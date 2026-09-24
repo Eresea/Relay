@@ -101,6 +101,7 @@ const MAX_HUD_TOP_OFFSET = 2000;
             class="switch"
             [attr.aria-checked]="launchAtLogin()"
             [disabled]="launchAtLoginPending()"
+            aria-label="Launch at login"
             (click)="toggleLaunchAtLogin()"
           >
             <span class="switch-thumb"></span>

@@ -49,6 +49,7 @@ let nextRuleId = 0;
             role="switch"
             class="switch"
             [attr.aria-checked]="notifyAll()"
+            aria-label="Notify on every new message"
             (click)="toggleNotifyAll()"
           >
             <span class="switch-thumb"></span>
@@ -65,6 +66,7 @@ let nextRuleId = 0;
             role="switch"
             class="switch"
             [attr.aria-checked]="notifyImportant()"
+            aria-label="Notify on Gmail's Important label"
             (click)="toggleNotifyImportant()"
           >
             <span class="switch-thumb"></span>
@@ -98,6 +100,7 @@ let nextRuleId = 0;
                   role="switch"
                   class="switch switch-sm"
                   [attr.aria-checked]="rule.enabled"
+                  [attr.aria-label]="'Toggle rule for ' + describeRule(rule)"
                   (click)="toggleRule(rule.id)"
                 >
                   <span class="switch-thumb"></span>
