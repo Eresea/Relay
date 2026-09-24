@@ -112,8 +112,9 @@ instead of green. A successful observation also becomes stale after 90 seconds
 without a newer success, so a suspended or stalled poll loop cannot leave an
 old green state indefinitely.
 
-Polling happens only while Runtime is open in the first release. Keep the last
-successful observation and its timestamp so a failed refresh can show stale
+Polling happens only while Runtime is open and the Relay window is visible in
+the first release; returning to a visible window triggers an immediate refresh.
+Keep the last successful observation and its timestamp so a failed refresh can show stale
 data without displaying a false green state. Keep the latest successful probe
 observations in the root bridge for the current Relay app session so navigating
 away and back does not blank the view; do not persist this cache to settings or

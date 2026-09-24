@@ -907,8 +907,13 @@ export class Runtime implements OnDestroy {
   protected readonly error = signal('');
   protected readonly notice = signal('');
   private tokenStatusRequest = 0;
+  private readonly onVisibilityChange = () => {
+    if (!document.hidden && this.tauri.available) void this.refreshRuntimeStatus();
+  };
+
   constructor() {
     void this.restore();
+    document.addEventListener('visibilitychange', this.onVisibilityChange);
     const lastStatus = this.tauri.runtimeStatusSnapshot();
     if (lastStatus.leaf) {
       this.leafHealth.set(lastStatus.leaf);
@@ -926,14 +931,9 @@ export class Runtime implements OnDestroy {
     }
 
     if (this.tauri.available) {
-      void this.refreshRuntimeStatus();
+      if (!document.hidden) void this.refreshRuntimeStatus();
       this.runtimeHealthTimer = setInterval(() => {
-        const leafObservation = this.leafHealth();
-        if (leafObservation && this.isStale(leafObservation.checkedAt))
-          this.leafHealthState.set('stale');
-        const nexusObservation = this.nexusHealth();
-        if (nexusObservation && this.isStale(nexusObservation.checkedAt))
-          this.nexusHealthState.set('stale');
+        if (document.hidden) return;
         void this.refreshRuntimeStatus();
       }, RUNTIME_STATUS_POLL_INTERVAL_MS);
     } else {
@@ -945,6 +945,7 @@ export class Runtime implements OnDestroy {
 
   ngOnDestroy(): void {
     if (this.runtimeHealthTimer !== null) clearInterval(this.runtimeHealthTimer);
+    document.removeEventListener('visibilitychange', this.onVisibilityChange);
   }
 
   private async restore(): Promise<void> {
@@ -1031,6 +1032,12 @@ export class Runtime implements OnDestroy {
   }
 
   protected async refreshRuntimeStatus(): Promise<void> {
+    const leafObservation = this.leafHealth();
+    if (leafObservation && this.isStale(leafObservation.checkedAt))
+      this.leafHealthState.set('stale');
+    const nexusObservation = this.nexusHealth();
+    if (nexusObservation && this.isStale(nexusObservation.checkedAt))
+      this.nexusHealthState.set('stale');
     await Promise.all([this.refreshLeafHealth(), this.refreshNexusReadiness()]);
   }
 
