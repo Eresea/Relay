@@ -12,6 +12,8 @@ mod notifications;
 mod opencloud;
 mod overlay;
 #[cfg(desktop)]
+mod runtime;
+#[cfg(desktop)]
 mod shortcuts;
 #[cfg(desktop)]
 mod tray;
@@ -116,6 +118,9 @@ pub fn run() {
                 commands::scan_workspaces,
                 commands::open_terminal,
                 commands::project_action,
+                runtime::runtime_grafana_token_configured,
+                runtime::runtime_grafana_set_token,
+                runtime::runtime_grafana_clear_token,
                 commands::update_status,
                 commands::update_check,
                 commands::update_download,

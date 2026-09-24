@@ -187,6 +187,33 @@ export class TauriBridge {
     return (await this.invoke<GithubPullRequestSummary[]>('github_pull_requests')) ?? [];
   }
 
+  async runtimeGrafanaSettings(): Promise<RuntimeGrafanaSettings> {
+    const stored = await this.getSetting<Partial<RuntimeGrafanaSettings> | null>(
+      'runtime.grafana',
+      null,
+    );
+    return {
+      grafanaUrl: typeof stored?.grafanaUrl === 'string' ? stored.grafanaUrl : '',
+      dashboardUrl: typeof stored?.dashboardUrl === 'string' ? stored.dashboardUrl : '',
+    };
+  }
+
+  async setRuntimeGrafanaSettings(settings: RuntimeGrafanaSettings): Promise<void> {
+    await this.setSetting('runtime.grafana', settings);
+  }
+
+  async runtimeGrafanaTokenConfigured(): Promise<boolean> {
+    return (await this.invoke<boolean>('runtime_grafana_token_configured')) ?? false;
+  }
+
+  async setRuntimeGrafanaToken(token: string): Promise<void> {
+    await this.invoke('runtime_grafana_set_token', { token });
+  }
+
+  async clearRuntimeGrafanaToken(): Promise<void> {
+    await this.invoke('runtime_grafana_clear_token');
+  }
+
   private settingsStore: LazyStore | null = null;
 
   /**
@@ -431,6 +458,12 @@ export type CoreCommand =
   | { readonly id: 'open_github' }
   | { readonly id: 'open_runtime' }
   | { readonly id: 'quit' };
+
+/** Non-secret Grafana connection details. The API token lives in the OS keychain. */
+export interface RuntimeGrafanaSettings {
+  readonly grafanaUrl: string;
+  readonly dashboardUrl: string;
+}
 
 /** What the palette displays for a core-contributed row. Mirrors `CoreCommandMeta`. */
 export interface CoreCommandMeta {

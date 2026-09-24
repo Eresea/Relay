@@ -1,6 +1,6 @@
 # Runtime module plan
 
-**Status:** proposal; implementation waits for the Leaf Grafana inventory.
+**Status:** in progress; live metric mapping waits for the Leaf Grafana inventory.
 
 ## Goal
 
@@ -66,6 +66,11 @@ connection settings in Relay settings and any token in the OS credential
 store. Keep Grafana access read-only. Do not add a provider framework for the
 first Grafana integration; introduce a shared adapter interface when a second
 real data source needs to fit the same seam.
+
+The initial setup screen stores Grafana and dashboard URLs under
+`runtime.grafana` in Relay's existing settings store. The API token is optional
+and stored in the OS credential store. All fields start blank; no Grafana
+queries run until the datasource and panels are identified.
 
 Polling happens only while Runtime is open in the first release. Keep the last
 successful observation and its timestamp so a failed refresh can show stale

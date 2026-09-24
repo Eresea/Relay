@@ -70,6 +70,10 @@ pub enum Error {
     #[error("could not access the system keychain: {0}")]
     TokenStore(String),
 
+    #[cfg(desktop)]
+    #[error("Grafana API token cannot be empty")]
+    GrafanaTokenEmpty,
+
     #[error("OpenCloud request failed: {0}")]
     OpenCloud(String),
 
