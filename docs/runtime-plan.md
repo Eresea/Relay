@@ -114,7 +114,10 @@ old green state indefinitely.
 
 Polling happens only while Runtime is open in the first release. Keep the last
 successful observation and its timestamp so a failed refresh can show stale
-data without displaying a false green state. Relay being closed does not count
+data without displaying a false green state. Keep the latest successful probe
+observations in the root bridge for the current Relay app session so navigating
+away and back does not blank the view; do not persist this cache to settings or
+sync it. This is not durable uptime history. Relay being closed does not count
 as uptime monitoring.
 
 ## Delivery plan

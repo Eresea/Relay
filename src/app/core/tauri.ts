@@ -15,6 +15,7 @@ import type { AppEvent, NotificationRecord, UpdateSnapshot } from './events';
 @Injectable({ providedIn: 'root' })
 export class TauriBridge {
   readonly available = '__TAURI_INTERNALS__' in window;
+  private latestRuntimeStatus: RuntimeStatusSnapshot = { leaf: null, nexus: null };
 
   /** Hides the palette window without destroying it — reopening must be instant. */
   async dismissPalette(): Promise<void> {
@@ -231,11 +232,19 @@ export class TauriBridge {
   }
 
   async runtimeLeafHealth(): Promise<LeafHealthObservation | null> {
-    return this.invoke<LeafHealthObservation>('runtime_leaf_health');
+    const observation = await this.invoke<LeafHealthObservation>('runtime_leaf_health');
+    if (observation) this.latestRuntimeStatus = { ...this.latestRuntimeStatus, leaf: observation };
+    return observation;
   }
 
   async runtimeNexusReadiness(): Promise<NexusReadinessObservation | null> {
-    return this.invoke<NexusReadinessObservation>('runtime_nexus_readiness');
+    const observation = await this.invoke<NexusReadinessObservation>('runtime_nexus_readiness');
+    if (observation) this.latestRuntimeStatus = { ...this.latestRuntimeStatus, nexus: observation };
+    return observation;
+  }
+
+  runtimeStatusSnapshot(): RuntimeStatusSnapshot {
+    return this.latestRuntimeStatus;
   }
 
   private settingsStore: LazyStore | null = null;
@@ -526,6 +535,11 @@ export interface NexusReadinessObservation {
   readonly checkedAt: number;
   readonly statusCode: number;
   readonly ready: boolean;
+}
+
+export interface RuntimeStatusSnapshot {
+  readonly leaf: LeafHealthObservation | null;
+  readonly nexus: NexusReadinessObservation | null;
 }
 
 /** What the palette displays for a core-contributed row. Mirrors `CoreCommandMeta`. */

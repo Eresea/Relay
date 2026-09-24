@@ -909,23 +909,31 @@ export class Runtime implements OnDestroy {
   private tokenStatusRequest = 0;
   constructor() {
     void this.restore();
+    const lastStatus = this.tauri.runtimeStatusSnapshot();
+    if (lastStatus.leaf) {
+      this.leafHealth.set(lastStatus.leaf);
+      this.leafHealthState.set(this.isStale(lastStatus.leaf.checkedAt) ? 'stale' : 'reachable');
+    }
+    if (lastStatus.nexus) {
+      this.nexusHealth.set(lastStatus.nexus);
+      this.nexusHealthState.set(
+        this.isStale(lastStatus.nexus.checkedAt)
+          ? 'stale'
+          : lastStatus.nexus.ready
+            ? 'ready'
+            : 'not-ready',
+      );
+    }
+
     if (this.tauri.available) {
       void this.refreshRuntimeStatus();
       this.runtimeHealthTimer = setInterval(() => {
         const leafObservation = this.leafHealth();
-        if (
-          leafObservation &&
-          Date.now() - leafObservation.checkedAt >= RUNTIME_STATUS_STALE_AFTER_MS
-        ) {
+        if (leafObservation && this.isStale(leafObservation.checkedAt))
           this.leafHealthState.set('stale');
-        }
         const nexusObservation = this.nexusHealth();
-        if (
-          nexusObservation &&
-          Date.now() - nexusObservation.checkedAt >= RUNTIME_STATUS_STALE_AFTER_MS
-        ) {
+        if (nexusObservation && this.isStale(nexusObservation.checkedAt))
           this.nexusHealthState.set('stale');
-        }
         void this.refreshRuntimeStatus();
       }, RUNTIME_STATUS_POLL_INTERVAL_MS);
     } else {
@@ -996,6 +1004,10 @@ export class Runtime implements OnDestroy {
     } catch {
       if (request === this.tokenStatusRequest) this.tokenStatus.set('unavailable');
     }
+  }
+
+  private isStale(checkedAt: number): boolean {
+    return Date.now() - checkedAt >= RUNTIME_STATUS_STALE_AFTER_MS;
   }
 
   protected async refreshLeafHealth(): Promise<void> {
