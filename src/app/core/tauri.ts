@@ -214,12 +214,18 @@ export class TauriBridge {
     await this.invoke('runtime_grafana_clear_token');
   }
 
-  async checkRuntimeGrafana(): Promise<RuntimeGrafanaCheck | null> {
-    return this.invoke<RuntimeGrafanaCheck>('runtime_grafana_check');
+  async checkRuntimeGrafana(grafanaUrl: string): Promise<RuntimeGrafanaCheck | null> {
+    return this.invoke<RuntimeGrafanaCheck>('runtime_grafana_check', { grafanaUrl });
   }
 
-  async runtimeGrafanaDashboardPanels(uid: string): Promise<RuntimeGrafanaPanelInventory | null> {
-    return this.invoke<RuntimeGrafanaPanelInventory>('runtime_grafana_dashboard_panels', { uid });
+  async runtimeGrafanaDashboardPanels(
+    uid: string,
+    grafanaUrl: string,
+  ): Promise<RuntimeGrafanaPanelInventory | null> {
+    return this.invoke<RuntimeGrafanaPanelInventory>('runtime_grafana_dashboard_panels', {
+      uid,
+      grafanaUrl,
+    });
   }
 
   async runtimeLeafHealth(): Promise<LeafHealthObservation | null> {

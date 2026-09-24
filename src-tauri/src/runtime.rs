@@ -3,26 +3,17 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use reqwest::header::{HeaderValue, AUTHORIZATION};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use tauri::AppHandle;
-use tauri_plugin_store::StoreExt;
 use url::Url;
 
 use crate::error::{Error, Result};
 
 const SERVICE: &str = "relay-runtime-grafana";
 const ACCOUNT: &str = "service-account-token";
-const SETTINGS_KEY: &str = "runtime.grafana";
 const DASHBOARD_LIMIT: usize = 50;
 const PANEL_LIMIT: usize = 200;
 const PANEL_DEPTH_LIMIT: usize = 8;
 const LEAF_HEALTH_URL: &str = "https://leaf.eresea.net/api/version/health";
 const NEXUS_READINESS_URL: &str = "https://nexus.eresea.net/readyz";
-
-#[derive(Debug, Default, Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct GrafanaSettings {
-    grafana_url: String,
-}
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -133,15 +124,8 @@ struct GrafanaAccess {
     token: Option<HeaderValue>,
 }
 
-fn grafana_access(app: &AppHandle) -> Result<GrafanaAccess> {
-    let store = app
-        .store("settings.json")
-        .map_err(|_| Error::GrafanaSettingsUnavailable)?;
-    let settings = store
-        .get(SETTINGS_KEY)
-        .and_then(|value| serde_json::from_value::<GrafanaSettings>(value).ok())
-        .unwrap_or_default();
-    let base_url = grafana_base_url(&settings.grafana_url)?;
+fn grafana_access(grafana_url: &str) -> Result<GrafanaAccess> {
+    let base_url = grafana_base_url(grafana_url)?;
     let client = reqwest::Client::builder()
         .timeout(Duration::from_secs(8))
         .redirect(reqwest::redirect::Policy::none())
@@ -199,8 +183,8 @@ pub fn runtime_grafana_clear_token() -> Result<()> {
 }
 
 #[tauri::command]
-pub async fn runtime_grafana_check(app: AppHandle) -> Result<GrafanaCheck> {
-    let access = grafana_access(&app)?;
+pub async fn runtime_grafana_check(grafana_url: String) -> Result<GrafanaCheck> {
+    let access = grafana_access(&grafana_url)?;
     let health_url = access
         .base_url
         .join("api/health")
@@ -299,8 +283,8 @@ pub async fn runtime_grafana_check(app: AppHandle) -> Result<GrafanaCheck> {
 
 #[tauri::command]
 pub async fn runtime_grafana_dashboard_panels(
-    app: AppHandle,
     uid: String,
+    grafana_url: String,
 ) -> Result<GrafanaDashboardPanelInventory> {
     if uid.is_empty()
         || uid.len() > 40
@@ -311,7 +295,7 @@ pub async fn runtime_grafana_dashboard_panels(
         return Err(Error::GrafanaDashboardUidInvalid);
     }
 
-    let access = grafana_access(&app)?;
+    let access = grafana_access(&grafana_url)?;
     let dashboard_url = access
         .base_url
         .join(&format!(

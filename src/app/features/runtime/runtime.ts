@@ -1195,8 +1195,7 @@ export class Runtime implements OnDestroy {
       return;
     }
     const grafanaUrl = normalizeWebUrl(this.grafanaUrl());
-    const dashboardUrl = normalizeWebUrl(this.dashboardUrl());
-    if (!grafanaUrl || dashboardUrl === null) {
+    if (!grafanaUrl) {
       this.error.set('Enter a valid Grafana URL before checking the connection.');
       return;
     }
@@ -1205,14 +1204,12 @@ export class Runtime implements OnDestroy {
     this.error.set('');
     this.notice.set('');
     try {
-      const settings: RuntimeGrafanaSettings = { grafanaUrl, dashboardUrl };
-      await this.tauri.setRuntimeGrafanaSettings(settings);
-      this.grafanaUrl.set(grafanaUrl);
-      this.dashboardUrl.set(dashboardUrl);
-      const result = await this.tauri.checkRuntimeGrafana();
+      const result = await this.tauri.checkRuntimeGrafana(grafanaUrl);
       if (!result) throw new Error('Grafana check did not return a result.');
       this.checkResult.set(result);
-      this.notice.set('Grafana connection checked. Leaf metrics are not mapped yet.');
+      this.notice.set(
+        'Connection checked. Use Save URLs to persist this connection; Leaf metrics are not mapped yet.',
+      );
     } catch (error: unknown) {
       this.checkResult.set(null);
       this.error.set(typeof error === 'string' ? error : 'Could not check the Grafana connection.');
@@ -1246,13 +1243,18 @@ export class Runtime implements OnDestroy {
 
   protected async inspectDashboard(dashboard: RuntimeGrafanaDashboard): Promise<void> {
     if (!this.tauri.available) return;
+    const grafanaUrl = normalizeWebUrl(this.grafanaUrl());
+    if (!grafanaUrl) {
+      this.panelInventoryError.set('Enter a valid Grafana URL before inspecting panels.');
+      return;
+    }
     this.inspectedDashboard.set(dashboard);
     this.dashboardPanels.set({ panels: [], truncated: false });
     this.panelInventoryError.set('');
     this.inspectingPanels.set(true);
     try {
       this.dashboardPanels.set(
-        (await this.tauri.runtimeGrafanaDashboardPanels(dashboard.uid)) ?? {
+        (await this.tauri.runtimeGrafanaDashboardPanels(dashboard.uid, grafanaUrl)) ?? {
           panels: [],
           truncated: false,
         },

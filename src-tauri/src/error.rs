@@ -79,10 +79,6 @@ pub enum Error {
     GrafanaTokenInvalid,
 
     #[cfg(desktop)]
-    #[error("Grafana settings could not be read")]
-    GrafanaSettingsUnavailable,
-
-    #[cfg(desktop)]
     #[error("enter a valid Grafana HTTP or HTTPS URL")]
     GrafanaUrlInvalid,
 
