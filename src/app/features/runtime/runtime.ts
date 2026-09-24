@@ -1049,7 +1049,7 @@ export class Runtime implements OnDestroy {
       return `No successful liveness response yet. ${this.leafHealthError()}`;
     }
     if (observation) {
-      return `HTTP ${observation.statusCode} · checked ${this.checkedAtLabel(observation.checkedAt)} · liveness only; database and Nexus are not checked.`;
+      return `HTTP ${observation.statusCode} · checked ${this.checkedAtLabel(observation.checkedAt)} (${this.checkedAgeLabel(observation.checkedAt)}) · liveness only; database and Nexus are not checked.`;
     }
     return 'No liveness observation yet.';
   }
@@ -1095,7 +1095,7 @@ export class Runtime implements OnDestroy {
       const readiness = observation.ready
         ? 'Nexus HTTP and PostgreSQL readiness are confirmed from this Relay client.'
         : 'Nexus reports that it is not ready.';
-      return `HTTP ${observation.statusCode} · checked ${this.checkedAtLabel(observation.checkedAt)} · ${readiness} This does not prove Leaf-to-Nexus connectivity.`;
+      return `HTTP ${observation.statusCode} · checked ${this.checkedAtLabel(observation.checkedAt)} (${this.checkedAgeLabel(observation.checkedAt)}) · ${readiness} This does not prove Leaf-to-Nexus connectivity.`;
     }
     return 'No readiness observation yet.';
   }
