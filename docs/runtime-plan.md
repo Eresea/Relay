@@ -85,9 +85,10 @@ The initial setup screen stores Grafana and dashboard URLs under
 and stored in the OS credential store. All fields start blank; no Grafana
 queries run until the datasource and panels are identified. A manual connection
 check now reads Grafana's health endpoint and lists up to 50 dashboards
-available to the saved credential. This confirms access to Grafana only; it is
-not used as Leaf's health signal. API route selection will be revisited after
-the Grafana instance version is known. Leaf already exposes an unauthenticated
+available to the saved credential; a discovered dashboard can be saved as the
+default Grafana destination. This confirms access to Grafana only; it is not
+used as Leaf's health signal. API route selection will be revisited after the
+Grafana instance version is known. Leaf already exposes an unauthenticated
 `GET /api/version/health`; Relay checks this every 30 seconds while the Runtime
 view is mounted. It only proves the endpoint returned its healthy response, not
 database readiness, request performance, or Nexus health. A failed refresh

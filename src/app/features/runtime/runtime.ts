@@ -4,6 +4,7 @@ import {
   TauriBridge,
   type LeafHealthObservation,
   type RuntimeGrafanaCheck,
+  type RuntimeGrafanaDashboard,
   type RuntimeGrafanaSettings,
 } from '@core/tauri';
 import { Icon } from '@shared/icon';
@@ -246,9 +247,26 @@ import { Icon } from '@shared/icon';
             <ul class="dashboard-list" aria-label="Grafana dashboards">
               @for (dashboard of result.dashboards; track dashboard.uid) {
                 <li>
-                  <button type="button" (click)="openDashboard(dashboard.url)">
+                  <button
+                    type="button"
+                    class="dashboard-open"
+                    [disabled]="saving()"
+                    (click)="openDashboard(dashboard.url)"
+                  >
                     {{ dashboard.title }}
                   </button>
+                  @if (dashboardUrl() === dashboard.url) {
+                    <span class="dashboard-default">Default</span>
+                  } @else {
+                    <button
+                      type="button"
+                      class="dashboard-use"
+                      [disabled]="saving()"
+                      (click)="selectDashboard(dashboard)"
+                    >
+                      Set default
+                    </button>
+                  }
                 </li>
               }
             </ul>
@@ -610,18 +628,44 @@ import { Icon } from '@shared/icon';
       list-style: none;
     }
 
-    .dashboard-list button {
-      inline-size: 100%;
-      padding: var(--space-3);
-      color: var(--text-body);
-      text-align: start;
+    .dashboard-list li {
+      display: flex;
+      align-items: center;
+      gap: var(--space-2);
+      min-inline-size: 0;
+      padding: var(--space-2);
       border: 1px solid var(--border-subtle);
       border-radius: var(--radius-sm);
       background: var(--bg-sunken);
+    }
+
+    .dashboard-list button {
+      color: var(--text-body);
       font: inherit;
     }
 
-    .dashboard-list button:hover {
+    .dashboard-open {
+      flex: 1;
+      min-inline-size: 0;
+      padding: var(--space-2);
+      overflow-wrap: anywhere;
+      text-align: start;
+      border: 0;
+      border-radius: var(--radius-sm);
+      background: transparent;
+    }
+
+    .dashboard-use {
+      flex: none;
+      padding: var(--space-2);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-sm);
+      background: var(--bg-raised);
+      white-space: nowrap;
+    }
+
+    .dashboard-open:hover:not(:disabled),
+    .dashboard-use:hover:not(:disabled) {
       background: var(--tint-hover);
     }
 
@@ -801,7 +845,15 @@ export class Runtime implements OnDestroy {
   }
 
   protected setGrafanaUrl(event: Event): void {
-    if (event.target instanceof HTMLInputElement) this.grafanaUrl.set(event.target.value);
+    if (!(event.target instanceof HTMLInputElement)) return;
+    const grafanaUrl = event.target.value;
+    if (normalizeWebUrl(grafanaUrl) !== normalizeWebUrl(this.grafanaUrl())) {
+      this.dashboardUrl.set('');
+      this.checkResult.set(null);
+      this.error.set('');
+      this.notice.set('');
+    }
+    this.grafanaUrl.set(grafanaUrl);
   }
 
   protected setDashboardUrl(event: Event): void {
@@ -915,6 +967,7 @@ export class Runtime implements OnDestroy {
       this.tokenInput.set('');
       this.tokenConfigured.set(true);
       this.tokenStatus.set('available');
+      this.checkResult.set(null);
       this.notice.set('Grafana token stored in the OS credential store.');
     } catch {
       this.error.set('Could not store the Grafana token in the OS credential store.');
@@ -935,6 +988,7 @@ export class Runtime implements OnDestroy {
       await this.tauri.clearRuntimeGrafanaToken();
       this.tokenConfigured.set(false);
       this.tokenInput.set('');
+      this.checkResult.set(null);
       this.notice.set('Grafana token removed.');
     } catch {
       this.error.set('Could not remove the Grafana token.');
@@ -972,6 +1026,29 @@ export class Runtime implements OnDestroy {
       this.error.set(typeof error === 'string' ? error : 'Could not check the Grafana connection.');
     } finally {
       this.checking.set(false);
+    }
+  }
+
+  protected async selectDashboard(dashboard: RuntimeGrafanaDashboard): Promise<void> {
+    if (!this.tauri.available) return;
+    const grafanaUrl = normalizeWebUrl(this.grafanaUrl());
+    if (!grafanaUrl) return;
+
+    this.saving.set(true);
+    this.error.set('');
+    this.notice.set('');
+    try {
+      await this.tauri.setRuntimeGrafanaSettings({
+        grafanaUrl,
+        dashboardUrl: dashboard.url,
+      });
+      this.grafanaUrl.set(grafanaUrl);
+      this.dashboardUrl.set(dashboard.url);
+      this.notice.set(`${dashboard.title} is now the default Grafana dashboard.`);
+    } catch {
+      this.error.set('Could not save the default Grafana dashboard.');
+    } finally {
+      this.saving.set(false);
     }
   }
 
