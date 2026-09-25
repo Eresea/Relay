@@ -310,6 +310,7 @@ function connectorErrorMessage(error: unknown): string {
                     role="switch"
                     class="switch"
                     [attr.aria-checked]="rule.enabled"
+                    [attr.aria-label]="'Toggle ' + kindLabel(kind) + ' notifications'"
                     (click)="toggleKind(kind)"
                   >
                     <span class="switch-thumb"></span>
