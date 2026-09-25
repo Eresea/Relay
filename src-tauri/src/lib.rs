@@ -1,3 +1,5 @@
+#[cfg(desktop)]
+mod codex;
 mod commands;
 mod error;
 mod events;
@@ -75,6 +77,7 @@ pub fn run() {
     {
         builder = builder
             .manage(updates::UpdateManager::default())
+            .manage(codex::CodexState::default())
             .plugin(tauri_plugin_updater::Builder::new().build())
             .invoke_handler(tauri::generate_handler![
                 commands::core_commands,
@@ -118,6 +121,9 @@ pub fn run() {
                 commands::scan_workspaces,
                 commands::open_terminal,
                 commands::project_action,
+                codex::codex_threads,
+                codex::codex_open_thread,
+                codex::codex_older_messages,
                 runtime::runtime_grafana_token_configured,
                 runtime::runtime_grafana_set_token,
                 runtime::runtime_grafana_clear_token,

@@ -20,9 +20,9 @@ import { RECENT_COMMANDS_KEY, recentCommands, updateRecentCommandIds } from '@co
 import { Icon } from '@shared/icon';
 import { Kbd } from '@shared/kbd';
 
-interface Section {
-  readonly group: string;
-  readonly matches: readonly CommandMatch[];
+interface TitlePart {
+  readonly text: string;
+  readonly matched: boolean;
 }
 
 /**
@@ -43,6 +43,8 @@ interface Section {
 export class CommandPalette {
   private readonly registry = inject(CommandRegistry);
   private readonly tauri = inject(TauriBridge);
+  private focusGeneration = 0;
+  private paletteBlurred = false;
 
   private readonly field = viewChild.required<ElementRef<HTMLInputElement>>('field');
   /** DOM order matches `flat()`'s order, since both are driven by the same
@@ -53,35 +55,26 @@ export class CommandPalette {
   protected readonly query = signal('');
   protected readonly activeIndex = signal(0);
   protected readonly recentIds = signal<readonly string[]>([]);
+  protected readonly running = signal(false);
+  protected readonly runError = signal(false);
 
   protected readonly matches = computed(() => search(this.registry.commands(), this.query()));
 
-  protected readonly sections = computed<readonly Section[]>(() => {
+  protected readonly flat = computed(() => {
     const matches = this.matches();
+    if (this.query().trim()) return matches;
+
+    const byId = new Map(matches.map((match) => [match.command.id, match]));
     const recent = recentCommands(
       matches.map((match) => match.command),
       this.recentIds(),
-    )
-      .map((command) => matches.find((match) => match.command.id === command.id))
-      .filter((match): match is CommandMatch => match !== undefined);
-    const recentSet = new Set(recent.map((match) => match.command.id));
-    const visibleMatches = this.query().trim()
-      ? matches
-      : matches.filter((match) => !recentSet.has(match.command.id));
-    const byGroup = new Map<string, CommandMatch[]>();
-    for (const match of visibleMatches) {
-      const bucket = byGroup.get(match.command.group);
-      if (bucket) bucket.push(match);
-      else byGroup.set(match.command.group, [match]);
-    }
-    const sections = [...byGroup].map(([group, matches]) => ({ group, matches }));
-    return recent.length > 0 && !this.query().trim()
-      ? [{ group: 'Recent', matches: recent }, ...sections]
-      : sections;
+    ).flatMap((command) => {
+      const match = byId.get(command.id);
+      return match ? [match] : [];
+    });
+    const recentIds = new Set(recent.map((match) => match.command.id));
+    return [...recent, ...matches.filter((match) => !recentIds.has(match.command.id))];
   });
-
-  /** Flat order, so arrow keys cross group boundaries without noticing them. */
-  protected readonly flat = computed(() => this.sections().flatMap((s) => s.matches));
 
   protected readonly active = computed(() => this.flat()[this.activeIndex()]?.command);
 
@@ -99,7 +92,15 @@ export class CommandPalette {
     const destroyRef = inject(DestroyRef);
     void this.tauri
       .onWindowFocusChanged((focused) => {
-        if (focused) this.field().nativeElement.focus();
+        if (focused) {
+          if (this.paletteBlurred) {
+            this.focusGeneration++;
+            this.paletteBlurred = false;
+          }
+          this.field().nativeElement.focus();
+        } else {
+          this.paletteBlurred = true;
+        }
       })
       .then((unlisten) => destroyRef.onDestroy(unlisten));
 
@@ -113,14 +114,26 @@ export class CommandPalette {
   protected onQuery(value: string): void {
     this.query.set(value);
     this.activeIndex.set(0);
-  }
-
-  protected indexOf(match: CommandMatch): number {
-    return this.flat().indexOf(match);
+    this.runError.set(false);
   }
 
   protected hue(command: Command): string | null {
     return command.hue ? hueVar(command.hue) : null;
+  }
+
+  protected titleParts(match: CommandMatch): readonly TitlePart[] {
+    const parts: TitlePart[] = [];
+    let cursor = 0;
+    for (const [start, end] of match.ranges) {
+      if (start > cursor)
+        parts.push({ text: match.command.title.slice(cursor, start), matched: false });
+      parts.push({ text: match.command.title.slice(start, end), matched: true });
+      cursor = end;
+    }
+    if (cursor < match.command.title.length) {
+      parts.push({ text: match.command.title.slice(cursor), matched: false });
+    }
+    return parts;
   }
 
   protected onKeydown(event: KeyboardEvent): void {
@@ -137,6 +150,14 @@ export class CommandPalette {
         event.preventDefault();
         void this.runActive();
         break;
+      case 'Tab':
+        if (this.query().trim() && this.active()) {
+          event.preventDefault();
+          const input = this.field().nativeElement;
+          input.value = this.active()!.title;
+          this.onQuery(input.value);
+        }
+        break;
       case 'Escape':
         event.preventDefault();
         void this.dismiss();
@@ -147,26 +168,43 @@ export class CommandPalette {
   }
 
   protected async run(command: Command): Promise<void> {
+    if (this.running()) return;
+    const focusGeneration = this.focusGeneration;
     const recent = updateRecentCommandIds(this.recentIds(), command.id);
     this.recentIds.set(recent);
     void this.tauri.setSetting(RECENT_COMMANDS_KEY, recent);
-    await command.run();
+    this.running.set(true);
+    this.runError.set(false);
+    this.field().nativeElement.focus();
+    try {
+      await command.run();
+    } catch {
+      this.running.set(false);
+      if (focusGeneration === this.focusGeneration) this.runError.set(true);
+      return;
+    }
+    this.running.set(false);
+    if (focusGeneration !== this.focusGeneration) return;
     await this.dismiss();
   }
 
   private async runActive(): Promise<void> {
+    if (this.running()) return;
     const command = this.active();
     if (command) await this.run(command);
   }
 
   private async dismiss(): Promise<void> {
+    if (this.running()) this.focusGeneration++;
     this.query.set('');
     this.activeIndex.set(0);
+    this.runError.set(false);
     this.field().nativeElement.value = '';
     await this.tauri.dismissPalette();
   }
 
   private move(delta: number): void {
+    if (this.running()) return;
     const count = this.flat().length;
     if (count === 0) return;
     this.activeIndex.update((i) => (i + delta + count) % count);

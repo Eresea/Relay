@@ -3,11 +3,16 @@ import {
   ChangeDetectionStrategy,
   Component,
   DestroyRef,
+  afterRenderEffect,
   computed,
   inject,
   signal,
+  viewChild,
+  type ElementRef,
 } from '@angular/core';
 
+import type { Command, CommandMatch } from '@core/command';
+import { search } from '@core/fuzzy';
 import { NotificationCenter } from '@core/notification-center';
 import type { NotificationRecord } from '@core/events';
 import { ThemeService } from '@core/theme';
@@ -19,6 +24,67 @@ import { MobileConnections } from './mobile-connections';
 
 type MobileTab = 'dashboard' | 'notifications' | 'vault' | 'connections' | 'settings';
 
+interface MobileModule extends Command {
+  readonly tab: MobileTab;
+}
+
+interface TitlePart {
+  readonly text: string;
+  readonly matched: boolean;
+}
+
+interface MobileModuleMatch extends Omit<CommandMatch, 'command'> {
+  readonly command: MobileModule;
+}
+
+const MOBILE_MODULES: readonly MobileModule[] = [
+  {
+    id: 'mobile.dashboard',
+    tab: 'dashboard',
+    title: 'Dashboard',
+    group: 'Modules',
+    icon: 'house',
+    keywords: ['home', 'overview'],
+    run: () => undefined,
+  },
+  {
+    id: 'mobile.notifications',
+    tab: 'notifications',
+    title: 'Notifications',
+    group: 'Modules',
+    icon: 'inbox',
+    keywords: ['inbox', 'activity', 'alerts'],
+    run: () => undefined,
+  },
+  {
+    id: 'mobile.vault',
+    tab: 'vault',
+    title: 'Password vault',
+    group: 'Modules',
+    icon: 'lock',
+    keywords: ['password', 'secret', 'account'],
+    run: () => undefined,
+  },
+  {
+    id: 'mobile.connections',
+    tab: 'connections',
+    title: 'Connections',
+    group: 'Modules',
+    icon: 'plus',
+    keywords: ['connect', 'github', 'gmail'],
+    run: () => undefined,
+  },
+  {
+    id: 'mobile.settings',
+    tab: 'settings',
+    title: 'Settings',
+    group: 'Modules',
+    icon: 'settings',
+    keywords: ['preferences', 'appearance'],
+    run: () => undefined,
+  },
+];
+
 @Component({
   selector: 'rl-mobile',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -26,6 +92,7 @@ type MobileTab = 'dashboard' | 'notifications' | 'vault' | 'connections' | 'sett
   template: `
     <div
       class="mobile-shell"
+      (keydown)="onShellKeydown($event)"
       (pointerdown)="startRailGesture($event)"
       (pointermove)="moveRailGesture($event)"
       (pointerup)="endRailGesture($event)"
@@ -42,21 +109,33 @@ type MobileTab = 'dashboard' | 'notifications' | 'vault' | 'connections' | 'sett
         >
           <rl-icon name="panel-left" [size]="16" />
         </button>
-        <div>
+        <div class="mobile-header-title">
           <p class="eyebrow">Relay</p>
-          <h1>{{ tabTitle() }}</h1>
+          <h1 #pageTitle tabindex="-1">{{ tabTitle() }}</h1>
         </div>
-        <button
-          type="button"
-          class="header-button"
-          (click)="theme.toggle()"
-          [attr.aria-label]="
-            theme.theme() === 'dark' ? 'Switch to light theme' : 'Switch to dark theme'
-          "
-          [attr.title]="theme.theme() === 'dark' ? 'Switch to light theme' : 'Switch to dark theme'"
-        >
-          <rl-icon [name]="theme.theme() === 'dark' ? 'sun' : 'moon'" [size]="16" />
-        </button>
+        <div class="header-actions">
+          <button
+            type="button"
+            class="header-button"
+            (click)="openCommandMenu()"
+            aria-label="Find a module"
+          >
+            <rl-icon name="search" [size]="16" />
+          </button>
+          <button
+            type="button"
+            class="header-button"
+            (click)="theme.toggle()"
+            [attr.aria-label]="
+              theme.theme() === 'dark' ? 'Switch to light theme' : 'Switch to dark theme'
+            "
+            [attr.title]="
+              theme.theme() === 'dark' ? 'Switch to light theme' : 'Switch to dark theme'
+            "
+          >
+            <rl-icon [name]="theme.theme() === 'dark' ? 'sun' : 'moon'" [size]="16" />
+          </button>
+        </div>
       </header>
 
       <button
@@ -81,7 +160,7 @@ type MobileTab = 'dashboard' | 'notifications' | 'vault' | 'connections' | 'sett
         aria-label="Relay navigation"
       >
         <div class="rail-heading">
-          <span class="eyebrow">Relay</span>
+          <span class="eyebrow">Go to</span>
           <button
             type="button"
             class="rail-close"
@@ -91,55 +170,57 @@ type MobileTab = 'dashboard' | 'notifications' | 'vault' | 'connections' | 'sett
             <rl-icon name="x" [size]="16" />
           </button>
         </div>
-        <button
-          type="button"
-          class="rail-item"
-          [class.active]="tab() === 'dashboard'"
-          (click)="selectTab('dashboard')"
-        >
-          <rl-icon name="house" [size]="16" />
-          <span>Dashboard</span>
-        </button>
-        <button
-          type="button"
-          class="rail-item"
-          [class.active]="tab() === 'notifications'"
-          (click)="selectTab('notifications')"
-        >
-          <rl-icon name="inbox" [size]="16" />
-          <span>Notifications</span>
-          @if (unreadCount() > 0) {
-            <span class="rail-badge">{{ unreadCount() }}</span>
+        <label class="rail-search">
+          <rl-icon name="search" [size]="16" />
+          <input
+            #moduleSearch
+            type="text"
+            autocomplete="off"
+            spellcheck="false"
+            placeholder="Find a module"
+            aria-label="Find a module"
+            role="combobox"
+            [value]="moduleQuery()"
+            [attr.aria-expanded]="railOpen()"
+            aria-controls="mobile-module-results"
+            [attr.aria-activedescendant]="activeModule() ? 'mobile-' + activeModule()!.id : null"
+            (input)="onModuleQuery($any($event.target).value)"
+          />
+        </label>
+        <div id="mobile-module-results" class="rail-modules" role="listbox" aria-label="Modules">
+          @for (match of moduleMatches(); track match.command.id) {
+            @let module = match.command;
+            @let index = moduleIndex(match);
+            <button
+              type="button"
+              class="rail-item"
+              role="option"
+              [id]="'mobile-' + module.id"
+              [attr.aria-label]="module.title"
+              [class.active]="tab() === module.tab"
+              [class.command-active]="index === activeModuleIndex()"
+              [attr.aria-current]="tab() === module.tab ? 'page' : null"
+              [attr.aria-selected]="index === activeModuleIndex()"
+              (click)="selectModule(module)"
+              (mousemove)="activeModuleIndex.set(index)"
+            >
+              <rl-icon [name]="module.icon ?? 'circle'" [size]="16" />
+              <span class="module-label">
+                @for (part of moduleTitleParts(match); track $index) {
+                  @if (part.matched) {
+                    <mark>{{ part.text }}</mark>
+                  } @else {
+                    {{ part.text }}
+                  }
+                }
+              </span>
+              @if (module.tab === 'notifications' && unreadCount() > 0) {
+                <span class="rail-badge">{{ unreadCount() }}</span>
+              }
+            </button>
+          } @empty {
+            <p class="module-empty">No matching module</p>
           }
-        </button>
-        <button
-          type="button"
-          class="rail-item"
-          [class.active]="tab() === 'vault'"
-          (click)="selectTab('vault')"
-        >
-          <rl-icon name="lock" [size]="16" />
-          <span>Password vault</span>
-        </button>
-        <button
-          type="button"
-          class="rail-item"
-          [class.active]="tab() === 'connections'"
-          (click)="selectTab('connections')"
-        >
-          <rl-icon name="settings" [size]="16" />
-          <span>Connections</span>
-        </button>
-        <div class="rail-settings">
-          <button
-            type="button"
-            class="rail-item"
-            [class.active]="tab() === 'settings'"
-            (click)="selectTab('settings')"
-          >
-            <rl-icon name="settings" [size]="16" />
-            <span>Settings</span>
-          </button>
         </div>
       </aside>
 
@@ -281,7 +362,8 @@ type MobileTab = 'dashboard' | 'notifications' | 'vault' | 'connections' | 'sett
         <button
           type="button"
           [class.active]="tab() === 'dashboard'"
-          (click)="tab.set('dashboard')"
+          (click)="selectTab('dashboard')"
+          [attr.aria-current]="tab() === 'dashboard' ? 'page' : null"
           aria-label="Dashboard"
         >
           <rl-icon name="house" [size]="16" />
@@ -290,7 +372,8 @@ type MobileTab = 'dashboard' | 'notifications' | 'vault' | 'connections' | 'sett
         <button
           type="button"
           [class.active]="tab() === 'notifications'"
-          (click)="tab.set('notifications')"
+          (click)="selectTab('notifications')"
+          [attr.aria-current]="tab() === 'notifications' ? 'page' : null"
           aria-label="Notifications"
         >
           <span class="nav-icon">
@@ -304,11 +387,30 @@ type MobileTab = 'dashboard' | 'notifications' | 'vault' | 'connections' | 'sett
         <button
           type="button"
           [class.active]="tab() === 'vault'"
-          (click)="tab.set('vault')"
+          (click)="selectTab('vault')"
+          [attr.aria-current]="tab() === 'vault' ? 'page' : null"
           aria-label="Password vault"
         >
           <rl-icon name="lock" [size]="16" />
           <span>Vault</span>
+        </button>
+        <button
+          type="button"
+          [class.active]="tab() === 'connections'"
+          (click)="selectTab('connections')"
+          [attr.aria-current]="tab() === 'connections' ? 'page' : null"
+        >
+          <rl-icon name="plus" [size]="16" />
+          <span>Connect</span>
+        </button>
+        <button
+          type="button"
+          [class.active]="tab() === 'settings'"
+          (click)="selectTab('settings')"
+          [attr.aria-current]="tab() === 'settings' ? 'page' : null"
+        >
+          <rl-icon name="settings" [size]="16" />
+          <span>Settings</span>
         </button>
       </nav>
     </div>
@@ -736,7 +838,7 @@ type MobileTab = 'dashboard' | 'notifications' | 'vault' | 'connections' | 'sett
 
     .mobile-nav {
       display: grid;
-      grid-template-columns: repeat(3, 1fr);
+      grid-template-columns: repeat(5, minmax(0, 1fr));
       flex: none;
       padding: var(--space-2) var(--space-3) calc(var(--space-2) + env(safe-area-inset-bottom));
       border-block-start: 1px solid var(--border-subtle);
@@ -753,6 +855,7 @@ type MobileTab = 'dashboard' | 'notifications' | 'vault' | 'connections' | 'sett
       color: var(--text-muted);
       font-size: var(--text-11);
       border-radius: var(--radius-md);
+      white-space: nowrap;
     }
 
     .mobile-nav button.active {
@@ -800,6 +903,8 @@ export class Mobile {
   private readonly tauri = inject(TauriBridge);
   protected readonly theme = inject(ThemeService);
   private readonly destroyRef = inject(DestroyRef);
+  private readonly moduleSearch = viewChild<ElementRef<HTMLInputElement>>('moduleSearch');
+  private readonly pageTitle = viewChild<ElementRef<HTMLHeadingElement>>('pageTitle');
 
   private railGesture: {
     pointerId: number;
@@ -819,6 +924,19 @@ export class Mobile {
   private suppressClickFor: string | null = null;
 
   protected readonly tab = signal<MobileTab>('dashboard');
+  protected readonly focusModuleSearch = signal(false);
+  protected readonly focusModuleHeading = signal(false);
+  protected readonly moduleQuery = signal('');
+  protected readonly activeModuleIndex = signal(0);
+  protected readonly moduleMatches = computed<readonly MobileModuleMatch[]>(() =>
+    search(MOBILE_MODULES, this.moduleQuery()).map((match) => ({
+      ...match,
+      command: MOBILE_MODULES.find((module) => module.id === match.command.id)!,
+    })),
+  );
+  protected readonly activeModule = computed(
+    () => this.moduleMatches()[this.activeModuleIndex()]?.command,
+  );
   protected readonly railOpen = signal(false);
   protected readonly railProgress = signal(0);
   protected readonly railGestureActive = signal(false);
@@ -849,6 +967,14 @@ export class Mobile {
   });
 
   constructor() {
+    afterRenderEffect(() => {
+      if (this.focusModuleHeading()) {
+        this.pageTitle()?.nativeElement.focus();
+        this.focusModuleHeading.set(false);
+      } else if (this.railOpen() && this.focusModuleSearch()) {
+        this.moduleSearch()?.nativeElement.focus();
+      }
+    });
     void this.refresh();
     void this.checkForUpdate();
     void onBackButtonPress(({ canGoBack }) => {
@@ -918,16 +1044,112 @@ export class Mobile {
   }
 
   protected toggleRail(): void {
-    this.setRailOpen(!this.railOpen());
+    if (this.railOpen()) {
+      this.closeRail();
+      return;
+    }
+
+    this.openCommandMenu();
   }
 
   protected closeRail(): void {
+    this.moduleQuery.set('');
     this.setRailOpen(false);
   }
 
   protected selectTab(tab: MobileTab): void {
     this.tab.set(tab);
     this.closeRail();
+  }
+
+  protected openCommandMenu(): void {
+    this.moduleQuery.set('');
+    this.activeModuleIndex.set(
+      Math.max(
+        0,
+        MOBILE_MODULES.findIndex((module) => module.tab === this.tab()),
+      ),
+    );
+    this.focusModuleSearch.set(true);
+    this.setRailOpen(true);
+  }
+
+  protected onModuleQuery(value: string): void {
+    this.moduleQuery.set(value);
+    this.activeModuleIndex.set(0);
+  }
+
+  protected moduleIndex(match: MobileModuleMatch): number {
+    return this.moduleMatches().indexOf(match);
+  }
+
+  protected moduleTitleParts(match: CommandMatch): readonly TitlePart[] {
+    const parts: TitlePart[] = [];
+    let cursor = 0;
+    for (const [start, end] of match.ranges) {
+      if (start > cursor)
+        parts.push({ text: match.command.title.slice(cursor, start), matched: false });
+      parts.push({ text: match.command.title.slice(start, end), matched: true });
+      cursor = end;
+    }
+    if (cursor < match.command.title.length) {
+      parts.push({ text: match.command.title.slice(cursor), matched: false });
+    }
+    return parts;
+  }
+
+  protected selectModule(module: MobileModule): void {
+    this.selectTab(module.tab);
+    this.focusModuleHeading.set(true);
+  }
+
+  protected onShellKeydown(event: KeyboardEvent): void {
+    if (!this.railOpen()) {
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'k') {
+        event.preventDefault();
+        this.openCommandMenu();
+      }
+      return;
+    }
+
+    if (event.target !== this.moduleSearch()?.nativeElement) {
+      if (event.key === 'Escape') this.closeRail();
+      return;
+    }
+
+    switch (event.key) {
+      case 'ArrowDown':
+        event.preventDefault();
+        this.moveModule(1);
+        break;
+      case 'ArrowUp':
+        event.preventDefault();
+        this.moveModule(-1);
+        break;
+      case 'Enter':
+        event.preventDefault();
+        if (this.activeModule()) this.selectModule(this.activeModule()!);
+        break;
+      case 'Tab':
+        if (this.moduleQuery().trim() && this.activeModule()) {
+          event.preventDefault();
+          const input = this.moduleSearch()?.nativeElement;
+          if (input) {
+            input.value = this.activeModule()!.title;
+            this.onModuleQuery(input.value);
+          }
+        }
+        break;
+      case 'Escape':
+        event.preventDefault();
+        this.closeRail();
+        break;
+    }
+  }
+
+  private moveModule(delta: number): void {
+    const count = this.moduleMatches().length;
+    if (count) this.activeModuleIndex.update((index) => (index + delta + count) % count);
   }
 
   protected startRailGesture(event: PointerEvent): void {
@@ -1003,6 +1225,11 @@ export class Mobile {
     this.railGestureActive.set(false);
     this.railOpen.set(open);
     this.railProgress.set(open ? 1 : 0);
+    if (!open) {
+      this.focusModuleSearch.set(false);
+      this.moduleQuery.set('');
+      this.activeModuleIndex.set(0);
+    }
   }
 
   protected startNotificationSwipe(event: PointerEvent, notificationId: string): void {

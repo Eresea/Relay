@@ -11,9 +11,7 @@ export interface Command {
   readonly id: string;
   /** Sentence case, names the action not the assent: "Open project", not "OK". */
   readonly title: string;
-  /** One line, then stop. Shown muted beside the title. */
-  readonly hint?: string;
-  /** Group heading in the palette. Rendered as an uppercase micro-caption. */
+  /** Search category; command rows stay title-only. */
   readonly group: string;
   /** Lucide glyph name. */
   readonly icon?: string;

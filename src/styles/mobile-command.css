@@ -1,0 +1,83 @@
+rl-mobile .mobile-header-title {
+  flex: 1;
+  min-inline-size: 0;
+  padding-inline: var(--space-2);
+}
+
+rl-mobile .mobile-header h1 {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+rl-mobile .header-actions,
+rl-mobile .rail-modules {
+  display: flex;
+}
+
+rl-mobile .header-actions {
+  flex: none;
+}
+
+rl-mobile .rail-search {
+  display: flex;
+  align-items: center;
+  flex: none;
+  min-block-size: 44px;
+  gap: var(--space-3);
+  padding-inline: var(--space-3);
+  color: var(--text-subtle);
+  border-block-end: 1px solid var(--border-subtle);
+}
+
+rl-mobile .rail-search input {
+  flex: 1;
+  min-inline-size: 0;
+  color: var(--text-strong);
+  font-size: var(--text-13);
+  background: none;
+  border: 0;
+  outline: 0;
+}
+
+rl-mobile .rail-search input::placeholder {
+  color: var(--text-subtle);
+}
+
+rl-mobile .rail-modules {
+  flex: 1;
+  min-block-size: 0;
+  flex-direction: column;
+  overflow-y: auto;
+  gap: var(--space-2);
+}
+
+rl-mobile .rail-item.command-active {
+  color: var(--text-strong);
+  background: var(--tint-selected);
+}
+
+rl-mobile .module-label {
+  flex: 1;
+  min-inline-size: 0;
+  overflow: hidden;
+  font-size: var(--text-13);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+rl-mobile .module-label mark {
+  color: var(--text-strong);
+  text-decoration: underline;
+  text-decoration-color: var(--accent);
+  text-underline-offset: 3px;
+  background: none;
+}
+
+rl-mobile .module-empty {
+  margin: 0;
+  padding: var(--space-4) var(--space-3);
+  color: var(--text-muted);
+  font-size: var(--text-13);
+  text-align: start;
+}

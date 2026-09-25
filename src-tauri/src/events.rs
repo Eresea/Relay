@@ -98,6 +98,9 @@ pub enum AppEvent {
     /// The "Runtime" command was run from another surface.
     OpenRuntimeRequested,
 
+    /// The "Agent threads" command was run from another surface.
+    OpenAgentsRequested,
+
     /// A notification to show in the HUD. `hue_source` names the long-lived
     /// object this is about (a job id today, an agent id once agents exist)
     /// — the HUD hashes it to a colour, never the notification's own id,

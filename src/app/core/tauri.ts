@@ -50,6 +50,18 @@ export class TauriBridge {
     return (await this.invoke<CoreCommandMeta[]>('core_commands')) ?? [];
   }
 
+  async codexThreads(): Promise<readonly CodexThread[]> {
+    return (await this.invoke<CodexThread[]>('codex_threads')) ?? [];
+  }
+
+  async codexOpenThread(threadId: string): Promise<CodexThreadDetails | null> {
+    return this.invoke<CodexThreadDetails>('codex_open_thread', { threadId });
+  }
+
+  async codexOlderMessages(threadId: string, cursor: string): Promise<CodexMessagePage | null> {
+    return this.invoke<CodexMessagePage>('codex_older_messages', { threadId, cursor });
+  }
+
   /** Minimizes the current window to the taskbar/dock. */
   async minimizeWindow(): Promise<void> {
     if (!this.available) return;
@@ -518,7 +530,31 @@ export type CoreCommand =
   | { readonly id: 'open_vault' }
   | { readonly id: 'open_github' }
   | { readonly id: 'open_runtime' }
+  | { readonly id: 'open_agents' }
   | { readonly id: 'quit' };
+
+export interface CodexThread {
+  readonly id: string;
+  readonly title: string;
+  readonly cwd: string;
+  readonly updatedAt: number;
+}
+
+export interface CodexThreadDetails {
+  readonly thread: CodexThread;
+  readonly messages: readonly CodexMessage[];
+  readonly olderCursor: string | null;
+}
+
+export interface CodexMessagePage {
+  readonly messages: readonly CodexMessage[];
+  readonly nextCursor: string | null;
+}
+
+export interface CodexMessage {
+  readonly role: 'You' | 'Codex';
+  readonly text: string;
+}
 
 /** Non-secret Grafana connection details. The API token lives in the OS keychain. */
 export interface RuntimeGrafanaSettings {
@@ -588,7 +624,6 @@ export interface CoreCommandMeta {
   readonly id: string;
   readonly title: string;
   readonly group: string;
-  readonly hint?: string;
   readonly icon?: string;
 }
 
