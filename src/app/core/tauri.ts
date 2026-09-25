@@ -209,6 +209,18 @@ export class TauriBridge {
     return (await this.invoke<GithubRepositorySummary[]>('github_repositories')) ?? [];
   }
 
+  async githubRegisterWebhooks(repositories: readonly string[]): Promise<readonly string[]> {
+    return (await this.invoke<string[]>('github_register_webhooks', { repositories })) ?? [];
+  }
+
+  async githubWebhookRepositories(): Promise<readonly string[]> {
+    return (await this.invoke<string[]>('github_webhook_repositories')) ?? [];
+  }
+
+  async githubUnregisterWebhook(repository: string): Promise<void> {
+    await this.invoke('github_unregister_webhook', { repository });
+  }
+
   async githubPullRequests(): Promise<readonly GithubPullRequestSummary[]> {
     return (await this.invoke<GithubPullRequestSummary[]>('github_pull_requests')) ?? [];
   }
@@ -399,7 +411,12 @@ export class TauriBridge {
   /** Whether a GitHub account is connected. Only reads the keychain. */
   async githubStatus(): Promise<GithubStatus> {
     return (
-      (await this.invoke<GithubStatus>('github_status')) ?? { connected: false, username: null }
+      (await this.invoke<GithubStatus>('github_status')) ?? {
+        connected: false,
+        username: null,
+        nexusCredentialReady: false,
+        nexusCredentialPending: false,
+      }
     );
   }
 
@@ -415,6 +432,29 @@ export class TauriBridge {
   /** Disconnects the GitHub account and stops the poll job, if running. */
   async githubDisconnect(): Promise<void> {
     await this.invoke('github_disconnect');
+  }
+
+  async nexusAuthStatus(): Promise<NexusAuthStatus> {
+    return (await this.invoke<NexusAuthStatus>('nexus_auth_status')) ?? {
+      connected: false,
+      userId: null,
+      email: null,
+      displayName: null,
+    };
+  }
+
+  async nexusAuthStart(): Promise<void> {
+    await this.invoke('nexus_auth_start');
+  }
+
+  async nexusAuthLogout(): Promise<void> {
+    await this.invoke('nexus_auth_logout');
+  }
+
+  async onNexusAuth(handler: (status: NexusAuthStatus) => void): Promise<() => void> {
+    if (!this.available) return () => {};
+    const { listen } = await import('@tauri-apps/api/event');
+    return listen<NexusAuthStatus>('nexus://auth', (message) => handler(message.payload));
   }
 
   /**
@@ -611,6 +651,15 @@ export interface PasswordOptions {
 export interface GithubStatus {
   readonly connected: boolean;
   readonly username: string | null;
+  readonly nexusCredentialReady: boolean;
+  readonly nexusCredentialPending: boolean;
+}
+
+export interface NexusAuthStatus {
+  readonly connected: boolean;
+  readonly userId: string | null;
+  readonly email: string | null;
+  readonly displayName: string | null;
 }
 
 /** Mirrors `github::oauth::DeviceAuthorization`. */

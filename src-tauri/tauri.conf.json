@@ -62,6 +62,10 @@
     ]
   },
   "plugins": {
+    "deep-link": {
+      "desktop": { "schemes": ["relay"] },
+      "mobile": [{ "scheme": ["relay"], "appLink": false }]
+    },
     "updater": {
       "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEQ5RTFGREI4RTQ0MTE5NUQKUldSZEdVSGt1UDNoMlVGV3BTekRKYVNONEIrdzdtZHBOa3EvYnhuR2NQTXJ6YXExY3VyR2E2dFcK",
       "endpoints": ["https://github.com/Eresea/Relay/releases/latest/download/latest.json"]

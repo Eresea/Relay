@@ -70,6 +70,9 @@ pub enum Error {
     #[error("could not access the system keychain: {0}")]
     TokenStore(String),
 
+    #[error("Nexus authentication failed: {0}")]
+    NexusAuth(String),
+
     #[error("OpenCloud request failed: {0}")]
     OpenCloud(String),
 

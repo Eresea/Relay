@@ -12,6 +12,7 @@
 //! Settings and rules are not secret and stay in `settings.json`, mirroring
 //! every other preference; only the token itself goes through here.
 
+use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 
 use crate::error::{Error, Result};
@@ -35,10 +36,11 @@ pub struct StoredToken {
 /// exercised in tests without a real Secret Service, Keychain, or Credential
 /// Manager present — the same reason `jobs` is written against `EventSink`
 /// rather than `AppHandle` directly.
+#[async_trait]
 pub trait TokenStore: Send + Sync + 'static {
-    fn get(&self) -> Result<Option<StoredToken>>;
-    fn set(&self, token: &StoredToken) -> Result<()>;
-    fn clear(&self) -> Result<()>;
+    async fn get(&self) -> Result<Option<StoredToken>>;
+    async fn set(&self, token: &StoredToken) -> Result<()>;
+    async fn clear(&self) -> Result<()>;
 }
 
 #[derive(Default)]
@@ -50,8 +52,9 @@ impl KeyringTokenStore {
     }
 }
 
+#[async_trait]
 impl TokenStore for KeyringTokenStore {
-    fn get(&self) -> Result<Option<StoredToken>> {
+    async fn get(&self) -> Result<Option<StoredToken>> {
         match self.entry()?.get_password() {
             Ok(raw) => {
                 log::info!("github: keychain get found an entry ({} bytes)", raw.len());
@@ -70,7 +73,7 @@ impl TokenStore for KeyringTokenStore {
         }
     }
 
-    fn set(&self, token: &StoredToken) -> Result<()> {
+    async fn set(&self, token: &StoredToken) -> Result<()> {
         let raw = serde_json::to_string(token).map_err(|e| Error::TokenStore(e.to_string()))?;
         let result = self
             .entry()?
@@ -80,7 +83,7 @@ impl TokenStore for KeyringTokenStore {
         result
     }
 
-    fn clear(&self) -> Result<()> {
+    async fn clear(&self) -> Result<()> {
         match self.entry()?.delete_credential() {
             Ok(()) | Err(keyring::Error::NoEntry) => Ok(()),
             Err(e) => Err(Error::TokenStore(e.to_string())),
@@ -97,17 +100,18 @@ pub mod fake {
     #[derive(Default)]
     pub struct FakeTokenStore(Mutex<Option<StoredToken>>);
 
+    #[async_trait]
     impl TokenStore for FakeTokenStore {
-        fn get(&self) -> Result<Option<StoredToken>> {
+        async fn get(&self) -> Result<Option<StoredToken>> {
             Ok(self.0.lock().unwrap().clone())
         }
 
-        fn set(&self, token: &StoredToken) -> Result<()> {
+        async fn set(&self, token: &StoredToken) -> Result<()> {
             *self.0.lock().unwrap() = Some(token.clone());
             Ok(())
         }
 
-        fn clear(&self) -> Result<()> {
+        async fn clear(&self) -> Result<()> {
             *self.0.lock().unwrap() = None;
             Ok(())
         }
@@ -119,10 +123,10 @@ mod tests {
     use super::fake::FakeTokenStore;
     use super::*;
 
-    #[test]
-    fn round_trips_through_the_fake_store() {
+    #[tokio::test]
+    async fn round_trips_through_the_fake_store() {
         let store = FakeTokenStore::default();
-        assert_eq!(store.get().unwrap(), None);
+        assert_eq!(store.get().await.unwrap(), None);
 
         let token = StoredToken {
             access_token: "gho_abc".into(),
@@ -130,10 +134,10 @@ mod tests {
             expires_at: Some(1_000),
             username: "octocat".into(),
         };
-        store.set(&token).unwrap();
-        assert_eq!(store.get().unwrap(), Some(token));
+        store.set(&token).await.unwrap();
+        assert_eq!(store.get().await.unwrap(), Some(token));
 
-        store.clear().unwrap();
-        assert_eq!(store.get().unwrap(), None);
+        store.clear().await.unwrap();
+        assert_eq!(store.get().await.unwrap(), None);
     }
 }

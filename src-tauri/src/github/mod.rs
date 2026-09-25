@@ -11,6 +11,8 @@
 //! recurring job.
 
 pub mod client;
+pub mod events;
+pub mod nexus_store;
 pub mod oauth;
 pub mod poll;
 pub mod rules;
@@ -28,10 +30,11 @@ use crate::events::{NotificationAction, NotificationStatus};
 use crate::jobs::{self, JobId, JobRegistry, NotificationOptions};
 
 use client::{GitHubClient, HttpGitHubClient, RepositorySummary};
+use nexus_store::NexusGitHubTokenStore;
 use oauth::DeviceAuthorization;
 use poll::PullRequestSnapshot;
 use rules::GithubConnectorSettings;
-use token_store::{KeyringTokenStore, TokenStore};
+use token_store::TokenStore;
 
 const SETTINGS_KEY: &str = "github.settings";
 const POLL_CACHE_FILE: &str = "github-poll-cache.json";
@@ -50,20 +53,30 @@ pub struct GithubState {
 pub struct GithubStatus {
     pub connected: bool,
     pub username: Option<String>,
+    pub nexus_credential_ready: bool,
+    pub nexus_credential_pending: bool,
 }
 
 /// Whether an account is connected. Cheap and synchronous — it only reads
 /// the keychain, never calls GitHub.
-pub fn status() -> Result<GithubStatus> {
+pub async fn status(app: &AppHandle) -> Result<GithubStatus> {
     log::info!("github: status() called");
-    match KeyringTokenStore.get()? {
-        Some(token) => Ok(GithubStatus {
+    let (username, nexus_credential_ready, nexus_credential_pending) =
+        NexusGitHubTokenStore::new(app.clone())
+            .connection_state()
+            .await?;
+    match username {
+        Some(username) => Ok(GithubStatus {
             connected: true,
-            username: Some(token.username),
+            username: Some(username),
+            nexus_credential_ready,
+            nexus_credential_pending,
         }),
         None => Ok(GithubStatus {
             connected: false,
             username: None,
+            nexus_credential_ready: false,
+            nexus_credential_pending: false,
         }),
     }
 }
@@ -71,8 +84,11 @@ pub fn status() -> Result<GithubStatus> {
 /// Returns the signed-in user's recent repositories. An unconnected account
 /// is a valid empty result so the Projects surface can still show local-only
 /// clones without inventing a separate auth state.
-pub async fn repositories(client: HttpGitHubClient) -> Result<Vec<RepositorySummary>> {
-    let Some(token) = KeyringTokenStore.get()? else {
+pub async fn repositories(
+    app: &AppHandle,
+    client: HttpGitHubClient,
+) -> Result<Vec<RepositorySummary>> {
+    let Some(token) = NexusGitHubTokenStore::new(app.clone()).get().await? else {
         return Ok(Vec::new());
     };
     client.list_repositories(&token.access_token).await
@@ -144,7 +160,7 @@ pub fn connect_start(
                 }],
             },
         );
-        let token_store = KeyringTokenStore;
+        let token_store = NexusGitHubTokenStore::new(job_app.clone());
         let result =
             poll::run_device_flow(&ctx, &job_client, &token_store, &client_id, device).await;
         let stored = match result {
@@ -177,8 +193,9 @@ pub fn connect_start(
 /// Cancels the poll job, if one is running, and removes the token from the
 /// keychain. The on-disk PR cache is also removed so a future reconnect
 /// starts from a clean slate rather than diffing against months-old state.
-pub fn disconnect(app: &AppHandle, registry: &JobRegistry) -> Result<()> {
-    KeyringTokenStore.clear()?;
+pub async fn disconnect(app: &AppHandle, registry: &JobRegistry) -> Result<()> {
+    events::unregister_all(app).await?;
+    NexusGitHubTokenStore::new(app.clone()).clear().await?;
     if let Some(job_id) = app.state::<GithubState>().poll_job.lock().unwrap().take() {
         let _ = registry.cancel(&job_id);
     }
@@ -189,12 +206,12 @@ pub fn disconnect(app: &AppHandle, registry: &JobRegistry) -> Result<()> {
 /// Called once at startup: if a token is already in the keychain from a
 /// previous session, resume polling without requiring the user to
 /// reconnect.
-pub fn resume_polling_if_connected(
+pub async fn resume_polling_if_connected(
     app: &AppHandle,
     client: HttpGitHubClient,
     registry: &JobRegistry,
 ) {
-    match KeyringTokenStore.get() {
+    match NexusGitHubTokenStore::new(app.clone()).get().await {
         Ok(Some(_)) => start_polling(app, client, registry),
         Ok(None) => {}
         Err(error) => log::warn!("could not check the GitHub connection at startup: {error}"),
@@ -202,7 +219,7 @@ pub fn resume_polling_if_connected(
 }
 
 fn start_polling(app: &AppHandle, client: HttpGitHubClient, registry: &JobRegistry) {
-    let token_store = Arc::new(KeyringTokenStore);
+    let token_store = Arc::new(NexusGitHubTokenStore::new(app.clone()));
     let sink = app.clone();
     let cache_path = poll_cache_path(app);
     let settings_app = app.clone();
