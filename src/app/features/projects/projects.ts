@@ -60,7 +60,7 @@ import { mergeProjectSummaries, projectKey, type ProjectSummary } from './projec
         </div>
       } @else {
         <div class="project-list" role="list">
-          @for (project of projects(); track project.githubRepo ?? project.path) {
+          @for (project of projects(); track project.path ?? project.githubRepo ?? project.name) {
             <article class="project-row" role="listitem">
               <span class="project-glyph">
                 <rl-icon-picker

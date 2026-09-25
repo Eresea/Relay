@@ -46,8 +46,6 @@ pub struct CoreCommandMeta {
     pub title: String,
     pub group: String,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub hint: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub icon: Option<String>,
 }
 
@@ -57,7 +55,6 @@ impl CoreCommandMeta {
             id: id.to_owned(),
             title: title.to_owned(),
             group: group.to_owned(),
-            hint: None,
             icon: Some(icon.to_owned()),
         }
     }
@@ -82,6 +79,8 @@ pub enum CoreCommand {
     HideHud,
     OpenVault,
     OpenGithub,
+    OpenRuntime,
+    OpenAgents,
     Quit,
 }
 
@@ -103,6 +102,16 @@ pub fn run_core_command(app: AppHandle, command: CoreCommand) -> Result<()> {
         CoreCommand::OpenGithub => {
             overlay::show_main(&app)?;
             app.emit(AppEvent::OpenGithubRequested);
+            Ok(())
+        }
+        CoreCommand::OpenRuntime => {
+            overlay::show_main(&app)?;
+            app.emit(AppEvent::OpenRuntimeRequested);
+            Ok(())
+        }
+        CoreCommand::OpenAgents => {
+            overlay::show_main(&app)?;
+            app.emit(AppEvent::OpenAgentsRequested);
             Ok(())
         }
         CoreCommand::Quit => {

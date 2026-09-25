@@ -11,52 +11,77 @@
     aria-expanded="true"
     aria-controls="palette-results"
     [attr.aria-activedescendant]="active() ? 'cmd-' + active()!.id : null"
+    [readOnly]="running()"
     (input)="onQuery($any($event.target).value)"
   />
 </div>
 
-<div class="results" id="palette-results" role="listbox" aria-label="Commands">
-  @for (section of sections(); track section.group) {
-    <div class="group">
-      <div class="u-caption heading" aria-hidden="true">{{ section.group }}</div>
-      @for (match of section.matches; track match.command.id) {
-        @let command = match.command;
-        @let index = indexOf(match);
-        <button
-          #row
-          type="button"
-          class="row"
-          role="option"
-          [id]="'cmd-' + command.id"
-          [class.is-active]="index === activeIndex()"
-          [attr.aria-selected]="index === activeIndex()"
-          (click)="run(command)"
-          (mousemove)="activeIndex.set(index)"
-        >
-          @if (hue(command); as tone) {
-            <span class="u-entity-tile tile" [style.--entity-hue]="tone">
-              <rl-icon [name]="command.icon ?? 'circle'" [size]="14" />
-            </span>
-          } @else if (command.icon) {
-            <rl-icon class="glyph" [name]="command.icon" [size]="16" />
-          }
-
-          <span class="label">{{ command.title }}</span>
-
-          @if (command.hint) {
-            <span class="hint">{{ command.hint }}</span>
-          }
-
-          @if (command.shortcut) {
-            <rl-kbd [keys]="command.shortcut" />
-          }
-        </button>
+<div
+  class="results"
+  id="palette-results"
+  role="listbox"
+  aria-label="Commands"
+  [attr.aria-busy]="running()"
+>
+  @for (match of flat(); track match.command.id; let index = $index) {
+    @let command = match.command;
+    <button
+      #row
+      type="button"
+      class="row"
+      role="option"
+      [id]="'cmd-' + command.id"
+      [attr.aria-label]="command.title"
+      [class.is-active]="index === activeIndex()"
+      [attr.aria-selected]="index === activeIndex()"
+      [disabled]="running()"
+      (click)="run(command)"
+      (mousemove)="activeIndex.set(index)"
+    >
+      @if (hue(command); as tone) {
+        <span class="u-entity-tile tile" [style.--entity-hue]="tone">
+          <rl-icon [name]="command.icon ?? 'circle'" [size]="14" />
+        </span>
+      } @else if (command.icon) {
+        <rl-icon class="glyph" [name]="command.icon" [size]="16" />
       }
-    </div>
+
+      <span class="label">
+        @for (part of titleParts(match); track $index) {
+          @if (part.matched) {
+            <mark>{{ part.text }}</mark>
+          } @else {
+            {{ part.text }}
+          }
+        }
+      </span>
+
+      @if (command.shortcut) {
+        <rl-kbd [keys]="command.shortcut" />
+      }
+    </button>
   } @empty {
     <div class="empty">
       <p class="title">No matching command</p>
       <p class="body">Try a shorter word, or press Escape to close.</p>
     </div>
+  }
+</div>
+
+<div
+  class="run-status"
+  [class.error]="runError()"
+  aria-live="polite"
+  aria-label="Command menu keyboard shortcuts"
+>
+  @if (running()) {
+    <span>Working…</span><span>Close</span><rl-kbd [keys]="['Esc']" />
+  } @else if (runError()) {
+    <span>Could not complete that action.</span><span>Retry</span><rl-kbd [keys]="['Enter']" />
+    <span>Close</span><rl-kbd [keys]="['Esc']" />
+  } @else {
+    <span>Navigate</span><rl-kbd [keys]="['↑', '↓']" /> <span>Complete</span
+    ><rl-kbd [keys]="['Tab']" /> <span>Open</span><rl-kbd [keys]="['Enter']" /> <span>Close</span
+    ><rl-kbd [keys]="['Esc']" />
   }
 </div>

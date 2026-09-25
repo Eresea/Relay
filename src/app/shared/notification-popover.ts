@@ -1,6 +1,7 @@
 import {
   ChangeDetectionStrategy,
   Component,
+  ElementRef,
   computed,
   effect,
   inject,
@@ -259,7 +260,7 @@ export class NotificationPopover {
   private readonly center = inject(NotificationCenter);
   private readonly tauri = inject(TauriBridge);
   private readonly appPopover = viewChild(AppPopover);
-  private readonly sentinel = viewChild<HTMLElement>('loadMoreSentinel');
+  private readonly sentinel = viewChild<ElementRef<HTMLButtonElement>>('loadMoreSentinel');
 
   protected readonly popoverOpen = signal(false);
   protected readonly visibleCount = signal(PAGE_SIZE);
@@ -279,7 +280,7 @@ export class NotificationPopover {
       const observer = new IntersectionObserver((entries) => {
         if (entries.some((entry) => entry.isIntersecting)) this.loadMore();
       });
-      observer.observe(sentinel);
+      observer.observe(sentinel.nativeElement);
       onCleanup(() => observer.disconnect());
     });
   }

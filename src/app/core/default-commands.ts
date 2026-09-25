@@ -18,16 +18,30 @@ export function registerDefaultCommands(): () => void {
     {
       id: 'relay.projects.open',
       title: 'Open projects',
-      hint: 'Sync local clones and GitHub repositories',
       group: 'Project',
       icon: 'library',
       keywords: ['project', 'workspace', 'folder', 'github', 'sync'],
       run: () => tauri.runCoreCommand({ id: 'open_main' }),
     },
     {
+      id: 'relay.runtime.open',
+      title: 'Open Runtime',
+      group: 'Project',
+      icon: 'info',
+      keywords: ['runtime', 'status', 'health', 'grafana', 'metrics', 'leaf'],
+      run: () => tauri.runCoreCommand({ id: 'open_runtime' }),
+    },
+    {
+      id: 'relay.agents.open',
+      title: 'Agent threads',
+      group: 'Agents',
+      icon: 'bot',
+      keywords: ['codex', 'conversation', 'session'],
+      run: () => tauri.runCoreCommand({ id: 'open_agents' }),
+    },
+    {
       id: 'relay.theme.toggle',
       title: 'Toggle theme',
-      hint: 'Switch between dark and light',
       group: 'Appearance',
       icon: 'sun',
       keywords: ['dark', 'light', 'appearance'],
@@ -43,7 +57,6 @@ export function registerDefaultCommands(): () => void {
     {
       id: 'relay.vault.open',
       title: 'Password vault',
-      hint: 'Generate and store passwords',
       group: 'Relay',
       icon: 'lock',
       keywords: ['password', 'generate', 'vault', 'security', 'account'],
@@ -52,7 +65,6 @@ export function registerDefaultCommands(): () => void {
     {
       id: 'relay.github.open',
       title: 'GitHub',
-      hint: 'Connect an account and manage notification rules',
       group: 'Relay',
       icon: 'inbox',
       keywords: ['github', 'pull request', 'pr', 'ci', 'notifications', 'connector'],
@@ -61,7 +73,6 @@ export function registerDefaultCommands(): () => void {
     {
       id: 'relay.app.reload',
       title: 'Reload interface',
-      hint: 'Rebuild the webview without restarting Relay',
       group: 'Relay',
       icon: 'loader-circle',
       keywords: ['refresh', 'restart'],

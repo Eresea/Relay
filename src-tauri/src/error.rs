@@ -70,6 +70,66 @@ pub enum Error {
     #[error("could not access the system keychain: {0}")]
     TokenStore(String),
 
+    #[cfg(desktop)]
+    #[error("Grafana API token cannot be empty")]
+    GrafanaTokenEmpty,
+
+    #[cfg(desktop)]
+    #[error("Grafana API token contains invalid characters")]
+    GrafanaTokenInvalid,
+
+    #[cfg(desktop)]
+    #[error("enter a valid Grafana HTTP or HTTPS URL")]
+    GrafanaUrlInvalid,
+
+    #[cfg(desktop)]
+    #[error("Grafana URL is not configured")]
+    GrafanaUrlMissing,
+
+    #[cfg(desktop)]
+    #[error("could not configure the Grafana HTTP client")]
+    GrafanaHttpClient,
+
+    #[cfg(desktop)]
+    #[error("could not reach Grafana health endpoint")]
+    GrafanaHealthRequestFailed,
+
+    #[cfg(desktop)]
+    #[error("Grafana health endpoint returned HTTP {0}")]
+    GrafanaHealthStatus(u16),
+
+    #[cfg(desktop)]
+    #[error("Grafana dashboard UID is invalid")]
+    GrafanaDashboardUidInvalid,
+
+    #[cfg(desktop)]
+    #[error("could not reach the Grafana dashboard endpoint")]
+    GrafanaDashboardRequestFailed,
+
+    #[cfg(desktop)]
+    #[error("Grafana dashboard endpoint returned HTTP {0}")]
+    GrafanaDashboardStatus(u16),
+
+    #[cfg(desktop)]
+    #[error("Grafana dashboard endpoint returned an unexpected response")]
+    GrafanaDashboardResponseInvalid,
+
+    #[cfg(desktop)]
+    #[error("could not reach the Leaf API health endpoint")]
+    LeafHealthRequestFailed,
+
+    #[cfg(desktop)]
+    #[error("Leaf API health endpoint returned an unexpected response")]
+    LeafHealthResponseInvalid,
+
+    #[cfg(desktop)]
+    #[error("could not reach the Nexus readiness endpoint")]
+    NexusReadinessRequestFailed,
+
+    #[cfg(desktop)]
+    #[error("Nexus readiness endpoint returned an unexpected response")]
+    NexusReadinessResponseInvalid,
+
     #[error("Nexus authentication failed: {0}")]
     NexusAuth(String),
 

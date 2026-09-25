@@ -9,6 +9,8 @@ import { BackgroundTaskIndicator } from '@shared/background-task-indicator';
 import { Icon } from '@shared/icon';
 import { NotificationPopover } from '@shared/notification-popover';
 import { Projects } from '@features/projects/projects';
+import { Runtime } from '@features/runtime/runtime';
+import { AgentThreads } from '@features/agents/agent-threads';
 import { Codex } from '@features/codex/codex';
 
 const RAIL_EXPANDED_SETTING_KEY = 'rail.expanded';
@@ -30,6 +32,8 @@ const RAIL_EXPANDED_SETTING_KEY = 'rail.expanded';
     Icon,
     NotificationPopover,
     Projects,
+    Runtime,
+    AgentThreads,
     Settings,
     UpdateStatusBar,
     Vault,
@@ -94,6 +98,26 @@ const RAIL_EXPANDED_SETTING_KEY = 'rail.expanded';
           <button
             type="button"
             class="rail-item"
+            [class.active]="view() === 'agents'"
+            (click)="view.set('agents')"
+            aria-label="Agent threads"
+          >
+            <span class="rail-icon"><rl-icon name="bot" [size]="16" /></span>
+            <span class="rail-label">Agent threads</span>
+          </button>
+          <button
+            type="button"
+            class="rail-item"
+            [class.active]="view() === 'runtime'"
+            (click)="view.set('runtime')"
+            aria-label="Runtime"
+          >
+            <span class="rail-icon"><rl-icon name="info" [size]="16" /></span>
+            <span class="rail-label">Runtime</span>
+          </button>
+          <button
+            type="button"
+            class="rail-item"
             [class.active]="view() === 'codex'"
             (click)="view.set('codex')"
             aria-label="Codex"
@@ -124,6 +148,10 @@ const RAIL_EXPANDED_SETTING_KEY = 'rail.expanded';
           <rl-codex />
         } @else if (view() === 'vault') {
           <rl-vault />
+        } @else if (view() === 'runtime') {
+          <rl-runtime />
+        } @else if (view() === 'agents') {
+          <rl-agent-threads />
         } @else {
           <rl-projects />
         }
@@ -357,7 +385,7 @@ const RAIL_EXPANDED_SETTING_KEY = 'rail.expanded';
 })
 export class Home {
   protected readonly theme = inject(ThemeService);
-  protected readonly view = signal<'home' | 'settings' | 'vault' | 'codex'>('home');
+  protected readonly view = signal<'home' | 'settings' | 'vault' | 'runtime' | 'agents' | 'codex'>('home');
   /** Starts collapsed — the safe default while the persisted value (below) is
    * still loading — then reconciles with whatever the user last left it as. */
   protected readonly railExpanded = signal(false);
@@ -391,6 +419,8 @@ export class Home {
           this.settingsTab.set('general');
         }
         if (event.type === 'openVaultRequested') this.view.set('vault');
+        if (event.type === 'openRuntimeRequested') this.view.set('runtime');
+        if (event.type === 'openAgentsRequested') this.view.set('agents');
         if (event.type === 'openGithubRequested') {
           this.view.set('settings');
           this.settingsTab.set('github');

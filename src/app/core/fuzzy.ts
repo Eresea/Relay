@@ -15,37 +15,83 @@ interface Scored {
 function scoreOne(haystack: string, needle: string): Scored | null {
   if (needle.length === 0) return { score: 0, ranges: [] };
 
-  const hay = haystack.toLowerCase();
-  const nee = needle.toLowerCase();
+  const characters = Array.from(haystack);
+  const hay = characters.map((character) => character.toLowerCase());
+  const nee = Array.from(needle.toLowerCase());
+  const offsets = [0];
+  for (const character of characters) offsets.push(offsets.at(-1)! + character.length);
 
-  const ranges: [number, number][] = [];
-  let score = 0;
-  let from = 0;
-  let runStart = -1;
-  let previousIndex = -2;
+  const scores = Array.from({ length: nee.length }, () =>
+    new Array<number>(hay.length).fill(-Infinity),
+  );
+  const previous = Array.from({ length: nee.length }, () => new Array<number>(hay.length).fill(-1));
 
-  for (const character of nee) {
-    const index = hay.indexOf(character, from);
-    if (index === -1) return null;
-
-    if (index === 0 || /[\s\-_/.]/.test(hay[index - 1])) score += 8;
-    if (index === previousIndex + 1) {
-      score += 6;
-    } else {
-      if (runStart !== -1) ranges.push([runStart, previousIndex + 1]);
-      runStart = index;
+  for (let index = 0; index < hay.length; index++) {
+    if (hay[index] === nee[0]) {
+      scores[0][index] = 1 + (isWordStart(characters, index) ? 8 : 0);
     }
-    score += 1;
-
-    previousIndex = index;
-    from = index + 1;
   }
 
-  if (runStart !== -1) ranges.push([runStart, previousIndex + 1]);
+  for (let queryIndex = 1; queryIndex < nee.length; queryIndex++) {
+    let bestGapScore = -Infinity;
+    let bestGapIndex = -1;
+    for (let index = 0; index < hay.length; index++) {
+      if (index >= 2 && scores[queryIndex - 1][index - 2] > bestGapScore) {
+        bestGapScore = scores[queryIndex - 1][index - 2];
+        bestGapIndex = index - 2;
+      }
+      if (hay[index] !== nee[queryIndex]) continue;
+
+      const adjacentScore = index > 0 ? scores[queryIndex - 1][index - 1] + 6 : -Infinity;
+      const gapScore = bestGapScore;
+      if (adjacentScore >= gapScore) {
+        scores[queryIndex][index] = adjacentScore + 1;
+        previous[queryIndex][index] = index - 1;
+      } else if (gapScore > -Infinity) {
+        scores[queryIndex][index] = gapScore + 1;
+        previous[queryIndex][index] = bestGapIndex;
+      }
+      if (scores[queryIndex][index] > -Infinity && isWordStart(characters, index)) {
+        scores[queryIndex][index] += 8;
+      }
+    }
+  }
+
+  let bestIndex = -1;
+  const lastScores = scores[nee.length - 1];
+  for (let index = 0; index < lastScores.length; index++) {
+    if (lastScores[index] > (bestIndex === -1 ? -Infinity : lastScores[bestIndex]))
+      bestIndex = index;
+  }
+  if (bestIndex === -1 || lastScores[bestIndex] === -Infinity) return null;
+
+  const matchedIndices = new Array<number>(nee.length);
+  let index = bestIndex;
+  for (let queryIndex = nee.length - 1; queryIndex >= 0; queryIndex--) {
+    matchedIndices[queryIndex] = index;
+    index = previous[queryIndex][index];
+  }
+
+  const ranges: [number, number][] = [];
+  let start = matchedIndices[0];
+  let end = start + 1;
+  for (const matchedIndex of matchedIndices.slice(1)) {
+    if (matchedIndex === end) {
+      end++;
+    } else {
+      ranges.push([offsets[start], offsets[end]]);
+      start = matchedIndex;
+      end = start + 1;
+    }
+  }
+  ranges.push([offsets[start], offsets[end]]);
 
   // Shorter titles that match are usually the better answer.
-  score -= Math.min(haystack.length, 60) * 0.05;
-  return { score, ranges };
+  return { score: lastScores[bestIndex] - Math.min(haystack.length, 60) * 0.05, ranges };
+}
+
+function isWordStart(characters: readonly string[], index: number): boolean {
+  return index === 0 || /[\s\-_/.]/.test(characters[index - 1]);
 }
 
 /** Title matches first, then keyword matches; within a tier, by score. */

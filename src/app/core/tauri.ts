@@ -15,6 +15,9 @@ import type { AppEvent, NotificationRecord, UpdateSnapshot } from './events';
 @Injectable({ providedIn: 'root' })
 export class TauriBridge {
   readonly available = '__TAURI_INTERNALS__' in window;
+  private latestRuntimeStatus: RuntimeStatusSnapshot = { leaf: null, nexus: null };
+  private runtimeSignalEvents: RuntimeSignalEvent[] = [];
+  private nextRuntimeSignalEventId = 0;
 
   /** Hides the palette window without destroying it — reopening must be instant. */
   async dismissPalette(): Promise<void> {
@@ -45,6 +48,18 @@ export class TauriBridge {
   /** Commands contributed by the Rust side, merged into the registry at startup. */
   async coreCommands(): Promise<readonly CoreCommandMeta[]> {
     return (await this.invoke<CoreCommandMeta[]>('core_commands')) ?? [];
+  }
+
+  async codexThreads(): Promise<readonly CodexThread[]> {
+    return (await this.invoke<CodexThread[]>('codex_threads')) ?? [];
+  }
+
+  async codexOpenThread(threadId: string): Promise<CodexThreadDetails | null> {
+    return this.invoke<CodexThreadDetails>('codex_open_thread', { threadId });
+  }
+
+  async codexOlderMessages(threadId: string, cursor: string): Promise<CodexMessagePage | null> {
+    return this.invoke<CodexMessagePage>('codex_older_messages', { threadId, cursor });
   }
 
   /** Minimizes the current window to the taskbar/dock. */
@@ -223,6 +238,91 @@ export class TauriBridge {
 
   async githubPullRequests(): Promise<readonly GithubPullRequestSummary[]> {
     return (await this.invoke<GithubPullRequestSummary[]>('github_pull_requests')) ?? [];
+  }
+
+  async runtimeGrafanaSettings(): Promise<RuntimeGrafanaSettings> {
+    const stored = await this.getSetting<Partial<RuntimeGrafanaSettings> | null>(
+      'runtime.grafana',
+      null,
+    );
+    return {
+      grafanaUrl: typeof stored?.grafanaUrl === 'string' ? stored.grafanaUrl : '',
+      dashboardUrl: typeof stored?.dashboardUrl === 'string' ? stored.dashboardUrl : '',
+    };
+  }
+
+  async setRuntimeGrafanaSettings(settings: RuntimeGrafanaSettings): Promise<void> {
+    await this.setSetting('runtime.grafana', settings);
+  }
+
+  async runtimeGrafanaTokenConfigured(grafanaUrl: string): Promise<boolean> {
+    return (
+      (await this.invoke<boolean>('runtime_grafana_token_configured', { grafanaUrl })) ?? false
+    );
+  }
+
+  async setRuntimeGrafanaToken(token: string, grafanaUrl: string): Promise<void> {
+    await this.invoke('runtime_grafana_set_token', { token, grafanaUrl });
+  }
+
+  async clearRuntimeGrafanaToken(grafanaUrl: string): Promise<void> {
+    await this.invoke('runtime_grafana_clear_token', { grafanaUrl });
+  }
+
+  async checkRuntimeGrafana(grafanaUrl: string): Promise<RuntimeGrafanaCheck | null> {
+    return this.invoke<RuntimeGrafanaCheck>('runtime_grafana_check', { grafanaUrl });
+  }
+
+  async runtimeGrafanaDashboardPanels(
+    uid: string,
+    grafanaUrl: string,
+  ): Promise<RuntimeGrafanaPanelInventory | null> {
+    return this.invoke<RuntimeGrafanaPanelInventory>('runtime_grafana_dashboard_panels', {
+      uid,
+      grafanaUrl,
+    });
+  }
+
+  async runtimeLeafHealth(): Promise<LeafHealthObservation | null> {
+    const observation = await this.invoke<LeafHealthObservation>('runtime_leaf_health');
+    if (observation) this.latestRuntimeStatus = { ...this.latestRuntimeStatus, leaf: observation };
+    return observation;
+  }
+
+  async runtimeNexusReadiness(): Promise<NexusReadinessObservation | null> {
+    const observation = await this.invoke<NexusReadinessObservation>('runtime_nexus_readiness');
+    if (observation) this.latestRuntimeStatus = { ...this.latestRuntimeStatus, nexus: observation };
+    return observation;
+  }
+
+  runtimeStatusSnapshot(): RuntimeStatusSnapshot {
+    return this.latestRuntimeStatus;
+  }
+
+  recordRuntimeSignalEvent(
+    source: RuntimeSignalEvent['source'],
+    state: RuntimeSignalEvent['state'],
+    statusCode?: number,
+    responseHeadersMs?: number,
+  ): void {
+    const previous = [...this.runtimeSignalEvents]
+      .reverse()
+      .find((event) => event.source === source);
+    if (previous?.state === state) return;
+    this.runtimeSignalEvents.push({
+      id: ++this.nextRuntimeSignalEventId,
+      source,
+      state,
+      previousState: previous?.state ?? null,
+      observedAt: Date.now(),
+      statusCode: statusCode ?? null,
+      responseHeadersMs: responseHeadersMs ?? null,
+    });
+    this.runtimeSignalEvents = this.runtimeSignalEvents.slice(-10);
+  }
+
+  runtimeSignalEventSnapshot(): readonly RuntimeSignalEvent[] {
+    return this.runtimeSignalEvents.slice().reverse();
   }
 
   private settingsStore: LazyStore | null = null;
@@ -495,14 +595,101 @@ export type CoreCommand =
   | { readonly id: 'hide_hud' }
   | { readonly id: 'open_vault' }
   | { readonly id: 'open_github' }
+  | { readonly id: 'open_runtime' }
+  | { readonly id: 'open_agents' }
   | { readonly id: 'quit' };
+
+export interface CodexThread {
+  readonly id: string;
+  readonly title: string;
+  readonly cwd: string;
+  readonly updatedAt: number;
+}
+
+export interface CodexThreadDetails {
+  readonly thread: CodexThread;
+  readonly messages: readonly CodexMessage[];
+  readonly olderCursor: string | null;
+}
+
+export interface CodexMessagePage {
+  readonly messages: readonly CodexMessage[];
+  readonly nextCursor: string | null;
+}
+
+export interface CodexMessage {
+  readonly role: 'You' | 'Codex';
+  readonly text: string;
+}
+
+/** Non-secret Grafana connection details. The API token lives in the OS keychain. */
+export interface RuntimeGrafanaSettings {
+  readonly grafanaUrl: string;
+  readonly dashboardUrl: string;
+}
+
+export interface RuntimeGrafanaCheck {
+  readonly version: string | null;
+  readonly checkedAt: number;
+  readonly dashboards: readonly RuntimeGrafanaDashboard[];
+  readonly dashboardError: string | null;
+}
+
+export interface RuntimeGrafanaDashboard {
+  readonly uid: string;
+  readonly title: string;
+  readonly url: string;
+}
+
+export interface RuntimeGrafanaPanel {
+  readonly id: number | null;
+  readonly title: string;
+  readonly kind: string;
+  readonly datasourceType: string | null;
+  readonly datasourceUid: string | null;
+  readonly targetCount: number;
+}
+
+export interface RuntimeGrafanaPanelInventory {
+  readonly panels: readonly RuntimeGrafanaPanel[];
+  readonly truncated: boolean;
+}
+
+export interface LeafHealthObservation {
+  readonly checkedAt: number;
+  readonly serverTime: string | null;
+  readonly statusCode: number;
+  readonly responseHeadersMs: number;
+  readonly healthy: boolean;
+}
+
+export interface NexusReadinessObservation {
+  readonly checkedAt: number;
+  readonly statusCode: number;
+  readonly responseHeadersMs: number;
+  readonly ready: boolean;
+}
+
+export interface RuntimeStatusSnapshot {
+  readonly leaf: LeafHealthObservation | null;
+  readonly nexus: NexusReadinessObservation | null;
+}
+
+export interface RuntimeSignalEvent {
+  readonly id: number;
+  readonly source: 'leaf' | 'nexus';
+  readonly state: 'reachable' | 'ready' | 'not-ready' | 'stale' | 'unknown';
+  readonly previousState: RuntimeSignalEvent['state'] | null;
+  readonly observedAt: number;
+  readonly statusCode: number | null;
+  readonly responseHeadersMs: number | null;
+}
 
 /** What the palette displays for a core-contributed row. Mirrors `CoreCommandMeta`. */
 export interface CoreCommandMeta {
   readonly id: string;
   readonly title: string;
   readonly group: string;
-  readonly hint?: string;
   readonly icon?: string;
 }
 
