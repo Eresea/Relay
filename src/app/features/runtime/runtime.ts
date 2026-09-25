@@ -1099,16 +1099,16 @@ export class Runtime implements OnDestroy {
       const reason = this.leafHealthError()
         ? `Latest check failed: ${this.leafHealthError()}`
         : 'No successful refresh arrived within the freshness window.';
-      return `Last response was ${previousState} (HTTP ${observation.statusCode}) at ${this.checkedAtLabel(observation.checkedAt)} (${age}). ${reason}`;
+      return `Last response was ${previousState} (HTTP ${observation.statusCode}; headers in ${observation.responseHeadersMs} ms from Relay) at ${this.checkedAtLabel(observation.checkedAt)} (${age}). ${reason}`;
     }
     if (this.leafHealthState() === 'not-ready' && observation) {
-      return `Leaf health probe returned HTTP ${observation.statusCode} without a healthy response at ${this.checkedAtLabel(observation.checkedAt)} (${this.checkedAgeLabel(observation.checkedAt)}).`;
+      return `Leaf health probe returned HTTP ${observation.statusCode} without a healthy response; headers arrived in ${observation.responseHeadersMs} ms from Relay at ${this.checkedAtLabel(observation.checkedAt)} (${this.checkedAgeLabel(observation.checkedAt)}).`;
     }
     if (this.leafHealthState() === 'unknown') {
       return `No successful liveness response yet. ${this.leafHealthError()}`;
     }
     if (observation) {
-      return `HTTP ${observation.statusCode} · checked ${this.checkedAtLabel(observation.checkedAt)} (${this.checkedAgeLabel(observation.checkedAt)}) · liveness only; database and Nexus are not checked.`;
+      return `HTTP ${observation.statusCode} · headers in ${observation.responseHeadersMs} ms from Relay · checked ${this.checkedAtLabel(observation.checkedAt)} (${this.checkedAgeLabel(observation.checkedAt)}) · liveness only; database and Nexus are not checked.`;
     }
     return 'No liveness observation yet.';
   }
@@ -1165,7 +1165,7 @@ export class Runtime implements OnDestroy {
       const reason = this.nexusHealthError()
         ? `Latest check failed: ${this.nexusHealthError()}`
         : 'No successful refresh arrived within the freshness window.';
-      return `${result} at ${this.checkedAtLabel(observation.checkedAt)} (${this.checkedAgeLabel(observation.checkedAt)}). ${reason} The probe runs from this Relay client; it does not prove Leaf-to-Nexus connectivity.`;
+      return `${result}, headers in ${observation.responseHeadersMs} ms from Relay, at ${this.checkedAtLabel(observation.checkedAt)} (${this.checkedAgeLabel(observation.checkedAt)}). ${reason} The probe runs from this Relay client; it does not prove Leaf-to-Nexus connectivity.`;
     }
     if (this.nexusHealthState() === 'unknown') {
       return `No successful readiness response yet. ${this.nexusHealthError()}`;
@@ -1174,7 +1174,7 @@ export class Runtime implements OnDestroy {
       const readiness = observation.ready
         ? 'Nexus HTTP and PostgreSQL readiness are confirmed from this Relay client.'
         : 'This response did not confirm Nexus readiness.';
-      return `HTTP ${observation.statusCode} · checked ${this.checkedAtLabel(observation.checkedAt)} (${this.checkedAgeLabel(observation.checkedAt)}) · ${readiness} This does not prove Leaf-to-Nexus connectivity.`;
+      return `HTTP ${observation.statusCode} · headers in ${observation.responseHeadersMs} ms from Relay · checked ${this.checkedAtLabel(observation.checkedAt)} (${this.checkedAgeLabel(observation.checkedAt)}) · ${readiness} This does not prove Leaf-to-Nexus connectivity.`;
     }
     return 'No readiness observation yet.';
   }

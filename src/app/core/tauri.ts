@@ -529,12 +529,14 @@ export interface LeafHealthObservation {
   readonly checkedAt: number;
   readonly serverTime: string | null;
   readonly statusCode: number;
+  readonly responseHeadersMs: number;
   readonly healthy: boolean;
 }
 
 export interface NexusReadinessObservation {
   readonly checkedAt: number;
   readonly statusCode: number;
+  readonly responseHeadersMs: number;
   readonly ready: boolean;
 }
 

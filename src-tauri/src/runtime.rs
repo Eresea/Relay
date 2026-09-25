@@ -1,4 +1,4 @@
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use base64::Engine;
@@ -99,6 +99,7 @@ pub struct LeafHealthObservation {
     pub checked_at: u64,
     pub server_time: Option<String>,
     pub status_code: u16,
+    pub response_headers_ms: u64,
     pub healthy: bool,
 }
 
@@ -107,6 +108,7 @@ pub struct LeafHealthObservation {
 pub struct NexusReadinessObservation {
     pub checked_at: u64,
     pub status_code: u16,
+    pub response_headers_ms: u64,
     pub ready: bool,
 }
 
@@ -396,11 +398,13 @@ pub async fn runtime_leaf_health() -> Result<LeafHealthObservation> {
         .redirect(reqwest::redirect::Policy::none())
         .build()
         .map_err(|_| Error::LeafHealthRequestFailed)?;
+    let request_started = Instant::now();
     let response = client
         .get(LEAF_HEALTH_URL)
         .send()
         .await
         .map_err(|_| Error::LeafHealthRequestFailed)?;
+    let response_headers_ms = request_started.elapsed().as_millis() as u64;
     let status_code = response.status().as_u16();
     let checked_at = SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -424,6 +428,7 @@ pub async fn runtime_leaf_health() -> Result<LeafHealthObservation> {
         checked_at,
         server_time: body.map(|body| body.timestamp),
         status_code,
+        response_headers_ms,
         healthy,
     })
 }
@@ -435,11 +440,13 @@ pub async fn runtime_nexus_readiness() -> Result<NexusReadinessObservation> {
         .redirect(reqwest::redirect::Policy::none())
         .build()
         .map_err(|_| Error::NexusReadinessRequestFailed)?;
+    let request_started = Instant::now();
     let response = client
         .get(NEXUS_READINESS_URL)
         .send()
         .await
         .map_err(|_| Error::NexusReadinessRequestFailed)?;
+    let response_headers_ms = request_started.elapsed().as_millis() as u64;
     let status = response.status();
     let status_code = status.as_u16();
     let ready = if status.is_success() {
@@ -462,6 +469,7 @@ pub async fn runtime_nexus_readiness() -> Result<NexusReadinessObservation> {
             .unwrap_or_default()
             .as_millis() as u64,
         status_code,
+        response_headers_ms,
         ready,
     })
 }
