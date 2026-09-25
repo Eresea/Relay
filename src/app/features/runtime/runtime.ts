@@ -145,7 +145,10 @@ const RUNTIME_STATUS_STALE_AFTER_MS = 90_000;
           <span class="overview-updated">Latest 10</span>
         </div>
         @if (runtimeEvents().length) {
-          <ul class="dashboard-list" aria-label="Recent Leaf and Nexus probe state changes">
+          <ul
+            class="dashboard-list probe-history-list"
+            aria-label="Recent Leaf and Nexus probe state changes"
+          >
             @for (event of runtimeEvents(); track event.id) {
               <li>
                 <div class="signal-cell">
@@ -636,7 +639,6 @@ const RUNTIME_STATUS_STALE_AFTER_MS = 90_000;
     }
 
     .config-header p,
-    .config-footer p,
     .field-hint {
       margin-block-start: var(--space-2);
       color: var(--text-muted);
@@ -706,10 +708,6 @@ const RUNTIME_STATUS_STALE_AFTER_MS = 90_000;
       border-block-start: 1px solid var(--border-subtle);
     }
 
-    .config-footer p {
-      margin-block-start: 0;
-    }
-
     .connection-result {
       margin-block-start: var(--space-5);
       padding: var(--space-5);
@@ -751,6 +749,10 @@ const RUNTIME_STATUS_STALE_AFTER_MS = 90_000;
       margin: var(--space-4) 0 0;
       padding: 0;
       list-style: none;
+    }
+
+    .probe-history-list {
+      grid-template-columns: minmax(0, 1fr);
     }
 
     .dashboard-list li {
