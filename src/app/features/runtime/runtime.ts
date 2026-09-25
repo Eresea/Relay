@@ -54,7 +54,7 @@ const RUNTIME_STATUS_STALE_AFTER_MS = 90_000;
         <div class="overview-heading">
           <div>
             <h2 id="overview-title">Leaf · Production</h2>
-            <p>Direct production probes</p>
+            <p>Direct production probes · response headers measured from Relay</p>
           </div>
           <span class="overview-updated">{{ probeSummary() }}</span>
         </div>
@@ -84,7 +84,7 @@ const RUNTIME_STATUS_STALE_AFTER_MS = 90_000;
                       [class.stale]="leafHealthState() === 'stale'"
                       [style.color]="leafHealthState() === 'not-ready' ? 'var(--danger)' : null"
                     >
-                      {{ leafHealthLabel() }} · HTTP {{ leafHealth()?.statusCode ?? '—' }}
+                      {{ leafHealthLabel() }} · {{ probeEvidence(leafHealth()) }}
                     </span>
                     <p role="status">{{ leafHealthDetail() }}</p>
                     <button
@@ -111,11 +111,9 @@ const RUNTIME_STATUS_STALE_AFTER_MS = 90_000;
                       class="state"
                       [class.operational]="nexusHealthState() === 'ready'"
                       [class.stale]="nexusHealthState() === 'stale'"
-                      [style.color]="
-                        nexusHealthState() === 'not-ready' ? 'var(--danger-ink)' : null
-                      "
+                      [style.color]="nexusHealthState() === 'not-ready' ? 'var(--danger)' : null"
                     >
-                      {{ nexusHealthLabel() }} · HTTP {{ nexusHealth()?.statusCode ?? '—' }}
+                      {{ nexusHealthLabel() }} · {{ probeEvidence(nexusHealth()) }}
                     </span>
                     <p role="status">{{ nexusHealthDetail() }}</p>
                     <button
@@ -1099,16 +1097,16 @@ export class Runtime implements OnDestroy {
       const reason = this.leafHealthError()
         ? `Latest check failed: ${this.leafHealthError()}`
         : 'No successful refresh arrived within the freshness window.';
-      return `Last response was ${previousState} (HTTP ${observation.statusCode}; headers in ${observation.responseHeadersMs} ms from Relay) at ${this.checkedAtLabel(observation.checkedAt)} (${age}). ${reason}`;
+      return `Last response was ${previousState} at ${this.checkedAtLabel(observation.checkedAt)} (${age}). ${reason}`;
     }
     if (this.leafHealthState() === 'not-ready' && observation) {
-      return `Leaf health probe returned HTTP ${observation.statusCode} without a healthy response; headers arrived in ${observation.responseHeadersMs} ms from Relay at ${this.checkedAtLabel(observation.checkedAt)} (${this.checkedAgeLabel(observation.checkedAt)}).`;
+      return `Leaf health probe did not confirm a healthy response at ${this.checkedAtLabel(observation.checkedAt)} (${this.checkedAgeLabel(observation.checkedAt)}).`;
     }
     if (this.leafHealthState() === 'unknown') {
       return `No successful liveness response yet. ${this.leafHealthError()}`;
     }
     if (observation) {
-      return `HTTP ${observation.statusCode} · headers in ${observation.responseHeadersMs} ms from Relay · checked ${this.checkedAtLabel(observation.checkedAt)} (${this.checkedAgeLabel(observation.checkedAt)}) · liveness only; database and Nexus are not checked.`;
+      return `Checked ${this.checkedAtLabel(observation.checkedAt)} (${this.checkedAgeLabel(observation.checkedAt)}) · liveness only; database and Nexus are not checked.`;
     }
     return 'No liveness observation yet.';
   }
@@ -1150,6 +1148,14 @@ export class Runtime implements OnDestroy {
       .join(' · ');
   }
 
+  protected probeEvidence(
+    observation: LeafHealthObservation | NexusReadinessObservation | null,
+  ): string {
+    return observation
+      ? `HTTP ${observation.statusCode} · ${observation.responseHeadersMs} ms`
+      : 'No response';
+  }
+
   protected nexusHealthDetail(): string {
     const observation = this.nexusHealth();
     if (this.nexusHealthState() === 'unavailable') {
@@ -1160,12 +1166,12 @@ export class Runtime implements OnDestroy {
     }
     if (this.nexusHealthState() === 'stale' && observation) {
       const result = observation.ready
-        ? `Last probe confirmed readiness (HTTP ${observation.statusCode})`
-        : `Last probe did not confirm readiness (HTTP ${observation.statusCode})`;
+        ? 'Last probe confirmed readiness'
+        : 'Last probe did not confirm readiness';
       const reason = this.nexusHealthError()
         ? `Latest check failed: ${this.nexusHealthError()}`
         : 'No successful refresh arrived within the freshness window.';
-      return `${result}, headers in ${observation.responseHeadersMs} ms from Relay, at ${this.checkedAtLabel(observation.checkedAt)} (${this.checkedAgeLabel(observation.checkedAt)}). ${reason} The probe runs from this Relay client; it does not prove Leaf-to-Nexus connectivity.`;
+      return `${result} at ${this.checkedAtLabel(observation.checkedAt)} (${this.checkedAgeLabel(observation.checkedAt)}). ${reason} The probe runs from this Relay client; it does not prove Leaf-to-Nexus connectivity.`;
     }
     if (this.nexusHealthState() === 'unknown') {
       return `No successful readiness response yet. ${this.nexusHealthError()}`;
@@ -1174,7 +1180,7 @@ export class Runtime implements OnDestroy {
       const readiness = observation.ready
         ? 'Nexus HTTP and PostgreSQL readiness are confirmed from this Relay client.'
         : 'This response did not confirm Nexus readiness.';
-      return `HTTP ${observation.statusCode} · headers in ${observation.responseHeadersMs} ms from Relay · checked ${this.checkedAtLabel(observation.checkedAt)} (${this.checkedAgeLabel(observation.checkedAt)}) · ${readiness} This does not prove Leaf-to-Nexus connectivity.`;
+      return `Checked ${this.checkedAtLabel(observation.checkedAt)} (${this.checkedAgeLabel(observation.checkedAt)}) · ${readiness} This does not prove Leaf-to-Nexus connectivity.`;
     }
     return 'No readiness observation yet.';
   }

@@ -55,7 +55,8 @@ The overview should show:
 - Until a useful service metric is mapped, show the probe's HTTP response code
   as raw evidence; do not present it as a performance or availability metric.
 - Show the probe's response-header time in milliseconds from Relay, and label
-  it as client-side timing rather than application request latency.
+  it in the status cell as client-side timing rather than application request
+  latency.
 - A standalone Nexus readiness signal with its probe location. Label it as a
   Leaf dependency only when a Leaf-facing signal exists.
 - A deep link to the relevant Grafana dashboard or panel.
