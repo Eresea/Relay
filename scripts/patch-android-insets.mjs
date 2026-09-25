@@ -19,7 +19,7 @@ if (!alreadyPatched) {
   activity = activity.replace(
     `    enableEdgeToEdge()
     super.onCreate(savedInstanceState)`,
-  `    enableEdgeToEdge()
+    `    enableEdgeToEdge()
     super.onCreate(savedInstanceState)
 
     val content = findViewById<View>(android.R.id.content)
@@ -40,18 +40,22 @@ if (!alreadyPatched) {
   );
 
   if (!activity.includes('WindowInsetsCompat')) {
-    throw new Error(`Could not patch Android activity at ${path}; its generated structure changed.`);
+    throw new Error(
+      `Could not patch Android activity at ${path}; its generated structure changed.`,
+    );
   }
 
   if (!activity.includes('setOnApplyWindowInsetsListener')) {
-    throw new Error(`Could not add Android window insets handling at ${path}; its generated structure changed.`);
+    throw new Error(
+      `Could not add Android window insets handling at ${path}; its generated structure changed.`,
+    );
   }
 }
 
 const imports = new Set();
 activity = activity
   .split('\n')
-  .filter((line) => !line.startsWith('import ') || !imports.has(line) && imports.add(line))
+  .filter((line) => !line.startsWith('import ') || (!imports.has(line) && imports.add(line)))
   .join('\n');
 
 writeFileSync(path, activity);
