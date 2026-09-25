@@ -11,6 +11,7 @@
 //! recurring job.
 
 pub mod client;
+pub mod events;
 pub mod nexus_store;
 pub mod oauth;
 pub mod poll;
