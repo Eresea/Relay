@@ -11,6 +11,7 @@ import {
   type GithubStatus,
   type NotificationSettings,
   type NotificationTypeRule,
+  type NexusAuthStatus,
   type PrEventKind,
 } from '@core/tauri';
 import { Icon } from '@shared/icon';
@@ -107,6 +108,31 @@ function connectorErrorMessage(error: unknown): string {
   imports: [FormsModule, Icon],
   template: `
     <section class="wrap">
+      <section class="group">
+        <div class="row-header">
+          <h2 class="u-caption">Nexus account</h2>
+          @if (nexusAuth().connected) {
+            <button type="button" class="link" [disabled]="nexusBusy()" (click)="logoutNexus()">
+              Sign out
+            </button>
+          }
+        </div>
+        <div class="row">
+          @if (nexusAuth().connected) {
+            <p class="label">Connected as <strong>{{ nexusAuth().email || nexusAuth().displayName }}</strong></p>
+          } @else {
+            <div>
+              <p class="label">Connect Relay to Nexus</p>
+              <p class="hint">Enables shared connector credentials and durable event delivery.</p>
+            </div>
+            <button type="button" class="primary" [disabled]="nexusBusy()" (click)="connectNexus()">
+              {{ nexusBusy() ? 'Waiting for sign-in…' : 'Connect Nexus' }}
+            </button>
+          }
+        </div>
+        @if (nexusError()) { <p class="error">{{ nexusError() }}</p> }
+      </section>
+
       @switch (status()) {
         @case ('disconnected') {
           <div class="connect">
@@ -589,6 +615,9 @@ export class Github {
   protected readonly busy = signal(false);
   protected readonly error = signal('');
   protected readonly username = signal<string | null>(null);
+  protected readonly nexusAuth = signal<NexusAuthStatus>({ connected: false, userId: null, email: null, displayName: null });
+  protected readonly nexusBusy = signal(false);
+  protected readonly nexusError = signal('');
   protected readonly deviceAuth = signal<DeviceAuthorization | null>(null);
   /** The most recent "blocked" detail reported for the in-flight connect job, if any — the real
    * reason a connection attempt failed, shown in place of a generic message when it is available. */
@@ -617,6 +646,13 @@ export class Github {
 
   constructor() {
     void this.refreshStatus();
+    void this.refreshNexusAuth();
+    void this.tauri.onNexusAuth((status) => {
+      this.nexusAuth.set(status);
+      this.nexusBusy.set(false);
+      if (!status.connected) this.nexusError.set('Nexus sign-in did not complete. Try again.');
+      else this.nexusError.set('');
+    }).then((unlisten) => this.destroyRef.onDestroy(unlisten));
 
     console.log('[github] component constructed, subscribing to relay://event');
     void this.tauri
@@ -651,6 +687,34 @@ export class Github {
       this.stopConnectFallbackPoll();
       if (this.copyCodeTimeout) clearTimeout(this.copyCodeTimeout);
     });
+  }
+
+  protected async connectNexus(): Promise<void> {
+    this.nexusBusy.set(true);
+    this.nexusError.set('');
+    try {
+      await this.tauri.nexusAuthStart();
+    } catch (error) {
+      this.nexusBusy.set(false);
+      this.nexusError.set(connectorErrorMessage(error));
+    }
+  }
+
+  protected async logoutNexus(): Promise<void> {
+    this.nexusBusy.set(true);
+    try {
+      await this.tauri.nexusAuthLogout();
+      await this.refreshNexusAuth();
+    } catch (error) {
+      this.nexusError.set(connectorErrorMessage(error));
+    } finally {
+      this.nexusBusy.set(false);
+    }
+  }
+
+  private async refreshNexusAuth(): Promise<void> {
+    try { this.nexusAuth.set(await this.tauri.nexusAuthStatus()); }
+    catch (error) { this.nexusError.set(connectorErrorMessage(error)); }
   }
 
   private startConnectFallbackPoll(jobId: string): void {

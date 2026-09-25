@@ -29,6 +29,7 @@ use crate::gmail::{self, GmailSettings, GmailState, GmailStatus, HttpGoogleApi, 
 use crate::jobs::{JobId, JobRegistry};
 #[cfg(mobile)]
 use crate::mobile_updates;
+use crate::nexus_auth;
 use crate::notifications::NotificationRecord;
 use crate::overlay;
 #[cfg(desktop)]
@@ -253,6 +254,21 @@ pub fn github_connect_start(
 #[tauri::command]
 pub fn github_disconnect(app: AppHandle, jobs: tauri::State<JobRegistry>) -> Result<()> {
     github::disconnect(&app, &jobs)
+}
+
+#[tauri::command]
+pub fn nexus_auth_status() -> Result<nexus_auth::NexusAuthStatus> {
+    nexus_auth::status()
+}
+
+#[tauri::command]
+pub fn nexus_auth_start(app: AppHandle) -> Result<()> {
+    nexus_auth::start(&app)
+}
+
+#[tauri::command]
+pub fn nexus_auth_logout() -> Result<()> {
+    nexus_auth::logout()
 }
 
 /// Whether Gmail is connected, mid-handshake, or neither.

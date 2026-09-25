@@ -391,6 +391,29 @@ export class TauriBridge {
     await this.invoke('github_disconnect');
   }
 
+  async nexusAuthStatus(): Promise<NexusAuthStatus> {
+    return (await this.invoke<NexusAuthStatus>('nexus_auth_status')) ?? {
+      connected: false,
+      userId: null,
+      email: null,
+      displayName: null,
+    };
+  }
+
+  async nexusAuthStart(): Promise<void> {
+    await this.invoke('nexus_auth_start');
+  }
+
+  async nexusAuthLogout(): Promise<void> {
+    await this.invoke('nexus_auth_logout');
+  }
+
+  async onNexusAuth(handler: (status: NexusAuthStatus) => void): Promise<() => void> {
+    if (!this.available) return () => {};
+    const { listen } = await import('@tauri-apps/api/event');
+    return listen<NexusAuthStatus>('nexus://auth', (message) => handler(message.payload));
+  }
+
   /**
    * Reads the connector's settings from `settings.json`. Merged field by
    * field against the defaults rather than returned as-is: `getSetting`
@@ -542,6 +565,13 @@ export interface PasswordOptions {
 export interface GithubStatus {
   readonly connected: boolean;
   readonly username: string | null;
+}
+
+export interface NexusAuthStatus {
+  readonly connected: boolean;
+  readonly userId: string | null;
+  readonly email: string | null;
+  readonly displayName: string | null;
 }
 
 /** Mirrors `github::oauth::DeviceAuthorization`. */
