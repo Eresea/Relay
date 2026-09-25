@@ -77,8 +77,8 @@
   @if (running()) {
     <span>Working…</span><span>Close</span><rl-kbd [keys]="['Esc']" />
   } @else if (runError()) {
-    <span>Could not complete that action. Try again.</span><span>Close</span
-    ><rl-kbd [keys]="['Esc']" />
+    <span>Could not complete that action.</span><span>Retry</span><rl-kbd [keys]="['Enter']" />
+    <span>Close</span><rl-kbd [keys]="['Esc']" />
   } @else {
     <span>Navigate</span><rl-kbd [keys]="['↑', '↓']" /> <span>Complete</span
     ><rl-kbd [keys]="['Tab']" /> <span>Open</span><rl-kbd [keys]="['Enter']" /> <span>Close</span

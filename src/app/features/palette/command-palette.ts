@@ -180,7 +180,7 @@ export class CommandPalette {
       await command.run();
     } catch {
       this.running.set(false);
-      if (focusGeneration === this.focusGeneration) this.runError.set(true);
+      if (!this.paletteBlurred) this.runError.set(true);
       return;
     }
     this.running.set(false);
@@ -195,7 +195,10 @@ export class CommandPalette {
   }
 
   private async dismiss(): Promise<void> {
-    if (this.running()) this.focusGeneration++;
+    if (this.running()) {
+      this.focusGeneration++;
+      this.paletteBlurred = true;
+    }
     this.query.set('');
     this.activeIndex.set(0);
     this.runError.set(false);
