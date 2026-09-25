@@ -193,6 +193,18 @@ export class TauriBridge {
     return result;
   }
 
+  async codexListThreads(cursor: string | null = null): Promise<CodexThreadPage> {
+    const result = await this.invoke<CodexThreadPage>('codex_list_threads', { cursor });
+    if (!result) throw new Error('Codex returned no thread list.');
+    return result;
+  }
+
+  async codexReadThread(threadId: string): Promise<CodexThread> {
+    const result = await this.invoke<CodexThread>('codex_read_thread', { threadId });
+    if (!result) throw new Error('Codex returned no thread.');
+    return result;
+  }
+
   async githubRepositories(): Promise<readonly GithubRepositorySummary[]> {
     return (await this.invoke<GithubRepositorySummary[]>('github_repositories')) ?? [];
   }
@@ -496,6 +508,44 @@ export interface WorkspaceSummary {
 export interface CodexRun {
   readonly threadId: string;
   readonly response: string;
+}
+
+export interface CodexThreadSummary {
+  readonly id: string;
+  readonly name: string | null;
+  readonly preview: string;
+  readonly cwd: string;
+  readonly createdAt: number;
+  readonly updatedAt: number;
+  readonly recencyAt: number | null;
+  readonly model: string | null;
+}
+
+export interface CodexThreadPage {
+  readonly threads: readonly CodexThreadSummary[];
+  readonly nextCursor: string | null;
+}
+
+export interface CodexThread {
+  readonly id: string;
+  readonly name: string | null;
+  readonly preview: string;
+  readonly cwd: string;
+  readonly createdAt: number;
+  readonly updatedAt: number;
+  readonly turns: readonly CodexTurn[];
+}
+
+export interface CodexTurn {
+  readonly id: string;
+  readonly status: string;
+  readonly items: readonly CodexThreadItem[];
+}
+
+export interface CodexThreadItem {
+  readonly id?: string;
+  readonly type: string;
+  readonly [field: string]: unknown;
 }
 
 export type ProjectActionRequest =

@@ -19,7 +19,8 @@ Relay uses the lower-level App Server because it is a Rust/Tauri app and does no
 
 ## What Relay does
 
-- The desktop Codex page lists workspaces already discovered by Relay, starts a new thread or resumes the last/manual thread ID, sends a prompt, displays the response, and offers an “Open in Codex” handoff.
+- The desktop Codex page lists local threads newest by recent activity, pages through older threads, opens a thread with its full turn and item history, and can hand it off to Codex desktop. New work can start a thread or resume the selected thread.
+- Thread history comes from App Server `thread/list` and `thread/read`; when the server returns paginated history, Relay reads every turn page in full before displaying it. User and agent Markdown is sanitized before rendering; tool calls, command output, file changes, and other stored items remain available in expandable detail blocks.
 - Relay launches a local `codex app-server --stdio` process per send, so Codex CLI must be installed and signed in on the same machine.
 - Turns can read and write within the selected workspace plus platform defaults, with network access disabled. Relay sets `approvalPolicy: "never"`; pressing Send therefore authorizes Codex to run commands and edit files inside that workspace without further approval. Requests for extra access are declined; the UI states this before the send action.
 - The App Server thread ID can be passed to the documented `codex://threads/<thread-id>` desktop deep link. Whether an App Server-created thread always opens with shared history in the desktop UI still needs a real end-to-end check.

@@ -1,4 +1,8 @@
-use std::{collections::VecDeque, path::Path, time::Duration};
+use std::{
+    collections::VecDeque,
+    path::{Path, PathBuf},
+    time::Duration,
+};
 
 use serde::Serialize;
 use serde_json::{json, Value};
@@ -12,6 +16,7 @@ use crate::error::{Error, Result};
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(20);
 const TURN_TIMEOUT: Duration = Duration::from_secs(15 * 60);
 const MAX_PROMPT_LENGTH: usize = 64_000;
+const THREAD_PAGE_SIZE: u64 = 50;
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -236,6 +241,124 @@ impl CodexClient {
 
         Ok(response)
     }
+
+    async fn read_thread(&mut self, thread_id: &str) -> Result<Value> {
+        if thread_id.trim().is_empty() {
+            return Err(protocol_error("Thread ID cannot be empty"));
+        }
+        let response = self
+            .request(
+                "thread/read",
+                json!({ "threadId": thread_id, "includeTurns": true }),
+            )
+            .await;
+        let mut thread = match response {
+            Ok(response) => response
+                .get("thread")
+                .cloned()
+                .ok_or_else(|| protocol_error("Codex app-server returned no thread"))?,
+            Err(_) => self
+                .request("thread/read", json!({ "threadId": thread_id }))
+                .await?
+                .get("thread")
+                .cloned()
+                .ok_or_else(|| protocol_error("Codex app-server returned no thread"))?,
+        };
+
+        let needs_full_history =
+            thread
+                .get("turns")
+                .and_then(Value::as_array)
+                .is_none_or(|turns| {
+                    thread.get("historyMode").and_then(Value::as_str) == Some("paginated")
+                        || turns.iter().any(|turn| {
+                            turn.get("itemsView")
+                                .and_then(Value::as_str)
+                                .is_some_and(|view| view != "full")
+                        })
+                });
+        if needs_full_history {
+            let mut turns = Vec::new();
+            let mut cursor: Option<String> = None;
+            loop {
+                let mut params = json!({
+                    "threadId": thread_id,
+                    "limit": THREAD_PAGE_SIZE,
+                    "sortDirection": "desc",
+                    "itemsView": "full"
+                });
+                if let Some(cursor) = cursor.as_ref() {
+                    params["cursor"] = json!(cursor);
+                }
+                let page = self.request("thread/turns/list", params).await?;
+                let page_turns = page.get("data").and_then(Value::as_array).ok_or_else(|| {
+                    protocol_error("Codex app-server returned invalid thread turns")
+                })?;
+                turns.extend(page_turns.iter().cloned());
+                cursor = page
+                    .get("nextCursor")
+                    .and_then(Value::as_str)
+                    .map(str::to_owned);
+                if cursor.is_none() {
+                    break;
+                }
+            }
+            turns.reverse();
+            thread["turns"] = Value::Array(turns);
+        }
+
+        Ok(thread)
+    }
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CodexThreadPage {
+    pub threads: Vec<Value>,
+    pub next_cursor: Option<String>,
+}
+
+pub async fn list_threads(cursor: Option<String>) -> Result<CodexThreadPage> {
+    let cwd = appserver_working_directory()?;
+    let mut client = CodexClient::start(&cwd).await?;
+    let mut params = json!({
+        "limit": THREAD_PAGE_SIZE,
+        "sortKey": "recency_at",
+        "sortDirection": "desc",
+        "sourceKinds": ["cli", "vscode", "appServer", "exec"]
+    });
+    if let Some(cursor) = cursor.filter(|cursor| !cursor.is_empty()) {
+        params["cursor"] = json!(cursor);
+    }
+    let page = client.request("thread/list", params).await?;
+    let threads = page
+        .get("data")
+        .and_then(Value::as_array)
+        .cloned()
+        .ok_or_else(|| protocol_error("Codex app-server returned an invalid thread list"))?;
+    Ok(CodexThreadPage {
+        threads,
+        next_cursor: page
+            .get("nextCursor")
+            .and_then(Value::as_str)
+            .map(str::to_owned),
+    })
+}
+
+pub async fn read_thread(thread_id: String) -> Result<Value> {
+    let cwd = appserver_working_directory()?;
+    CodexClient::start(&cwd)
+        .await?
+        .read_thread(&thread_id)
+        .await
+}
+
+fn appserver_working_directory() -> Result<PathBuf> {
+    let cwd = std::env::var_os("USERPROFILE")
+        .or_else(|| std::env::var_os("HOME"))
+        .map(PathBuf::from)
+        .unwrap_or(std::env::current_dir()?);
+    Ok(std::fs::canonicalize(cwd)?)
 }
 
 pub async fn send(

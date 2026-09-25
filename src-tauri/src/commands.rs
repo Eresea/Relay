@@ -367,6 +367,18 @@ pub async fn codex_send(
     crate::codex::send(prompt, working_directory, thread_id).await
 }
 
+#[cfg(desktop)]
+#[tauri::command]
+pub async fn codex_list_threads(cursor: Option<String>) -> Result<crate::codex::CodexThreadPage> {
+    crate::codex::list_threads(cursor).await
+}
+
+#[cfg(desktop)]
+#[tauri::command]
+pub async fn codex_read_thread(thread_id: String) -> Result<serde_json::Value> {
+    crate::codex::read_thread(thread_id).await
+}
+
 /// Opens a local Git clone in the platform terminal.
 #[tauri::command]
 pub fn open_terminal(path: String) -> Result<()> {
