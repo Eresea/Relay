@@ -111,7 +111,9 @@ only; they are not Leaf health signals. Leaf already exposes an unauthenticated
 `GET /api/version/health`; Relay checks this every 30 seconds while the Runtime
 view is mounted and visible. A healthy 2xx response confirms endpoint liveness
 only, not database readiness, request performance, or Leaf-to-Nexus
-connectivity. Relay also checks Nexus's public `/readyz` endpoint every 30
+connectivity. The inspected Leaf API controllers do not expose a signal for
+Leaf-to-Nexus connectivity, so keep the Nexus row as a standalone Relay-side
+probe. Relay also checks Nexus's public `/readyz` endpoint every 30
 seconds; a ready response confirms Nexus API and PostgreSQL readiness from the
 Relay client, not from Leaf's network path. A non-success HTTP response from
 either probe is a current Not ready observation. A transport failure or invalid
