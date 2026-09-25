@@ -9,6 +9,7 @@ import {
   type DeviceAuthorization,
   type GithubConnectorSettings,
   type GithubStatus,
+  type GithubRepositorySummary,
   type NotificationSettings,
   type NotificationTypeRule,
   type NexusAuthStatus,
@@ -224,6 +225,56 @@ function connectorErrorMessage(error: unknown): string {
           </section>
 
           <section class="group">
+            <h2 class="u-caption">Nexus webhooks</h2>
+            <p class="hint">
+              Select repositories where you can manage hooks. Nexus stores pull request deliveries
+              while Relay is offline; Relay applies your notification rules when it reconnects.
+              GitHub will ask for repository hook permission during sign-in.
+            </p>
+            @if (!nexusAuth().connected) {
+              <p class="hint">Connect your Nexus account to enable webhook delivery.</p>
+            } @else if (webhookRepositories().length === 0) {
+              <p class="hint">No repositories are available from GitHub.</p>
+            } @else {
+              <div class="webhook-repositories">
+                @for (repo of webhookRepositories(); track repo.fullName) {
+                  <label class="webhook-repository">
+                    <input
+                      type="checkbox"
+                      [checked]="selectedWebhookRepos().includes(repo.fullName)"
+                      (change)="toggleWebhookRepo(repo.fullName)"
+                    />
+                    <span>{{ repo.fullName }}</span>
+                  </label>
+                }
+              </div>
+              <button
+                type="button"
+                class="primary"
+                [disabled]="webhookBusy() || selectedWebhookRepos().length === 0"
+                (click)="registerWebhooks()"
+              >
+                {{ webhookBusy() ? 'Registering…' : 'Enable webhooks for selected repos' }}
+              </button>
+            }
+            @for (repository of registeredWebhookRepos(); track repository) {
+              <div class="entry">
+                <code>{{ repository }}</code>
+                <button
+                  type="button"
+                  class="link"
+                  [disabled]="webhookBusy()"
+                  (click)="unregisterWebhook(repository)"
+                >
+                  Remove webhook
+                </button>
+              </div>
+            }
+            @if (webhookError()) { <p class="error">{{ webhookError() }}</p> }
+            @if (webhookSuccess()) { <p class="hint">{{ webhookSuccess() }}</p> }
+          </section>
+
+          <section class="group">
             <h2 class="u-caption">Polling</h2>
             <div class="row">
               <div>
@@ -382,6 +433,20 @@ function connectorErrorMessage(error: unknown): string {
       display: flex;
       align-items: center;
       gap: var(--space-3);
+    }
+
+    .webhook-repositories {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: var(--space-2);
+      margin-block: var(--space-4);
+    }
+
+    .webhook-repository {
+      display: flex;
+      align-items: center;
+      gap: var(--space-2);
+      min-block-size: 40px;
     }
 
     .status-dot {
@@ -624,6 +689,12 @@ export class Github {
   protected readonly error = signal('');
   protected readonly username = signal<string | null>(null);
   protected readonly githubConnection = signal<GithubStatus | null>(null);
+  protected readonly webhookRepositories = signal<readonly GithubRepositorySummary[]>([]);
+  protected readonly registeredWebhookRepos = signal<readonly string[]>([]);
+  protected readonly selectedWebhookRepos = signal<string[]>([]);
+  protected readonly webhookBusy = signal(false);
+  protected readonly webhookError = signal('');
+  protected readonly webhookSuccess = signal('');
   protected readonly nexusAuth = signal<NexusAuthStatus>({ connected: false, userId: null, email: null, displayName: null });
   protected readonly nexusBusy = signal(false);
   protected readonly nexusError = signal('');
@@ -800,7 +871,13 @@ export class Github {
     if (result.connected) {
       this.username.set(result.username);
       this.status.set('connected');
+      try {
+        this.webhookRepositories.set(await this.tauri.githubRepositories());
+      } catch {
+        this.webhookRepositories.set([]);
+      }
     } else {
+      this.webhookRepositories.set([]);
       this.status.set('disconnected');
     }
   }
@@ -811,6 +888,11 @@ export class Github {
     this.pollIntervalSecs.set(settings.pollIntervalSecs);
     this.notifications.set(toEditableNotifications(settings.notifications));
     this.muted.set([...settings.muted]);
+    try {
+      this.registeredWebhookRepos.set(await this.tauri.githubWebhookRepositories());
+    } catch {
+      this.registeredWebhookRepos.set([]);
+    }
   }
 
   private buildSettings(): GithubConnectorSettings {
@@ -824,6 +906,49 @@ export class Github {
 
   protected save(): void {
     void this.tauri.setGithubSettings(this.buildSettings());
+  }
+
+  protected toggleWebhookRepo(repository: string): void {
+    this.selectedWebhookRepos.update((selected) =>
+      selected.includes(repository)
+        ? selected.filter((value) => value !== repository)
+        : [...selected, repository],
+    );
+  }
+
+  protected async registerWebhooks(): Promise<void> {
+    this.webhookBusy.set(true);
+    this.webhookError.set('');
+    this.webhookSuccess.set('');
+    try {
+      const registered = await this.tauri.githubRegisterWebhooks(this.selectedWebhookRepos());
+      this.registeredWebhookRepos.set(await this.tauri.githubWebhookRepositories());
+      this.webhookSuccess.set(
+        registered.length
+          ? `Enabled: ${registered.join(', ')}`
+          : 'Selected repositories already have webhooks enabled.',
+      );
+      this.selectedWebhookRepos.set([]);
+    } catch (error) {
+      this.webhookError.set(connectorErrorMessage(error));
+    } finally {
+      this.webhookBusy.set(false);
+    }
+  }
+
+  protected async unregisterWebhook(repository: string): Promise<void> {
+    this.webhookBusy.set(true);
+    this.webhookError.set('');
+    this.webhookSuccess.set('');
+    try {
+      await this.tauri.githubUnregisterWebhook(repository);
+      this.registeredWebhookRepos.update((repos) => repos.filter((repo) => repo !== repository));
+      this.webhookSuccess.set(`Removed webhook for ${repository}.`);
+    } catch (error) {
+      this.webhookError.set(connectorErrorMessage(error));
+    } finally {
+      this.webhookBusy.set(false);
+    }
   }
 
   protected async connect(): Promise<void> {

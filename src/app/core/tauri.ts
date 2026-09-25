@@ -183,6 +183,18 @@ export class TauriBridge {
     return (await this.invoke<GithubRepositorySummary[]>('github_repositories')) ?? [];
   }
 
+  async githubRegisterWebhooks(repositories: readonly string[]): Promise<readonly string[]> {
+    return (await this.invoke<string[]>('github_register_webhooks', { repositories })) ?? [];
+  }
+
+  async githubWebhookRepositories(): Promise<readonly string[]> {
+    return (await this.invoke<string[]>('github_webhook_repositories')) ?? [];
+  }
+
+  async githubUnregisterWebhook(repository: string): Promise<void> {
+    await this.invoke('github_unregister_webhook', { repository });
+  }
+
   async githubPullRequests(): Promise<readonly GithubPullRequestSummary[]> {
     return (await this.invoke<GithubPullRequestSummary[]>('github_pull_requests')) ?? [];
   }

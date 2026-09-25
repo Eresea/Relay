@@ -234,6 +234,24 @@ pub async fn github_repositories(
 }
 
 #[tauri::command]
+pub async fn github_register_webhooks(
+    app: AppHandle,
+    repositories: Vec<String>,
+) -> Result<Vec<String>> {
+    github::events::register(&app, repositories).await
+}
+
+#[tauri::command]
+pub fn github_webhook_repositories(app: AppHandle) -> Result<Vec<String>> {
+    github::events::registered_repositories(&app)
+}
+
+#[tauri::command]
+pub async fn github_unregister_webhook(app: AppHandle, repository: String) -> Result<()> {
+    github::events::unregister(&app, &repository).await
+}
+
+#[tauri::command]
 pub fn github_pull_requests(app: AppHandle) -> Result<Vec<PullRequestSnapshot>> {
     github::pull_requests(&app)
 }
