@@ -20,7 +20,7 @@ use serde::{Deserialize, Serialize};
 /// `repo` is the narrowest scope that can see private pull requests at all.
 /// Users who only care about public repos can still connect; the connector
 /// never writes anything back to GitHub with this token.
-pub const SCOPE: &str = "repo admin:repo_hook";
+pub const SCOPE: &str = "repo";
 
 const DEFAULT_POLL_INTERVAL_SECS: u64 = 5;
 

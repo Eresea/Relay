@@ -229,7 +229,8 @@ function connectorErrorMessage(error: unknown): string {
             <p class="hint">
               Select repositories where you can manage hooks. Nexus stores pull request deliveries
               while Relay is offline; Relay applies your notification rules when it reconnects.
-              GitHub will ask for repository hook permission during sign-in.
+              Your GitHub account must have admin access to each repository. The existing repo
+              scope can manage hooks and also grants broad repository access.
             </p>
             @if (!nexusAuth().connected) {
               <p class="hint">Connect your Nexus account to enable webhook delivery.</p>

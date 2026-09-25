@@ -15,9 +15,20 @@ Nexus login enables these connected features. Relay's local features still start
 
 ## What exists
 
-- Relay's GitHub Device Flow, token refresh, API client, PR diff/rules, notification pipeline, and keychain token are in `src-tauri/src/github`. Relay has a Nexus sync HTTP client that accepts an access token, but no Nexus account sign-in/session UI yet.
-- Nexus has browser authorization code + PKCE for the `relay` client (`relay://auth/callback`), whose configured scopes are currently `openid profile email`. Nexus vault creation and grant management require `credentials:manage`, currently assigned to `roots-web`. Granted clients can read a credential and can replace its secret only with an explicit replace grant.
-- Nexus event endpoints are bound to `(user_id, client_id)`. Existing ingress requires its own `X-Nexus-*` HMAC, stores JSON in a shared client inbox, and erases the payload on ack. Its user WebSocket does not currently receive an inbox wakeup.
+- Relay's GitHub Device Flow, token refresh, API client, PR diff/rules, notification pipeline, and keychain token are in `src-tauri/src/github`. Relay has Nexus account sign-in and a generic vault handoff; Relay deposits the GitHub token bundle with create-only permission and uses Nexus after the explicit read grant is approved.
+- Nexus has browser authorization code + PKCE for the `relay` client (`relay://auth/callback`). Relay requests `openid profile email credentials:create`; Nexus vault creation and grant management require `credentials:manage`, currently assigned to `roots-web`. Granted clients can read a credential and can replace its secret only with an explicit replace grant.
+- Nexus event endpoints are bound to `(user_id, client_id)`. Ingress supports both the existing `X-Nexus-*` HMAC and generic raw-body HMAC; accepted JSON is stored in the shared client inbox and erased on ack. A new delivery publishes a payload-free `events.available` wakeup to the authenticated OAuth client's user WebSocket.
+
+## Implemented flow
+
+- Relay lists GitHub repositories and registers hooks only after the user explicitly selects them. It creates one generic Nexus endpoint per repo, sends the one-time endpoint secret directly to GitHub, and stores only endpoint and hook IDs in Relay settings. Disconnect removes the GitHub hooks and revokes their Nexus endpoints.
+- Relay claims inbox events on startup and every 20 seconds, and drains immediately after an authenticated WebSocket wakeup. Delivery IDs and derived notifications are committed atomically to Relay's SQLite store before Nexus ack. Unsupported, malformed, and rule-suppressed deliveries get a durable ignored marker before ack.
+- Supported pull request actions refresh the current PR snapshot before notification, so the existing polling cache reconciles without repeating the opened/closed/merged/review-requested alert. Polling remains active for CI state and repositories without registered hooks.
+- The WebSocket uses an Authorization header and no token in its URL. Nexus binds the subscription to the verified token client ID, not an `appId` query value. Relay closes and reconnects when the local Nexus session changes.
+
+## Verification boundary
+
+The Relay Rust target passes `cargo check --offline`, and Nexus passes `go build ./...`. The Angular CLI is not installed in this worktree, and no live OAuth consent, GitHub hook registration, delivery, or offline replay has been exercised here.
 
 ## Credential flow
 
@@ -46,7 +57,7 @@ This generic mode covers providers with the same raw-body HMAC primitive. A prov
 
 ## GitHub coverage and recovery
 
-Create repository hooks only for explicitly selected repositories where the user has admin access. The existing GitHub `repo` OAuth scope is broad but does not grant repository administration. Relay currently finds PRs the user is involved in across repositories, so hooks cannot cover that whole set. Keep ETag-based GitHub polling for repositories without hook access and as periodic reconciliation for hooked repositories. [GitHub hook permissions](https://docs.github.com/en/rest/repos/webhooks), [webhook types and administration](https://docs.github.com/en/webhooks/types-of-webhooks).
+Create repository hooks only for explicitly selected repositories where the user has admin access. GitHub's existing `repo` OAuth scope already includes repository webhook write access, along with broad private repository read/write access; hook creation still requires the user to have repository admin access. A future GitHub App could narrow the connector's permissions. Relay currently finds PRs the user is involved in across repositories, so hooks cannot cover that whole set. Keep ETag-based GitHub polling for repositories without hook access and as periodic reconciliation for hooked repositories. [GitHub hook permissions](https://docs.github.com/en/rest/repos/webhooks), [OAuth scope details](https://docs.github.com/en/apps/oauth-apps/building-oauth-apps/scopes-for-oauth-apps).
 
 “Offline replay” means events that Nexus **accepted** while Relay was closed. GitHub does not automatically redeliver failed webhook requests, and Nexus currently caps payloads at 1 MiB while GitHub allows much larger payloads. Preserve failed-delivery visibility and use GitHub redelivery while it is available; polling can recover current PR state but cannot reconstruct every intermediate action. Do not promise a complete history across a Nexus outage or oversized webhook. [GitHub failed deliveries](https://docs.github.com/en/webhooks/using-webhooks/handling-failed-webhook-deliveries), [GitHub payload cap](https://docs.github.com/en/webhooks/webhook-events-and-payloads).
 

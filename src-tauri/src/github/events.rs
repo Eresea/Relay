@@ -1,14 +1,17 @@
 use std::collections::HashMap;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
+use futures_util::{SinkExt, StreamExt};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use tauri::{AppHandle, Emitter};
+use tauri::{AppHandle, Manager};
+use tokio_tungstenite::tungstenite::client::IntoClientRequest;
+use tokio_tungstenite::tungstenite::http::header::AUTHORIZATION;
+use tokio_tungstenite::tungstenite::http::HeaderValue;
+use tokio_tungstenite::tungstenite::Message;
 
 use crate::error::{Error, Result};
-use crate::events::{
-    AppEvent, NotificationAction, NotificationStatus, CHANNEL, INFO_AUTO_DISMISS_MS,
-};
+use crate::events::{AppEvent, NotificationAction, NotificationStatus, INFO_AUTO_DISMISS_MS};
 use crate::nexus_auth;
 use crate::notifications::{self, NotificationRecord};
 use tauri_plugin_store::StoreExt;
@@ -19,6 +22,7 @@ use super::token_store::TokenStore;
 
 const NEXUS: &str = "https://nexus.eresea.net/api/v1";
 const INBOX_INTERVAL: Duration = Duration::from_secs(20);
+const NEXUS_WS: &str = "wss://nexus.eresea.net/ws/v1/user";
 const WEBHOOKS_KEY: &str = "github.webhooks";
 
 #[derive(Clone, Deserialize, Serialize)]
@@ -77,18 +81,82 @@ struct Base {
 }
 
 pub fn start(app: AppHandle) {
+    let inbox_app = app.clone();
     tauri::async_runtime::spawn(async move {
         let http = reqwest::Client::builder()
             .redirect(reqwest::redirect::Policy::none())
             .build()
             .expect("Nexus event client configuration is valid");
         loop {
-            if let Err(error) = poll_once(&app, &http).await {
+            if let Err(error) = poll_once(&inbox_app, &http).await {
                 log::warn!("Nexus event inbox poll failed: {error}");
             }
             tokio::time::sleep(INBOX_INTERVAL).await;
         }
     });
+    tauri::async_runtime::spawn(async move {
+        websocket_loop(app).await;
+    });
+}
+
+async fn websocket_loop(app: AppHandle) {
+    loop {
+        let connected = connect_and_drain(&app).await;
+        if let Err(error) = connected {
+            log::debug!("Nexus realtime connection ended: {error}");
+        }
+        tokio::time::sleep(Duration::from_secs(5)).await;
+    }
+}
+
+async fn connect_and_drain(app: &AppHandle) -> Result<()> {
+    let token = nexus_auth::access_token(app).await?;
+    let mut request = NEXUS_WS
+        .into_client_request()
+        .map_err(|error| Error::NexusAuth(error.to_string()))?;
+    request.headers_mut().insert(
+        AUTHORIZATION,
+        HeaderValue::from_str(&format!("Bearer {token}"))
+            .map_err(|error| Error::NexusAuth(error.to_string()))?,
+    );
+    let (mut socket, _) = tokio_tungstenite::connect_async(request)
+        .await
+        .map_err(|error| Error::NexusAuth(error.to_string()))?;
+    let mut auth_check = tokio::time::interval(Duration::from_secs(30));
+    auth_check.tick().await;
+    loop {
+        tokio::select! {
+            message = socket.next() => {
+                let Some(message) = message else { return Ok(()); };
+                match message.map_err(|error| Error::NexusAuth(error.to_string()))? {
+                    Message::Text(text) => {
+                        let available = serde_json::from_str::<serde_json::Value>(&text)
+                            .ok()
+                            .and_then(|event| event.get("type").and_then(Value::as_str).map(str::to_owned))
+                            .is_some_and(|kind| kind == "events.available");
+                        if available {
+                            let http = reqwest::Client::builder()
+                                .redirect(reqwest::redirect::Policy::none())
+                                .build()
+                                .map_err(|error| Error::NexusAuth(error.to_string()))?;
+                            poll_once(app, &http).await?;
+                        }
+                    }
+                    Message::Ping(payload) => {
+                        socket.send(Message::Pong(payload)).await
+                            .map_err(|error| Error::NexusAuth(error.to_string()))?;
+                    }
+                    Message::Close(_) => return Ok(()),
+                    _ => {}
+                }
+            }
+            _ = auth_check.tick() => {
+                if !matches!(nexus_auth::access_token(app).await, Ok(active) if active == token) {
+                    return Ok(());
+                }
+            }
+        }
+    }
 }
 
 pub async fn register(app: &AppHandle, repositories: Vec<String>) -> Result<Vec<String>> {
@@ -254,6 +322,13 @@ pub async fn unregister(app: &AppHandle, repo: &str) -> Result<()> {
         .map_err(|error| Error::NexusAuth(error.to_string()))
 }
 
+pub async fn unregister_all(app: &AppHandle) -> Result<()> {
+    for repo in registered_repositories(app)? {
+        unregister(app, &repo).await?;
+    }
+    Ok(())
+}
+
 fn parse_repository(repo: &str) -> Option<(&str, &str)> {
     fn valid(part: &str) -> bool {
         !part.is_empty()
@@ -299,7 +374,7 @@ async fn poll_once(app: &AppHandle, http: &reqwest::Client) -> Result<()> {
     let response = http
         .post(format!("{NEXUS}/events/inbox/claim"))
         .bearer_auth(&token)
-        .json(&serde_json::json!({ "limit": 50 }))
+        .json(&serde_json::json!({ "limit": 10 }))
         .send()
         .await
         .map_err(|error| Error::NexusAuth(error.to_string()))?
@@ -311,53 +386,98 @@ async fn poll_once(app: &AppHandle, http: &reqwest::Client) -> Result<()> {
         .map_err(|error| Error::NexusAuth(error.to_string()))?;
 
     for event in inbox.events {
-        if let Some((repo, branch, number, title, url, kind)) = interpret(&event) {
-            let settings = super::read_settings(app);
-            if should_notify(&settings, &repo, &branch, number, kind) {
-                let notification_id = format!("github:webhook:{}", event.id);
-                let record = NotificationRecord {
-                    notification_id: notification_id.clone(),
-                    job_id: notification_id.clone(),
-                    hue_source: "github".into(),
-                    title: event_title(kind).into(),
-                    detail: Some(format!("{repo}#{number} · {title}")),
-                    icon: None,
-                    status: NotificationStatus::Done,
-                    progress: None,
-                    auto_dismiss_ms: Some(INFO_AUTO_DISMISS_MS),
-                    actions: vec![NotificationAction::Open {
-                        label: "Open".into(),
-                        url,
-                    }],
-                    read: false,
-                    created_at: now_millis(),
-                };
-                if notifications::persist_webhook(app, &event.id, &record)? {
-                    if let Err(error) = crate::overlay::show_hud(app) {
-                        log::warn!("could not show the HUD for a GitHub event: {error}");
-                    }
-                    let _ = Emitter::emit(
-                        app,
-                        CHANNEL,
-                        AppEvent::Notification {
-                            notification_id,
-                            job_id: crate::jobs::JobId::from(record.job_id.clone()),
-                            hue_source: record.hue_source,
-                            title: record.title,
-                            detail: record.detail,
-                            icon: record.icon,
-                            status: record.status,
-                            progress: record.progress,
-                            auto_dismiss_ms: record.auto_dismiss_ms,
-                            actions: record.actions,
-                        },
-                    );
-                }
-            }
+        if let Err(error) = process_event(app, http, &token, &event).await {
+            log::warn!("could not process Nexus event {}: {error}", event.id);
         }
-        acknowledge(http, &token, &event).await?;
     }
     Ok(())
+}
+
+async fn process_event(
+    app: &AppHandle,
+    http: &reqwest::Client,
+    token: &str,
+    event: &InboxEvent,
+) -> Result<()> {
+    if !valid_event_id(&event.id) || event.claim_token.is_empty() {
+        return Err(Error::NexusAuth(
+            "Nexus returned an invalid event claim".into(),
+        ));
+    }
+    if notifications::webhook_processed(app, &event.id)? {
+        return acknowledge(http, token, event).await;
+    }
+    if let Some((repo, branch, number, _title, _url, kind)) = interpret(event) {
+        let credential = NexusGitHubTokenStore::new(app.clone())
+            .get()
+            .await?
+            .ok_or_else(|| Error::NexusAuth("GitHub credential is unavailable".into()))?;
+        let client = app
+            .state::<super::client::HttpGitHubClient>()
+            .inner()
+            .clone();
+        let snapshot = super::poll::refresh_from_webhook(
+            app,
+            &client,
+            &credential.access_token,
+            &credential.username,
+            &repo,
+            number,
+        )
+        .await?;
+        let settings = super::read_settings(app);
+        if should_notify(&settings, &repo, &branch, number, kind)
+            && (kind != PrEventKind::ReviewRequested || snapshot.review_requested)
+        {
+            let notification_id = format!("{repo}#{number}:{kind:?}");
+            let record = NotificationRecord {
+                notification_id: notification_id.clone(),
+                job_id: notification_id.clone(),
+                hue_source: "github".into(),
+                title: event_title(kind).into(),
+                detail: Some(format!("{repo}#{number} · {}", snapshot.title)),
+                icon: None,
+                status: NotificationStatus::Done,
+                progress: None,
+                auto_dismiss_ms: Some(INFO_AUTO_DISMISS_MS),
+                actions: vec![NotificationAction::Open {
+                    label: "Open".into(),
+                    url: snapshot.url,
+                }],
+                read: false,
+                created_at: now_millis(),
+            };
+            if notifications::persist_webhook(app, &event.id, &record)? {
+                crate::events::EventSink::emit(
+                    app,
+                    AppEvent::Notification {
+                        notification_id,
+                        job_id: crate::jobs::JobId::from(record.job_id.clone()),
+                        hue_source: record.hue_source,
+                        title: record.title,
+                        detail: record.detail,
+                        icon: record.icon,
+                        status: record.status,
+                        progress: record.progress,
+                        auto_dismiss_ms: record.auto_dismiss_ms,
+                        actions: record.actions,
+                    },
+                );
+            }
+        } else {
+            notifications::ignore_webhook(app, &event.id)?;
+        }
+    } else {
+        notifications::ignore_webhook(app, &event.id)?;
+    }
+    acknowledge(http, token, event).await
+}
+
+fn valid_event_id(id: &str) -> bool {
+    !id.is_empty()
+        && id
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || b"_-".contains(&byte))
 }
 
 fn interpret(event: &InboxEvent) -> Option<(String, String, u64, String, String, PrEventKind)> {

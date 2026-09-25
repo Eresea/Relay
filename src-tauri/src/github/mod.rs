@@ -194,6 +194,7 @@ pub fn connect_start(
 /// keychain. The on-disk PR cache is also removed so a future reconnect
 /// starts from a clean slate rather than diffing against months-old state.
 pub async fn disconnect(app: &AppHandle, registry: &JobRegistry) -> Result<()> {
+    events::unregister_all(app).await?;
     NexusGitHubTokenStore::new(app.clone()).clear().await?;
     if let Some(job_id) = app.state::<GithubState>().poll_job.lock().unwrap().take() {
         let _ = registry.cancel(&job_id);

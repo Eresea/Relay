@@ -145,17 +145,13 @@ pub fn persist_webhook(
     record: &NotificationRecord,
 ) -> Result<bool> {
     let mut connection = connection(app)?;
-    connection.execute_batch(
-        "CREATE TABLE IF NOT EXISTS processed_webhook_events (
-            event_id TEXT PRIMARY KEY,
-            processed_at INTEGER NOT NULL
-        );",
-    )?;
+    ensure_webhook_table(&connection)?;
     let transaction = connection.transaction()?;
     let inserted = transaction.execute(
         "INSERT OR IGNORE INTO processed_webhook_events (event_id, processed_at) VALUES (?1, ?2)",
         params![event_id, now_millis() as i64],
     )?;
+    prune_webhook_events(&transaction)?;
     if inserted == 0 {
         transaction.rollback()?;
         return Ok(false);
@@ -163,6 +159,47 @@ pub fn persist_webhook(
     upsert_in(&transaction, record)?;
     transaction.commit()?;
     Ok(true)
+}
+
+pub fn webhook_processed(app: &AppHandle, event_id: &str) -> Result<bool> {
+    let connection = connection(app)?;
+    ensure_webhook_table(&connection)?;
+    Ok(connection.query_row(
+        "SELECT EXISTS(SELECT 1 FROM processed_webhook_events WHERE event_id = ?1)",
+        [event_id],
+        |row| row.get(0),
+    )?)
+}
+
+pub fn ignore_webhook(app: &AppHandle, event_id: &str) -> Result<()> {
+    let mut connection = connection(app)?;
+    ensure_webhook_table(&connection)?;
+    let transaction = connection.transaction()?;
+    transaction.execute(
+        "INSERT OR IGNORE INTO processed_webhook_events (event_id, processed_at) VALUES (?1, ?2)",
+        params![event_id, now_millis() as i64],
+    )?;
+    prune_webhook_events(&transaction)?;
+    transaction.commit()?;
+    Ok(())
+}
+
+fn ensure_webhook_table(connection: &rusqlite::Connection) -> Result<()> {
+    connection.execute_batch(
+        "CREATE TABLE IF NOT EXISTS processed_webhook_events (
+            event_id TEXT PRIMARY KEY,
+            processed_at INTEGER NOT NULL
+        );",
+    )?;
+    Ok(())
+}
+
+fn prune_webhook_events(connection: &rusqlite::Connection) -> Result<()> {
+    connection.execute(
+        "DELETE FROM processed_webhook_events WHERE processed_at < ?1",
+        [now_millis().saturating_sub(30 * 24 * 60 * 60 * 1000) as i64],
+    )?;
+    Ok(())
 }
 
 fn upsert_in(connection: &rusqlite::Connection, record: &NotificationRecord) -> Result<()> {
