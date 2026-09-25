@@ -221,15 +221,16 @@ pub fn vault_export(app: AppHandle, vault: tauri::State<VaultState>) -> Result<S
 /// Whether a GitHub account is connected. Only reads the keychain — never
 /// calls GitHub.
 #[tauri::command]
-pub fn github_status() -> Result<GithubStatus> {
-    github::status()
+pub async fn github_status(app: AppHandle) -> Result<GithubStatus> {
+    github::status(&app).await
 }
 
 #[tauri::command]
 pub async fn github_repositories(
+    app: AppHandle,
     client: tauri::State<'_, HttpGitHubClient>,
 ) -> Result<Vec<RepositorySummary>> {
-    github::repositories(client.inner().clone()).await
+    github::repositories(&app, client.inner().clone()).await
 }
 
 #[tauri::command]
@@ -252,8 +253,8 @@ pub fn github_connect_start(
 /// Disconnects the GitHub account: stops the poll job, if running, and
 /// removes the token from the keychain.
 #[tauri::command]
-pub fn github_disconnect(app: AppHandle, jobs: tauri::State<JobRegistry>) -> Result<()> {
-    github::disconnect(&app, &jobs)
+pub async fn github_disconnect(app: AppHandle, jobs: tauri::State<'_, JobRegistry>) -> Result<()> {
+    github::disconnect(&app, &jobs).await
 }
 
 #[tauri::command]

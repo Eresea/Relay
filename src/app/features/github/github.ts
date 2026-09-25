@@ -213,6 +213,14 @@ function connectorErrorMessage(error: unknown): string {
                 </p>
               </div>
             </div>
+            @if (githubConnection()?.nexusCredentialReady) {
+              <p class="hint">GitHub credentials are stored in Nexus.</p>
+            } @else if (githubConnection()?.nexusCredentialPending) {
+              <p class="hint">
+                Grant Relay read and replace access to this GitHub credential in Nexus. Relay keeps
+                the local copy until it can read the saved credential back.
+              </p>
+            }
           </section>
 
           <section class="group">
@@ -615,6 +623,7 @@ export class Github {
   protected readonly busy = signal(false);
   protected readonly error = signal('');
   protected readonly username = signal<string | null>(null);
+  protected readonly githubConnection = signal<GithubStatus | null>(null);
   protected readonly nexusAuth = signal<NexusAuthStatus>({ connected: false, userId: null, email: null, displayName: null });
   protected readonly nexusBusy = signal(false);
   protected readonly nexusError = signal('');
@@ -787,6 +796,7 @@ export class Github {
     await this.loadSettings();
 
     const result = await this.tauri.githubStatus();
+    this.githubConnection.set(result);
     if (result.connected) {
       this.username.set(result.username);
       this.status.set('connected');

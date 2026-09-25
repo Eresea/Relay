@@ -270,7 +270,11 @@ pub fn run() {
 
             let github_client = app.state::<HttpGitHubClient>().inner().clone();
             let job_registry = app.state::<JobRegistry>().inner().clone();
-            github::resume_polling_if_connected(app.handle(), github_client, &job_registry);
+            let github_app = app.handle().clone();
+            tauri::async_runtime::spawn(async move {
+                github::resume_polling_if_connected(&github_app, github_client, &job_registry)
+                    .await;
+            });
 
             // A connector that stopped polling every time the window closed
             // would be pointless — resume whatever was connected before the

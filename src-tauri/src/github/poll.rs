@@ -255,7 +255,7 @@ async fn run_device_flow_inner<C: GitHubClient, S: EventSink, T: TokenStore>(
                     username,
                 };
                 log::info!("github: writing the token to the keychain");
-                token_store.set(&stored)?;
+                token_store.set(&stored).await?;
                 log::info!("github: token stored");
                 return Ok(stored);
             }
@@ -448,18 +448,25 @@ where
     loop {
         ctx.checkpoint()?;
 
-        let Some(mut stored) = token_store.get()? else {
+        let settings = read_settings();
+        let stored = match token_store.get().await {
+            Ok(stored) => stored,
+            Err(error) => {
+                log::warn!("could not read the GitHub credential: {error}");
+                tokio::time::sleep(Duration::from_secs(settings.poll_interval_secs)).await;
+                continue;
+            }
+        };
+        let Some(mut stored) = stored else {
             log::info!("github: poll loop found no token, stopping");
             return Ok(());
         };
-
-        let settings = read_settings();
 
         if needs_refresh(stored.expires_at, now_millis()) {
             if let Some(client_id) = super::rules::effective_client_id(&settings) {
                 match refresh_stored_token(&client, client_id, &stored).await {
                     Ok(refreshed) => {
-                        token_store.set(&refreshed)?;
+                        token_store.set(&refreshed).await?;
                         stored = refreshed;
                     }
                     Err(error) => log::warn!("could not refresh the GitHub token: {error}"),
@@ -763,16 +770,17 @@ mod tests {
 
     struct FailingTokenStore;
 
+    #[async_trait::async_trait]
     impl TokenStore for FailingTokenStore {
-        fn get(&self) -> Result<Option<StoredToken>> {
+        async fn get(&self) -> Result<Option<StoredToken>> {
             Ok(None)
         }
 
-        fn set(&self, _token: &StoredToken) -> Result<()> {
+        async fn set(&self, _token: &StoredToken) -> Result<()> {
             Err(Error::TokenStore("simulated keychain failure".to_string()))
         }
 
-        fn clear(&self) -> Result<()> {
+        async fn clear(&self) -> Result<()> {
             Ok(())
         }
     }
@@ -820,7 +828,7 @@ mod tests {
 
         assert_eq!(stored.access_token, "gho_abc");
         assert_eq!(stored.username, "octocat");
-        assert_eq!(token_store.get().unwrap(), Some(stored));
+        assert_eq!(token_store.get().await.unwrap(), Some(stored));
     }
 
     fn blocked_titles(sink: &FakeSink) -> Vec<String> {
@@ -863,7 +871,7 @@ mod tests {
         )
         .await;
         assert!(matches!(result, Err(Error::GithubDeviceFlowDenied)));
-        assert_eq!(token_store.get().unwrap(), None);
+        assert_eq!(token_store.get().await.unwrap(), None);
         assert_eq!(
             blocked_titles(&sink),
             vec![Error::GithubDeviceFlowDenied.to_string()]

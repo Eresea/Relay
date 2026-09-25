@@ -373,7 +373,12 @@ export class TauriBridge {
   /** Whether a GitHub account is connected. Only reads the keychain. */
   async githubStatus(): Promise<GithubStatus> {
     return (
-      (await this.invoke<GithubStatus>('github_status')) ?? { connected: false, username: null }
+      (await this.invoke<GithubStatus>('github_status')) ?? {
+        connected: false,
+        username: null,
+        nexusCredentialReady: false,
+        nexusCredentialPending: false,
+      }
     );
   }
 
@@ -565,6 +570,8 @@ export interface PasswordOptions {
 export interface GithubStatus {
   readonly connected: boolean;
   readonly username: string | null;
+  readonly nexusCredentialReady: boolean;
+  readonly nexusCredentialPending: boolean;
 }
 
 export interface NexusAuthStatus {
