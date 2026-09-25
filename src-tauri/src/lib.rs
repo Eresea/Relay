@@ -1,3 +1,5 @@
+#[cfg(desktop)]
+mod codex;
 mod commands;
 mod error;
 mod events;
@@ -116,6 +118,9 @@ pub fn run() {
                 commands::scan_workspaces,
                 commands::open_terminal,
                 commands::project_action,
+                commands::codex_send,
+                commands::codex_list_threads,
+                commands::codex_read_thread,
                 commands::update_status,
                 commands::update_check,
                 commands::update_download,
