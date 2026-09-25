@@ -31,27 +31,33 @@ const MAX_HUD_TOP_OFFSET = 2000;
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [Github, Gmail],
   template: `
-    <nav class="tabs">
+    <nav class="tabs" role="tablist" aria-label="Settings sections">
       <button
         type="button"
+        role="tab"
         class="tab"
         [class.active]="tab() === 'general'"
+        [attr.aria-selected]="tab() === 'general'"
         (click)="tab.set('general')"
       >
         General
       </button>
       <button
         type="button"
+        role="tab"
         class="tab"
         [class.active]="tab() === 'github'"
+        [attr.aria-selected]="tab() === 'github'"
         (click)="tab.set('github')"
       >
         GitHub
       </button>
       <button
         type="button"
+        role="tab"
         class="tab"
         [class.active]="tab() === 'gmail'"
+        [attr.aria-selected]="tab() === 'gmail'"
         (click)="tab.set('gmail')"
       >
         Gmail
@@ -100,6 +106,7 @@ const MAX_HUD_TOP_OFFSET = 2000;
             role="switch"
             class="switch"
             [attr.aria-checked]="launchAtLogin()"
+            aria-label="Launch at login"
             [disabled]="launchAtLoginPending()"
             (click)="toggleLaunchAtLogin()"
           >
