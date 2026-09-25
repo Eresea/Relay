@@ -87,7 +87,7 @@ const RUNTIME_STATUS_STALE_AFTER_MS = 90_000;
                     >
                       {{ leafHealthLabel() }} · {{ probeEvidence(leafHealth()) }}
                     </span>
-                    <p role="status">{{ leafHealthDetail() }}</p>
+                    <p>{{ leafHealthDetail() }}</p>
                     <button
                       type="button"
                       class="secondary-button"
@@ -117,7 +117,7 @@ const RUNTIME_STATUS_STALE_AFTER_MS = 90_000;
                     >
                       {{ nexusHealthLabel() }} · {{ probeEvidence(nexusHealth()) }}
                     </span>
-                    <p role="status">{{ nexusHealthDetail() }}</p>
+                    <p>{{ nexusHealthDetail() }}</p>
                     <button
                       type="button"
                       class="secondary-button"
