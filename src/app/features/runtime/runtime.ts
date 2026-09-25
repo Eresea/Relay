@@ -8,6 +8,7 @@ import {
   type RuntimeGrafanaSettings,
   type RuntimeGrafanaPanelInventory,
   type NexusReadinessObservation,
+  type RuntimeSignalEvent,
 } from '@core/tauri';
 import { Icon } from '@shared/icon';
 
@@ -133,6 +134,47 @@ const RUNTIME_STATUS_STALE_AFTER_MS = 90_000;
             </tbody>
           </table>
         </div>
+      </section>
+
+      <section class="overview" aria-labelledby="history-title">
+        <div class="overview-heading">
+          <div>
+            <h2 id="history-title">Recent probe changes</h2>
+            <p>State transitions observed while Runtime was open in this Relay session</p>
+          </div>
+          <span class="overview-updated">Latest 10</span>
+        </div>
+        @if (runtimeEvents().length) {
+          <ul class="dashboard-list" aria-label="Recent Leaf and Nexus probe state changes">
+            @for (event of runtimeEvents(); track event.id) {
+              <li>
+                <div class="signal-cell">
+                  <span>{{ runtimeEventSourceLabel(event.source) }}</span>
+                  <span
+                    class="state"
+                    [class.operational]="event.state === 'reachable' || event.state === 'ready'"
+                    [class.stale]="event.state === 'stale'"
+                    [style.color]="event.state === 'not-ready' ? 'var(--danger)' : null"
+                    [style.background]="event.state === 'not-ready' ? 'var(--danger-tint)' : null"
+                  >
+                    {{ runtimeEventTransitionLabel(event) }}
+                  </span>
+                  <time>{{ runtimeEventTimeLabel(event.observedAt) }}</time>
+                  @if (event.statusCode !== null) {
+                    <small>
+                      HTTP {{ event.statusCode }}
+                      @if (event.responseHeadersMs !== null) {
+                        · {{ event.responseHeadersMs }} ms from Relay
+                      }
+                    </small>
+                  }
+                </div>
+              </li>
+            }
+          </ul>
+        } @else {
+          <p class="page-description">No probe state changes observed in this Relay session.</p>
+        }
       </section>
 
       <section class="setup-notice" role="status" aria-labelledby="setup-title">
@@ -905,6 +947,7 @@ export class Runtime implements OnDestroy {
   >('checking');
   protected readonly nexusHealthError = signal('');
   protected readonly nexusRefreshing = signal(false);
+  protected readonly runtimeEvents = signal<readonly RuntimeSignalEvent[]>([]);
   protected readonly error = signal('');
   protected readonly notice = signal('');
   private tokenStatusRequest = 0;
@@ -916,6 +959,7 @@ export class Runtime implements OnDestroy {
     void this.restore();
     document.addEventListener('visibilitychange', this.onVisibilityChange);
     const lastStatus = this.tauri.runtimeStatusSnapshot();
+    this.runtimeEvents.set(this.tauri.runtimeSignalEventSnapshot());
     if (lastStatus.leaf) {
       this.leafHealth.set(lastStatus.leaf);
       this.leafHealthState.set(
@@ -1028,11 +1072,19 @@ export class Runtime implements OnDestroy {
       this.leafHealth.set(observation);
       this.leafHealthError.set('');
       this.leafHealthState.set(observation.healthy ? 'reachable' : 'not-ready');
+      this.recordRuntimeEvent(
+        'leaf',
+        observation.healthy ? 'reachable' : 'not-ready',
+        observation.statusCode,
+        observation.responseHeadersMs,
+      );
     } catch (error: unknown) {
       this.leafHealthError.set(
         typeof error === 'string' ? error : 'Could not confirm Leaf API liveness.',
       );
-      this.leafHealthState.set(this.leafHealth() ? 'stale' : 'unknown');
+      const state = this.leafHealth() ? 'stale' : 'unknown';
+      this.leafHealthState.set(state);
+      this.recordRuntimeEvent('leaf', state);
     } finally {
       this.leafRefreshing.set(false);
     }
@@ -1058,11 +1110,19 @@ export class Runtime implements OnDestroy {
       this.nexusHealth.set(observation);
       this.nexusHealthError.set('');
       this.nexusHealthState.set(observation.ready ? 'ready' : 'not-ready');
+      this.recordRuntimeEvent(
+        'nexus',
+        observation.ready ? 'ready' : 'not-ready',
+        observation.statusCode,
+        observation.responseHeadersMs,
+      );
     } catch (error: unknown) {
       this.nexusHealthError.set(
         typeof error === 'string' ? error : 'Could not confirm Nexus readiness.',
       );
-      this.nexusHealthState.set(this.nexusHealth() ? 'stale' : 'unknown');
+      const state = this.nexusHealth() ? 'stale' : 'unknown';
+      this.nexusHealthState.set(state);
+      this.recordRuntimeEvent('nexus', state);
     } finally {
       this.nexusRefreshing.set(false);
     }
@@ -1156,6 +1216,46 @@ export class Runtime implements OnDestroy {
     return observation
       ? `HTTP ${observation.statusCode} · ${observation.responseHeadersMs} ms`
       : 'No response';
+  }
+
+  protected runtimeEventSourceLabel(source: RuntimeSignalEvent['source']): string {
+    return source === 'leaf' ? 'Leaf API' : 'Nexus API';
+  }
+
+  protected runtimeEventTransitionLabel(event: RuntimeSignalEvent): string {
+    const current = this.runtimeEventStateLabel(event.state);
+    return event.previousState
+      ? `${this.runtimeEventStateLabel(event.previousState)} → ${current}`
+      : `First observation · ${current}`;
+  }
+
+  protected runtimeEventTimeLabel(timestamp: number): string {
+    return new Date(timestamp).toLocaleString();
+  }
+
+  private runtimeEventStateLabel(state: RuntimeSignalEvent['state']): string {
+    switch (state) {
+      case 'reachable':
+        return 'Reachable';
+      case 'ready':
+        return 'Ready';
+      case 'not-ready':
+        return 'Not ready';
+      case 'stale':
+        return 'Stale';
+      case 'unknown':
+        return 'Unknown';
+    }
+  }
+
+  private recordRuntimeEvent(
+    source: RuntimeSignalEvent['source'],
+    state: RuntimeSignalEvent['state'],
+    statusCode?: number,
+    responseHeadersMs?: number,
+  ): void {
+    this.tauri.recordRuntimeSignalEvent(source, state, statusCode, responseHeadersMs);
+    this.runtimeEvents.set(this.tauri.runtimeSignalEventSnapshot());
   }
 
   protected nexusHealthDetail(): string {

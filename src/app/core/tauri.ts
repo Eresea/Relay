@@ -16,6 +16,8 @@ import type { AppEvent, NotificationRecord, UpdateSnapshot } from './events';
 export class TauriBridge {
   readonly available = '__TAURI_INTERNALS__' in window;
   private latestRuntimeStatus: RuntimeStatusSnapshot = { leaf: null, nexus: null };
+  private runtimeSignalEvents: RuntimeSignalEvent[] = [];
+  private nextRuntimeSignalEventId = 0;
 
   /** Hides the palette window without destroying it — reopening must be instant. */
   async dismissPalette(): Promise<void> {
@@ -245,6 +247,32 @@ export class TauriBridge {
 
   runtimeStatusSnapshot(): RuntimeStatusSnapshot {
     return this.latestRuntimeStatus;
+  }
+
+  recordRuntimeSignalEvent(
+    source: RuntimeSignalEvent['source'],
+    state: RuntimeSignalEvent['state'],
+    statusCode?: number,
+    responseHeadersMs?: number,
+  ): void {
+    const previous = [...this.runtimeSignalEvents]
+      .reverse()
+      .find((event) => event.source === source);
+    if (previous?.state === state) return;
+    this.runtimeSignalEvents.push({
+      id: ++this.nextRuntimeSignalEventId,
+      source,
+      state,
+      previousState: previous?.state ?? null,
+      observedAt: Date.now(),
+      statusCode: statusCode ?? null,
+      responseHeadersMs: responseHeadersMs ?? null,
+    });
+    this.runtimeSignalEvents = this.runtimeSignalEvents.slice(-10);
+  }
+
+  runtimeSignalEventSnapshot(): readonly RuntimeSignalEvent[] {
+    return this.runtimeSignalEvents.slice().reverse();
   }
 
   private settingsStore: LazyStore | null = null;
@@ -543,6 +571,16 @@ export interface NexusReadinessObservation {
 export interface RuntimeStatusSnapshot {
   readonly leaf: LeafHealthObservation | null;
   readonly nexus: NexusReadinessObservation | null;
+}
+
+export interface RuntimeSignalEvent {
+  readonly id: number;
+  readonly source: 'leaf' | 'nexus';
+  readonly state: 'reachable' | 'ready' | 'not-ready' | 'stale' | 'unknown';
+  readonly previousState: RuntimeSignalEvent['state'] | null;
+  readonly observedAt: number;
+  readonly statusCode: number | null;
+  readonly responseHeadersMs: number | null;
 }
 
 /** What the palette displays for a core-contributed row. Mirrors `CoreCommandMeta`. */

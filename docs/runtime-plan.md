@@ -2,8 +2,10 @@
 
 **Status:** the basic Leaf overview is implemented with direct Leaf and Nexus
 probes, visible-window polling, a session-only last-observation cache, and
-explicit stale/not-ready states. Grafana health, dashboard and panel metadata
-discovery work; metric mapping awaits the configured inventory.
+explicit stale/not-ready states. Runtime also keeps the latest 10 probe state
+transitions in memory for the current Relay session. Grafana health, dashboard
+and panel metadata discovery work; metric mapping awaits the configured
+inventory.
 
 ## Goal
 
@@ -147,11 +149,14 @@ as uptime monitoring.
    production-first grid. Show the chosen health state and a few metrics,
    timestamps, stale/unknown states, and Grafana deep links. Keep polling
    bounded to the open view.
-4. **Add diagnosis.** Add compact incident/signal history, deployment
-   annotations, and a “what changed?” path after the overview answers the
-   fast-status question. Prefer deployment SHA/version events already available
-   from GitHub Actions. Where possible, correlate deploys with error and
-   latency changes without implying causation.
+4. **Add source-backed diagnosis.** The overview now keeps the latest 10 Leaf
+   and Nexus probe state transitions in the current Relay process. This is only
+   evidence observed while Runtime is open; it is not an uptime record and is
+   cleared when Relay exits. Add Grafana alert history and deployment
+   annotations for a real “what changed?” view after the metrics source is
+   mapped. Prefer deployment SHA/version events already available from GitHub
+   Actions. Where possible, correlate deploys with error and latency changes
+   without implying causation.
 
    Do not treat Leaf's `/api/version` response as a release marker until its
    production configuration is verified: the controller defaults `version` to
