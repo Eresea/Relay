@@ -194,8 +194,46 @@ export class TauriBridge {
     return (await this.invoke<WorkspaceSummary[]>('scan_workspaces')) ?? [];
   }
 
+  async codexSend(
+    prompt: string,
+    workingDirectory: string,
+    threadId: string | null,
+  ): Promise<CodexRun> {
+    const result = await this.invoke<CodexRun>('codex_send', {
+      prompt,
+      workingDirectory,
+      threadId,
+    });
+    if (!result) throw new Error('Codex returned no result.');
+    return result;
+  }
+
+  async codexListThreads(cursor: string | null = null): Promise<CodexThreadPage> {
+    const result = await this.invoke<CodexThreadPage>('codex_list_threads', { cursor });
+    if (!result) throw new Error('Codex returned no thread list.');
+    return result;
+  }
+
+  async codexReadThread(threadId: string): Promise<CodexThread> {
+    const result = await this.invoke<CodexThread>('codex_read_thread', { threadId });
+    if (!result) throw new Error('Codex returned no thread.');
+    return result;
+  }
+
   async githubRepositories(): Promise<readonly GithubRepositorySummary[]> {
     return (await this.invoke<GithubRepositorySummary[]>('github_repositories')) ?? [];
+  }
+
+  async githubRegisterWebhooks(repositories: readonly string[]): Promise<readonly string[]> {
+    return (await this.invoke<string[]>('github_register_webhooks', { repositories })) ?? [];
+  }
+
+  async githubWebhookRepositories(): Promise<readonly string[]> {
+    return (await this.invoke<string[]>('github_webhook_repositories')) ?? [];
+  }
+
+  async githubUnregisterWebhook(repository: string): Promise<void> {
+    await this.invoke('github_unregister_webhook', { repository });
   }
 
   async githubPullRequests(): Promise<readonly GithubPullRequestSummary[]> {
@@ -473,7 +511,12 @@ export class TauriBridge {
   /** Whether a GitHub account is connected. Only reads the keychain. */
   async githubStatus(): Promise<GithubStatus> {
     return (
-      (await this.invoke<GithubStatus>('github_status')) ?? { connected: false, username: null }
+      (await this.invoke<GithubStatus>('github_status')) ?? {
+        connected: false,
+        username: null,
+        nexusCredentialReady: false,
+        nexusCredentialPending: false,
+      }
     );
   }
 
@@ -489,6 +532,29 @@ export class TauriBridge {
   /** Disconnects the GitHub account and stops the poll job, if running. */
   async githubDisconnect(): Promise<void> {
     await this.invoke('github_disconnect');
+  }
+
+  async nexusAuthStatus(): Promise<NexusAuthStatus> {
+    return (await this.invoke<NexusAuthStatus>('nexus_auth_status')) ?? {
+      connected: false,
+      userId: null,
+      email: null,
+      displayName: null,
+    };
+  }
+
+  async nexusAuthStart(): Promise<void> {
+    await this.invoke('nexus_auth_start');
+  }
+
+  async nexusAuthLogout(): Promise<void> {
+    await this.invoke('nexus_auth_logout');
+  }
+
+  async onNexusAuth(handler: (status: NexusAuthStatus) => void): Promise<() => void> {
+    if (!this.available) return () => {};
+    const { listen } = await import('@tauri-apps/api/event');
+    return listen<NexusAuthStatus>('nexus://auth', (message) => handler(message.payload));
   }
 
   /**
@@ -666,6 +732,49 @@ export interface WorkspaceSummary {
   readonly packageScripts?: readonly string[];
 }
 
+export interface CodexRun {
+  readonly threadId: string;
+  readonly response: string;
+}
+
+export interface CodexThreadSummary {
+  readonly id: string;
+  readonly name: string | null;
+  readonly preview: string;
+  readonly cwd: string;
+  readonly createdAt: number;
+  readonly updatedAt: number;
+  readonly recencyAt: number | null;
+  readonly model: string | null;
+}
+
+export interface CodexThreadPage {
+  readonly threads: readonly CodexThreadSummary[];
+  readonly nextCursor: string | null;
+}
+
+export interface CodexThread {
+  readonly id: string;
+  readonly name: string | null;
+  readonly preview: string;
+  readonly cwd: string;
+  readonly createdAt: number;
+  readonly updatedAt: number;
+  readonly turns: readonly CodexTurn[];
+}
+
+export interface CodexTurn {
+  readonly id: string;
+  readonly status: string;
+  readonly items: readonly CodexThreadItem[];
+}
+
+export interface CodexThreadItem {
+  readonly id?: string;
+  readonly type: string;
+  readonly [field: string]: unknown;
+}
+
 export type ProjectActionRequest =
   | { readonly id: 'gitFetch' }
   | { readonly id: 'gitPull' }
@@ -729,6 +838,15 @@ export interface PasswordOptions {
 export interface GithubStatus {
   readonly connected: boolean;
   readonly username: string | null;
+  readonly nexusCredentialReady: boolean;
+  readonly nexusCredentialPending: boolean;
+}
+
+export interface NexusAuthStatus {
+  readonly connected: boolean;
+  readonly userId: string | null;
+  readonly email: string | null;
+  readonly displayName: string | null;
 }
 
 /** Mirrors `github::oauth::DeviceAuthorization`. */

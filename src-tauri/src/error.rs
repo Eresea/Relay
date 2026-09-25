@@ -130,6 +130,9 @@ pub enum Error {
     #[error("Nexus readiness endpoint returned an unexpected response")]
     NexusReadinessResponseInvalid,
 
+    #[error("Nexus authentication failed: {0}")]
+    NexusAuth(String),
+
     #[error("OpenCloud request failed: {0}")]
     OpenCloud(String),
 

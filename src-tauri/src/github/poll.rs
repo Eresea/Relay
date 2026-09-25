@@ -14,6 +14,7 @@
 
 use std::collections::HashMap;
 use std::path::Path;
+use std::sync::Mutex;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use serde::{Deserialize, Serialize};
@@ -26,6 +27,8 @@ use super::client::{CiState, Conditional, GitHubClient};
 use super::oauth::{interpret_token_response, DeviceCodeResponse, TokenOutcome};
 use super::rules::{should_notify, GithubConnectorSettings, PrEventKind};
 use super::token_store::{StoredToken, TokenStore};
+
+static POLL_CACHE_LOCK: Mutex<()> = Mutex::new(());
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct TrackedPr {
@@ -255,7 +258,7 @@ async fn run_device_flow_inner<C: GitHubClient, S: EventSink, T: TokenStore>(
                     username,
                 };
                 log::info!("github: writing the token to the keychain");
-                token_store.set(&stored)?;
+                token_store.set(&stored).await?;
                 log::info!("github: token stored");
                 return Ok(stored);
             }
@@ -399,6 +402,11 @@ async fn refresh_stored_token<C: GitHubClient>(
 }
 
 fn load_cache(path: &Path) -> PollCache {
+    let _guard = POLL_CACHE_LOCK.lock().unwrap();
+    read_cache(path)
+}
+
+fn read_cache(path: &Path) -> PollCache {
     std::fs::read_to_string(path)
         .ok()
         .and_then(|raw| serde_json::from_str(&raw).ok())
@@ -415,13 +423,82 @@ pub fn recent_pull_requests(path: &Path) -> Vec<PullRequestSnapshot> {
     pull_requests
 }
 
-fn save_cache(path: &Path, cache: &PollCache) {
-    let Ok(raw) = serde_json::to_string_pretty(cache) else {
-        return;
+pub async fn refresh_from_webhook<C: GitHubClient>(
+    app: &tauri::AppHandle,
+    client: &C,
+    token: &str,
+    username: &str,
+    repo: &str,
+    number: u64,
+) -> Result<PullRequestSnapshot> {
+    let (owner, name) = repo
+        .split_once('/')
+        .ok_or_else(|| Error::GithubRequestFailed("invalid webhook repository".into()))?;
+    let detail = client.fetch_pr(token, owner, name, number).await?;
+    let ci_state = client
+        .fetch_ci_state(token, owner, name, &detail.head.sha)
+        .await?;
+    let current = TrackedPr {
+        state: detail.state.clone(),
+        merged: detail.merged,
+        ci_state,
+        review_requested: detail
+            .requested_reviewers
+            .iter()
+            .any(|reviewer| reviewer.login == username),
     };
-    if let Err(error) = std::fs::write(path, raw) {
+    let snapshot = PullRequestSnapshot {
+        repository: repo.to_string(),
+        number,
+        title: detail.title,
+        url: detail.html_url,
+        state: detail.state,
+        review_requested: current.review_requested,
+        ci_state: current.ci_state,
+        last_seen: now_millis(),
+    };
+    let path = super::poll_cache_path(app);
+    let mut cache = load_cache(&path);
+    let key = format!("{repo}#{number}");
+    cache.prs.insert(key.clone(), current);
+    cache.details.insert(key, snapshot.clone());
+    save_cache_checked(&path, &cache)?;
+    Ok(snapshot)
+}
+
+fn save_cache(path: &Path, cache: &PollCache) {
+    if let Err(error) = save_cache_checked(path, cache) {
         log::warn!("could not persist the GitHub poll cache: {error}");
     }
+}
+
+fn save_cache_checked(path: &Path, cache: &PollCache) -> Result<()> {
+    let _guard = POLL_CACHE_LOCK.lock().unwrap();
+    let mut merged = read_cache(path);
+    if cache.search_etag.is_some() {
+        merged.search_etag = cache.search_etag.clone();
+    }
+    for (key, incoming) in &cache.prs {
+        let existing_seen = merged
+            .details
+            .get(key)
+            .map_or(0, |snapshot| snapshot.last_seen);
+        let incoming_seen = cache
+            .details
+            .get(key)
+            .map_or(0, |snapshot| snapshot.last_seen);
+        if existing_seen > incoming_seen {
+            continue;
+        }
+        merged.prs.insert(key.clone(), incoming.clone());
+        if let Some(snapshot) = cache.details.get(key) {
+            merged.details.insert(key.clone(), snapshot.clone());
+        }
+    }
+    let serialized = serde_json::to_vec_pretty(&merged)
+        .map_err(|error| Error::GithubRequestFailed(error.to_string()))?;
+    std::fs::write(path, serialized)?;
+    Ok(())
 }
 
 /// Runs until cancelled or until the token disappears (the user
@@ -443,23 +520,28 @@ where
     S: EventSink,
     T: TokenStore,
 {
-    let mut cache = load_cache(&cache_path);
-
     loop {
         ctx.checkpoint()?;
 
-        let Some(mut stored) = token_store.get()? else {
+        let settings = read_settings();
+        let stored = match token_store.get().await {
+            Ok(stored) => stored,
+            Err(error) => {
+                log::warn!("could not read the GitHub credential: {error}");
+                tokio::time::sleep(Duration::from_secs(settings.poll_interval_secs)).await;
+                continue;
+            }
+        };
+        let Some(mut stored) = stored else {
             log::info!("github: poll loop found no token, stopping");
             return Ok(());
         };
-
-        let settings = read_settings();
 
         if needs_refresh(stored.expires_at, now_millis()) {
             if let Some(client_id) = super::rules::effective_client_id(&settings) {
                 match refresh_stored_token(&client, client_id, &stored).await {
                     Ok(refreshed) => {
-                        token_store.set(&refreshed)?;
+                        token_store.set(&refreshed).await?;
                         stored = refreshed;
                     }
                     Err(error) => log::warn!("could not refresh the GitHub token: {error}"),
@@ -469,6 +551,7 @@ where
             }
         }
 
+        let mut cache = load_cache(&cache_path);
         match run_poll_cycle(
             &client,
             &sink,
@@ -763,16 +846,17 @@ mod tests {
 
     struct FailingTokenStore;
 
+    #[async_trait::async_trait]
     impl TokenStore for FailingTokenStore {
-        fn get(&self) -> Result<Option<StoredToken>> {
+        async fn get(&self) -> Result<Option<StoredToken>> {
             Ok(None)
         }
 
-        fn set(&self, _token: &StoredToken) -> Result<()> {
+        async fn set(&self, _token: &StoredToken) -> Result<()> {
             Err(Error::TokenStore("simulated keychain failure".to_string()))
         }
 
-        fn clear(&self) -> Result<()> {
+        async fn clear(&self) -> Result<()> {
             Ok(())
         }
     }
@@ -820,7 +904,7 @@ mod tests {
 
         assert_eq!(stored.access_token, "gho_abc");
         assert_eq!(stored.username, "octocat");
-        assert_eq!(token_store.get().unwrap(), Some(stored));
+        assert_eq!(token_store.get().await.unwrap(), Some(stored));
     }
 
     fn blocked_titles(sink: &FakeSink) -> Vec<String> {
@@ -863,7 +947,7 @@ mod tests {
         )
         .await;
         assert!(matches!(result, Err(Error::GithubDeviceFlowDenied)));
-        assert_eq!(token_store.get().unwrap(), None);
+        assert_eq!(token_store.get().await.unwrap(), None);
         assert_eq!(
             blocked_titles(&sink),
             vec![Error::GithubDeviceFlowDenied.to_string()]

@@ -29,6 +29,7 @@ use crate::gmail::{self, GmailSettings, GmailState, GmailStatus, HttpGoogleApi, 
 use crate::jobs::{JobId, JobRegistry};
 #[cfg(mobile)]
 use crate::mobile_updates;
+use crate::nexus_auth;
 use crate::notifications::NotificationRecord;
 use crate::overlay;
 #[cfg(desktop)]
@@ -229,15 +230,34 @@ pub fn vault_export(app: AppHandle, vault: tauri::State<VaultState>) -> Result<S
 /// Whether a GitHub account is connected. Only reads the keychain — never
 /// calls GitHub.
 #[tauri::command]
-pub fn github_status() -> Result<GithubStatus> {
-    github::status()
+pub async fn github_status(app: AppHandle) -> Result<GithubStatus> {
+    github::status(&app).await
 }
 
 #[tauri::command]
 pub async fn github_repositories(
+    app: AppHandle,
     client: tauri::State<'_, HttpGitHubClient>,
 ) -> Result<Vec<RepositorySummary>> {
-    github::repositories(client.inner().clone()).await
+    github::repositories(&app, client.inner().clone()).await
+}
+
+#[tauri::command]
+pub async fn github_register_webhooks(
+    app: AppHandle,
+    repositories: Vec<String>,
+) -> Result<Vec<String>> {
+    github::events::register(&app, repositories).await
+}
+
+#[tauri::command]
+pub fn github_webhook_repositories(app: AppHandle) -> Result<Vec<String>> {
+    github::events::registered_repositories(&app)
+}
+
+#[tauri::command]
+pub async fn github_unregister_webhook(app: AppHandle, repository: String) -> Result<()> {
+    github::events::unregister(&app, &repository).await
 }
 
 #[tauri::command]
@@ -260,8 +280,23 @@ pub fn github_connect_start(
 /// Disconnects the GitHub account: stops the poll job, if running, and
 /// removes the token from the keychain.
 #[tauri::command]
-pub fn github_disconnect(app: AppHandle, jobs: tauri::State<JobRegistry>) -> Result<()> {
-    github::disconnect(&app, &jobs)
+pub async fn github_disconnect(app: AppHandle, jobs: tauri::State<'_, JobRegistry>) -> Result<()> {
+    github::disconnect(&app, &jobs).await
+}
+
+#[tauri::command]
+pub fn nexus_auth_status() -> Result<nexus_auth::NexusAuthStatus> {
+    nexus_auth::status()
+}
+
+#[tauri::command]
+pub fn nexus_auth_start(app: AppHandle) -> Result<()> {
+    nexus_auth::start(&app)
+}
+
+#[tauri::command]
+pub fn nexus_auth_logout() -> Result<()> {
+    nexus_auth::logout()
 }
 
 /// Whether Gmail is connected, mid-handshake, or neither.
@@ -364,6 +399,28 @@ pub async fn scan_workspaces() -> Result<Vec<WorkspaceSummary>> {
     tauri::async_runtime::spawn_blocking(crate::workspaces::scan)
         .await
         .map_err(|error| std::io::Error::other(error.to_string()))?
+}
+
+#[cfg(desktop)]
+#[tauri::command]
+pub async fn codex_send(
+    prompt: String,
+    working_directory: String,
+    thread_id: Option<String>,
+) -> Result<crate::codex::CodexRun> {
+    crate::codex::send(prompt, working_directory, thread_id).await
+}
+
+#[cfg(desktop)]
+#[tauri::command]
+pub async fn codex_list_threads(cursor: Option<String>) -> Result<crate::codex::CodexThreadPage> {
+    crate::codex::list_threads(cursor).await
+}
+
+#[cfg(desktop)]
+#[tauri::command]
+pub async fn codex_read_thread(thread_id: String) -> Result<serde_json::Value> {
+    crate::codex::read_thread(thread_id).await
 }
 
 /// Opens a local Git clone in the platform terminal.

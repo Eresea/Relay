@@ -9,6 +9,7 @@ mod jobs;
 #[cfg(any(mobile, test))]
 #[allow(dead_code)]
 mod mobile_updates;
+mod nexus_auth;
 pub mod nexus_sync;
 mod notifications;
 mod opencloud;
@@ -25,6 +26,7 @@ mod vault;
 mod workspaces;
 
 use tauri::Manager;
+use tauri_plugin_deep_link::DeepLinkExt;
 
 use github::client::HttpGitHubClient;
 use github::GithubState;
@@ -40,9 +42,17 @@ pub fn run() {
     {
         // A second launch must raise the running instance, not start a rival
         // one that fights over the global shortcut and the tray icon.
-        builder = builder.plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
+        builder = builder.plugin(tauri_plugin_single_instance::init(|app, args, _cwd| {
             if let Err(error) = overlay::show_main(app) {
                 log::error!("could not raise the running instance: {error}");
+            }
+            for arg in args {
+                if let Ok(url) = url::Url::parse(&arg) {
+                    let app = app.clone();
+                    tauri::async_runtime::spawn(async move {
+                        nexus_auth::handle_callback(app, url).await;
+                    });
+                }
             }
         }));
         builder = builder.plugin(tauri_plugin_window_state::Builder::default().build());
@@ -60,7 +70,9 @@ pub fn run() {
         .manage(GithubState::default())
         .manage(HttpGitHubClient::default())
         .manage(GmailState::default())
+        .manage(nexus_auth::NexusAuthState::default())
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_deep_link::init())
         .plugin(tauri_plugin_store::Builder::default().build())
         .plugin(
             tauri_plugin_log::Builder::default()
@@ -106,9 +118,15 @@ pub fn run() {
                 opencloud::opencloud_download,
                 commands::github_status,
                 commands::github_repositories,
+                commands::github_register_webhooks,
+                commands::github_webhook_repositories,
+                commands::github_unregister_webhook,
                 commands::github_pull_requests,
                 commands::github_connect_start,
                 commands::github_disconnect,
+                commands::nexus_auth_status,
+                commands::nexus_auth_start,
+                commands::nexus_auth_logout,
                 commands::gmail_status,
                 commands::gmail_get_settings,
                 commands::gmail_set_settings,
@@ -131,6 +149,9 @@ pub fn run() {
                 runtime::runtime_grafana_dashboard_panels,
                 runtime::runtime_leaf_health,
                 runtime::runtime_nexus_readiness,
+                commands::codex_send,
+                commands::codex_list_threads,
+                commands::codex_read_thread,
                 commands::update_status,
                 commands::update_check,
                 commands::update_download,
@@ -167,9 +188,15 @@ pub fn run() {
             opencloud::opencloud_download,
             commands::github_status,
             commands::github_repositories,
+            commands::github_register_webhooks,
+            commands::github_webhook_repositories,
+            commands::github_unregister_webhook,
             commands::github_pull_requests,
             commands::github_connect_start,
             commands::github_disconnect,
+            commands::nexus_auth_status,
+            commands::nexus_auth_start,
+            commands::nexus_auth_logout,
             commands::gmail_status,
             commands::gmail_get_settings,
             commands::gmail_set_settings,
@@ -215,6 +242,24 @@ pub fn run() {
 
     builder
         .setup(|app| {
+            let callback_app = app.handle().clone();
+            app.deep_link().on_open_url(move |event| {
+                for url in event.urls() {
+                    let app = callback_app.clone();
+                    let url = url.clone();
+                    tauri::async_runtime::spawn(async move {
+                        nexus_auth::handle_callback(app, url).await;
+                    });
+                }
+            });
+            if let Some(urls) = app.deep_link().get_current()? {
+                for url in urls {
+                    let app = app.handle().clone();
+                    tauri::async_runtime::spawn(async move {
+                        nexus_auth::handle_callback(app, url).await;
+                    });
+                }
+            }
             #[cfg(desktop)]
             {
                 tray::build(app)?;
@@ -249,7 +294,12 @@ pub fn run() {
 
             let github_client = app.state::<HttpGitHubClient>().inner().clone();
             let job_registry = app.state::<JobRegistry>().inner().clone();
-            github::resume_polling_if_connected(app.handle(), github_client, &job_registry);
+            let github_app = app.handle().clone();
+            github::events::start(github_app.clone());
+            tauri::async_runtime::spawn(async move {
+                github::resume_polling_if_connected(&github_app, github_client, &job_registry)
+                    .await;
+            });
 
             // A connector that stopped polling every time the window closed
             // would be pointless — resume whatever was connected before the
