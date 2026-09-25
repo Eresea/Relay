@@ -9,6 +9,7 @@ import { BackgroundTaskIndicator } from '@shared/background-task-indicator';
 import { Icon } from '@shared/icon';
 import { NotificationPopover } from '@shared/notification-popover';
 import { Projects } from '@features/projects/projects';
+import { Codex } from '@features/codex/codex';
 
 const RAIL_EXPANDED_SETTING_KEY = 'rail.expanded';
 
@@ -25,6 +26,7 @@ const RAIL_EXPANDED_SETTING_KEY = 'rail.expanded';
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [
     BackgroundTaskIndicator,
+    Codex,
     Icon,
     NotificationPopover,
     Projects,
@@ -89,6 +91,16 @@ const RAIL_EXPANDED_SETTING_KEY = 'rail.expanded';
             <span class="rail-icon"><rl-icon name="library" [size]="16" /></span>
             <span class="rail-label">Projects</span>
           </button>
+          <button
+            type="button"
+            class="rail-item"
+            [class.active]="view() === 'codex'"
+            (click)="view.set('codex')"
+            aria-label="Codex"
+          >
+            <span class="rail-icon"><rl-icon name="command" [size]="16" /></span>
+            <span class="rail-label">Codex</span>
+          </button>
         </div>
 
         <div class="rail-bottom">
@@ -108,6 +120,8 @@ const RAIL_EXPANDED_SETTING_KEY = 'rail.expanded';
       <main class="content">
         @if (view() === 'settings') {
           <rl-settings [initialTab]="settingsTab()" />
+        } @else if (view() === 'codex') {
+          <rl-codex />
         } @else if (view() === 'vault') {
           <rl-vault />
         } @else {
@@ -343,7 +357,7 @@ const RAIL_EXPANDED_SETTING_KEY = 'rail.expanded';
 })
 export class Home {
   protected readonly theme = inject(ThemeService);
-  protected readonly view = signal<'home' | 'settings' | 'vault'>('home');
+  protected readonly view = signal<'home' | 'settings' | 'vault' | 'codex'>('home');
   /** Starts collapsed — the safe default while the persisted value (below) is
    * still loading — then reconciles with whatever the user last left it as. */
   protected readonly railExpanded = signal(false);

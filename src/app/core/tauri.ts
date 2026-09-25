@@ -179,6 +179,20 @@ export class TauriBridge {
     return (await this.invoke<WorkspaceSummary[]>('scan_workspaces')) ?? [];
   }
 
+  async codexSend(
+    prompt: string,
+    workingDirectory: string,
+    threadId: string | null,
+  ): Promise<CodexRun> {
+    const result = await this.invoke<CodexRun>('codex_send', {
+      prompt,
+      workingDirectory,
+      threadId,
+    });
+    if (!result) throw new Error('Codex returned no result.');
+    return result;
+  }
+
   async githubRepositories(): Promise<readonly GithubRepositorySummary[]> {
     return (await this.invoke<GithubRepositorySummary[]>('github_repositories')) ?? [];
   }
@@ -477,6 +491,11 @@ export interface WorkspaceSummary {
   readonly currentBranch?: string | null;
   readonly branches?: readonly string[];
   readonly packageScripts?: readonly string[];
+}
+
+export interface CodexRun {
+  readonly threadId: string;
+  readonly response: string;
 }
 
 export type ProjectActionRequest =

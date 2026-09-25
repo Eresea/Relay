@@ -357,6 +357,16 @@ pub async fn scan_workspaces() -> Result<Vec<WorkspaceSummary>> {
         .map_err(|error| std::io::Error::other(error.to_string()))?
 }
 
+#[cfg(desktop)]
+#[tauri::command]
+pub async fn codex_send(
+    prompt: String,
+    working_directory: String,
+    thread_id: Option<String>,
+) -> Result<crate::codex::CodexRun> {
+    crate::codex::send(prompt, working_directory, thread_id).await
+}
+
 /// Opens a local Git clone in the platform terminal.
 #[tauri::command]
 pub fn open_terminal(path: String) -> Result<()> {
