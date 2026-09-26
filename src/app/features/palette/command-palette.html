@@ -8,6 +8,7 @@
     placeholder="Type a command"
     aria-label="Search commands"
     role="combobox"
+    aria-autocomplete="list"
     aria-expanded="true"
     aria-controls="palette-results"
     [attr.aria-activedescendant]="active() ? 'cmd-' + active()!.id : null"
@@ -21,7 +22,7 @@
   id="palette-results"
   role="listbox"
   aria-label="Commands"
-  [attr.aria-busy]="running()"
+  [attr.aria-busy]="running() || loadingThreads()"
 >
   @for (match of flat(); track match.command.id; let index = $index) {
     @let command = match.command;
@@ -62,8 +63,15 @@
     </button>
   } @empty {
     <div class="empty">
-      <p class="title">No matching command</p>
-      <p class="body">Try a shorter word, or press Escape to close.</p>
+      @if (loadingThreads()) {
+        <p class="title">Searching agent threads…</p>
+      } @else if (threadLoadFailed()) {
+        <p class="title">Could not load agent threads</p>
+        <p class="body">Open Agent Threads to retry.</p>
+      } @else {
+        <p class="title">No matching command</p>
+        <p class="body">Try a shorter word, or press Escape to close.</p>
+      }
     </div>
   }
 </div>
@@ -80,6 +88,9 @@
     <span>Could not complete that action.</span><span>Retry</span><rl-kbd [keys]="['Enter']" />
     <span>Close</span><rl-kbd [keys]="['Esc']" />
   } @else {
+    @if (loadingThreads()) {
+      <span>Finding threads…</span>
+    }
     <span>Navigate</span><rl-kbd [keys]="['↑', '↓']" /> <span>Complete</span
     ><rl-kbd [keys]="['Tab']" /> <span>Open</span><rl-kbd [keys]="['Enter']" /> <span>Close</span
     ><rl-kbd [keys]="['Esc']" />

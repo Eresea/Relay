@@ -50,6 +50,7 @@ export type AppEvent =
   | { readonly type: 'openGithubRequested' }
   | { readonly type: 'openRuntimeRequested' }
   | { readonly type: 'openAgentsRequested' }
+  | { readonly type: 'openAgentThreadRequested'; readonly threadId: string }
   | ({ readonly type: 'notification' } & NotificationPayload)
   | { readonly type: 'notificationDone'; readonly jobId: string; readonly ok: boolean }
   | ({ readonly type: 'updateChanged' } & UpdateSnapshot);

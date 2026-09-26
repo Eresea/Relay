@@ -1,4 +1,12 @@
-import { ChangeDetectionStrategy, Component, inject, signal } from '@angular/core';
+import {
+  ChangeDetectionStrategy,
+  Component,
+  effect,
+  inject,
+  input,
+  output,
+  signal,
+} from '@angular/core';
 
 import { TauriBridge, type CodexThread, type CodexThreadDetails } from '@core/tauri';
 import { Icon } from '@shared/icon';
@@ -260,6 +268,10 @@ import { Icon } from '@shared/icon';
 })
 export class AgentThreads {
   private readonly tauri = inject(TauriBridge);
+  private lastRequestedThreadId: string | null = null;
+
+  readonly openThreadId = input<string | null>(null);
+  readonly threadHandled = output<void>();
 
   protected readonly threads = signal<readonly CodexThread[]>([]);
   protected readonly loading = signal(true);
@@ -271,6 +283,25 @@ export class AgentThreads {
 
   constructor() {
     void this.refresh();
+    effect(() => {
+      const threadId = this.openThreadId();
+      if (!threadId) {
+        this.lastRequestedThreadId = null;
+        return;
+      }
+      if (this.loading() || this.lastRequestedThreadId === threadId) return;
+
+      const thread = this.threads().find((item) => item.id === threadId);
+      this.lastRequestedThreadId = threadId;
+      if (!thread) {
+        if (!this.error()) {
+          this.error.set('That thread is no longer available. Refresh and try again.');
+        }
+        this.threadHandled.emit();
+        return;
+      }
+      void this.open(thread).finally(() => this.threadHandled.emit());
+    });
   }
 
   protected async refresh(): Promise<void> {

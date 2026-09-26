@@ -535,12 +535,14 @@ export class TauriBridge {
   }
 
   async nexusAuthStatus(): Promise<NexusAuthStatus> {
-    return (await this.invoke<NexusAuthStatus>('nexus_auth_status')) ?? {
-      connected: false,
-      userId: null,
-      email: null,
-      displayName: null,
-    };
+    return (
+      (await this.invoke<NexusAuthStatus>('nexus_auth_status')) ?? {
+        connected: false,
+        userId: null,
+        email: null,
+        displayName: null,
+      }
+    );
   }
 
   async nexusAuthStart(): Promise<void> {
@@ -552,7 +554,7 @@ export class TauriBridge {
   }
 
   async onNexusAuth(handler: (status: NexusAuthStatus) => void): Promise<() => void> {
-    if (!this.available) return () => {};
+    if (!this.available) return () => undefined;
     const { listen } = await import('@tauri-apps/api/event');
     return listen<NexusAuthStatus>('nexus://auth', (message) => handler(message.payload));
   }
@@ -597,6 +599,7 @@ export type CoreCommand =
   | { readonly id: 'open_github' }
   | { readonly id: 'open_runtime' }
   | { readonly id: 'open_agents' }
+  | { readonly id: 'open_agent_thread'; readonly args: { readonly threadId: string } }
   | { readonly id: 'quit' };
 
 export interface CodexThread {

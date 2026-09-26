@@ -151,7 +151,10 @@ const RAIL_EXPANDED_SETTING_KEY = 'rail.expanded';
         } @else if (view() === 'runtime') {
           <rl-runtime />
         } @else if (view() === 'agents') {
-          <rl-agent-threads />
+          <rl-agent-threads
+            [openThreadId]="requestedAgentThreadId()"
+            (threadHandled)="requestedAgentThreadId.set(null)"
+          />
         } @else {
           <rl-projects />
         }
@@ -385,7 +388,10 @@ const RAIL_EXPANDED_SETTING_KEY = 'rail.expanded';
 })
 export class Home {
   protected readonly theme = inject(ThemeService);
-  protected readonly view = signal<'home' | 'settings' | 'vault' | 'runtime' | 'agents' | 'codex'>('home');
+  protected readonly view = signal<'home' | 'settings' | 'vault' | 'runtime' | 'agents' | 'codex'>(
+    'home',
+  );
+  protected readonly requestedAgentThreadId = signal<string | null>(null);
   /** Starts collapsed — the safe default while the persisted value (below) is
    * still loading — then reconciles with whatever the user last left it as. */
   protected readonly railExpanded = signal(false);
@@ -421,6 +427,10 @@ export class Home {
         if (event.type === 'openVaultRequested') this.view.set('vault');
         if (event.type === 'openRuntimeRequested') this.view.set('runtime');
         if (event.type === 'openAgentsRequested') this.view.set('agents');
+        if (event.type === 'openAgentThreadRequested') {
+          this.requestedAgentThreadId.set(event.threadId);
+          this.view.set('agents');
+        }
         if (event.type === 'openGithubRequested') {
           this.view.set('settings');
           this.settingsTab.set('github');

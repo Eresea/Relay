@@ -57,16 +57,36 @@ export class CommandPalette {
   protected readonly recentIds = signal<readonly string[]>([]);
   protected readonly running = signal(false);
   protected readonly runError = signal(false);
+  protected readonly loadingThreads = signal(false);
+  protected readonly threadLoadFailed = signal(false);
+  private readonly threadCommands = signal<readonly Command[]>([]);
+  private threadLoad: Promise<void> | null = null;
 
-  protected readonly matches = computed(() => search(this.registry.commands(), this.query()));
+  protected readonly matches = computed(() => {
+    const query = this.query();
+    const commands = query.trim()
+      ? [...this.registry.commands(), ...this.threadCommands()]
+      : this.registry.commands();
+    return search(commands, query);
+  });
 
   protected readonly flat = computed(() => {
     const matches = this.matches();
     if (this.query().trim()) return matches;
 
-    const byId = new Map(matches.map((match) => [match.command.id, match]));
+    const byId = new Map(
+      [
+        ...matches,
+        ...this.threadCommands().map((command) => ({
+          command,
+          kind: 'title' as const,
+          score: 0,
+          ranges: [],
+        })),
+      ].map((match) => [match.command.id, match]),
+    );
     const recent = recentCommands(
-      matches.map((match) => match.command),
+      [...byId.values()].map((match) => match.command),
       this.recentIds(),
     ).flatMap((command) => {
       const match = byId.get(command.id);
@@ -115,6 +135,9 @@ export class CommandPalette {
     this.query.set(value);
     this.activeIndex.set(0);
     this.runError.set(false);
+    if (/\b(?:agent|agents|thread|threads|codex|session|conversation)\b/i.test(value)) {
+      void this.loadAgentThreads();
+    }
   }
 
   protected hue(command: Command): string | null {
@@ -151,11 +174,14 @@ export class CommandPalette {
         void this.runActive();
         break;
       case 'Tab':
-        if (this.query().trim() && this.active()) {
+        if (this.query().trim()) {
           event.preventDefault();
+          const active = this.active();
           const input = this.field().nativeElement;
-          input.value = this.active()!.title;
-          this.onQuery(input.value);
+          if (active) {
+            input.value = active.title;
+            this.onQuery(input.value);
+          }
         }
         break;
       case 'Escape':
@@ -192,6 +218,37 @@ export class CommandPalette {
     if (this.running()) return;
     const command = this.active();
     if (command) await this.run(command);
+  }
+
+  private loadAgentThreads(): Promise<void> {
+    if (!this.tauri.available || this.threadLoad) return this.threadLoad ?? Promise.resolve();
+    this.loadingThreads.set(true);
+    this.threadLoad = this.tauri
+      .codexThreads()
+      .then((threads) => {
+        const activeId = this.active()?.id;
+        this.threadCommands.set(
+          threads.map((thread) => ({
+            id: `relay.agents.thread.${thread.id}`,
+            title: `Open ${thread.title}`,
+            group: 'Agent threads',
+            icon: 'message-square',
+            keywords: ['thread', 'agent', 'codex', 'conversation', 'session', thread.cwd],
+            run: () =>
+              this.tauri.runCoreCommand({
+                id: 'open_agent_thread',
+                args: { threadId: thread.id },
+              }),
+          })),
+        );
+        if (activeId) {
+          const activeIndex = this.flat().findIndex((match) => match.command.id === activeId);
+          if (activeIndex >= 0) this.activeIndex.set(activeIndex);
+        }
+      })
+      .catch(() => this.threadLoadFailed.set(true))
+      .finally(() => this.loadingThreads.set(false));
+    return this.threadLoad;
   }
 
   private async dismiss(): Promise<void> {

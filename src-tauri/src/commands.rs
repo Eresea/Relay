@@ -81,7 +81,14 @@ pub enum CoreCommand {
     OpenGithub,
     OpenRuntime,
     OpenAgents,
+    OpenAgentThread(OpenAgentThreadArgs),
     Quit,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct OpenAgentThreadArgs {
+    thread_id: String,
 }
 
 #[tauri::command]
@@ -112,6 +119,16 @@ pub fn run_core_command(app: AppHandle, command: CoreCommand) -> Result<()> {
         CoreCommand::OpenAgents => {
             overlay::show_main(&app)?;
             app.emit(AppEvent::OpenAgentsRequested);
+            Ok(())
+        }
+        CoreCommand::OpenAgentThread(args) => {
+            if args.thread_id.trim().is_empty() {
+                return Err(std::io::Error::other("Thread ID cannot be empty").into());
+            }
+            overlay::show_main(&app)?;
+            app.emit(AppEvent::OpenAgentThreadRequested {
+                thread_id: args.thread_id,
+            });
             Ok(())
         }
         CoreCommand::Quit => {
