@@ -7,6 +7,7 @@ use rand::RngCore;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use tauri::{AppHandle, Emitter, Manager};
+use tauri_plugin_opener::OpenerExt;
 use url::Url;
 
 use crate::error::{Error, Result};
@@ -201,7 +202,7 @@ pub async fn verify_mfa(app: &AppHandle, code: String, recovery_code: String) ->
     Ok(())
 }
 
-pub fn google_start() -> Result<()> {
+pub fn google_start(app: &AppHandle) -> Result<()> {
     let mut authorize = Url::parse(&format!("{NEXUS}/api/v1/auth/oauth/google/start"))
         .map_err(|_| Error::NexusAuth("invalid Google authorization URL".into()))?;
     authorize
@@ -210,7 +211,8 @@ pub fn google_start() -> Result<()> {
         .append_pair("redirect_uri", REDIRECT_URI)
         .append_pair("platform", "desktop")
         .append_pair("handoff", "auto");
-    tauri_plugin_opener::open_url(authorize.as_str(), None::<&str>)
+    app.opener()
+        .open_url(authorize.as_str(), None::<&str>)
         .map_err(|error| Error::NexusAuth(error.to_string()))
 }
 
@@ -412,7 +414,7 @@ pub fn start(app: &AppHandle) -> Result<()> {
         .append_pair("code_challenge", &challenge)
         .append_pair("code_challenge_method", "S256")
         .append_pair("state", &state);
-    if let Err(error) = tauri_plugin_opener::open_url(authorize.as_str(), None::<&str>) {
+    if let Err(error) = app.opener().open_url(authorize.as_str(), None::<&str>) {
         app.state::<NexusAuthState>().pending.lock().unwrap().take();
         return Err(Error::NexusAuth(error.to_string()));
     }

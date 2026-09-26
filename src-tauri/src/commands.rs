@@ -344,8 +344,8 @@ pub async fn nexus_auth_verify_mfa(
 }
 
 #[tauri::command]
-pub fn nexus_auth_google_start() -> Result<()> {
-    nexus_auth::google_start()
+pub fn nexus_auth_google_start(app: AppHandle) -> Result<()> {
+    nexus_auth::google_start(&app)
 }
 
 #[tauri::command]
