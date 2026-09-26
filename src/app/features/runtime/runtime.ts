@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, inject, OnDestroy, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, inject, type OnDestroy, signal } from '@angular/core';
 
 import {
   TauriBridge,
@@ -84,7 +84,9 @@ const RUNTIME_STATUS_STALE_AFTER_MS = 90_000;
                       [class.operational]="leafHealthState() === 'reachable'"
                       [class.stale]="leafHealthState() === 'stale'"
                       [style.color]="leafHealthState() === 'not-ready' ? 'var(--danger)' : null"
-                      [style.background]="leafHealthState() === 'not-ready' ? 'var(--danger-tint)' : null"
+                      [style.background]="
+                        leafHealthState() === 'not-ready' ? 'var(--danger-tint)' : null
+                      "
                     >
                       {{ leafHealthLabel() }} · {{ probeEvidence(leafHealth()) }}
                     </span>
@@ -114,7 +116,9 @@ const RUNTIME_STATUS_STALE_AFTER_MS = 90_000;
                       [class.operational]="nexusHealthState() === 'ready'"
                       [class.stale]="nexusHealthState() === 'stale'"
                       [style.color]="nexusHealthState() === 'not-ready' ? 'var(--danger)' : null"
-                      [style.background]="nexusHealthState() === 'not-ready' ? 'var(--danger-tint)' : null"
+                      [style.background]="
+                        nexusHealthState() === 'not-ready' ? 'var(--danger-tint)' : null
+                      "
                     >
                       {{ nexusHealthLabel() }} · {{ probeEvidence(nexusHealth()) }}
                     </span>

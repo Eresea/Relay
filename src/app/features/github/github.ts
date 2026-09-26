@@ -120,7 +120,9 @@ function connectorErrorMessage(error: unknown): string {
         </div>
         <div class="row">
           @if (nexusAuth().connected) {
-            <p class="label">Connected as <strong>{{ nexusAuth().email || nexusAuth().displayName }}</strong></p>
+            <p class="label">
+              Connected as <strong>{{ nexusAuth().email || nexusAuth().displayName }}</strong>
+            </p>
           } @else {
             <div>
               <p class="label">Connect Relay to Nexus</p>
@@ -131,7 +133,9 @@ function connectorErrorMessage(error: unknown): string {
             </button>
           }
         </div>
-        @if (nexusError()) { <p class="error">{{ nexusError() }}</p> }
+        @if (nexusError()) {
+          <p class="error">{{ nexusError() }}</p>
+        }
       </section>
 
       @switch (status()) {
@@ -228,9 +232,9 @@ function connectorErrorMessage(error: unknown): string {
             <h2 class="u-caption">Nexus webhooks</h2>
             <p class="hint">
               Select repositories where you can manage hooks. Nexus stores pull request deliveries
-              while Relay is offline; Relay applies your notification rules when it reconnects.
-              Your GitHub account must have admin access to each repository. The existing repo
-              scope can manage hooks and also grants broad repository access.
+              while Relay is offline; Relay applies your notification rules when it reconnects. Your
+              GitHub account must have admin access to each repository. The existing repo scope can
+              manage hooks and also grants broad repository access.
             </p>
             @if (!nexusAuth().connected) {
               <p class="hint">Connect your Nexus account to enable webhook delivery.</p>
@@ -271,8 +275,12 @@ function connectorErrorMessage(error: unknown): string {
                 </button>
               </div>
             }
-            @if (webhookError()) { <p class="error">{{ webhookError() }}</p> }
-            @if (webhookSuccess()) { <p class="hint">{{ webhookSuccess() }}</p> }
+            @if (webhookError()) {
+              <p class="error">{{ webhookError() }}</p>
+            }
+            @if (webhookSuccess()) {
+              <p class="hint">{{ webhookSuccess() }}</p>
+            }
           </section>
 
           <section class="group">
@@ -696,7 +704,12 @@ export class Github {
   protected readonly webhookBusy = signal(false);
   protected readonly webhookError = signal('');
   protected readonly webhookSuccess = signal('');
-  protected readonly nexusAuth = signal<NexusAuthStatus>({ connected: false, userId: null, email: null, displayName: null });
+  protected readonly nexusAuth = signal<NexusAuthStatus>({
+    connected: false,
+    userId: null,
+    email: null,
+    displayName: null,
+  });
   protected readonly nexusBusy = signal(false);
   protected readonly nexusError = signal('');
   protected readonly deviceAuth = signal<DeviceAuthorization | null>(null);
@@ -728,12 +741,14 @@ export class Github {
   constructor() {
     void this.refreshStatus();
     void this.refreshNexusAuth();
-    void this.tauri.onNexusAuth((status) => {
-      this.nexusAuth.set(status);
-      this.nexusBusy.set(false);
-      if (!status.connected) this.nexusError.set('Nexus sign-in did not complete. Try again.');
-      else this.nexusError.set('');
-    }).then((unlisten) => this.destroyRef.onDestroy(unlisten));
+    void this.tauri
+      .onNexusAuth((status) => {
+        this.nexusAuth.set(status);
+        this.nexusBusy.set(false);
+        if (!status.connected) this.nexusError.set('Nexus sign-in did not complete. Try again.');
+        else this.nexusError.set('');
+      })
+      .then((unlisten) => this.destroyRef.onDestroy(unlisten));
 
     console.log('[github] component constructed, subscribing to relay://event');
     void this.tauri
@@ -794,8 +809,11 @@ export class Github {
   }
 
   private async refreshNexusAuth(): Promise<void> {
-    try { this.nexusAuth.set(await this.tauri.nexusAuthStatus()); }
-    catch (error) { this.nexusError.set(connectorErrorMessage(error)); }
+    try {
+      this.nexusAuth.set(await this.tauri.nexusAuthStatus());
+    } catch (error) {
+      this.nexusError.set(connectorErrorMessage(error));
+    }
   }
 
   private startConnectFallbackPoll(jobId: string): void {

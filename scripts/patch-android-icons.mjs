@@ -20,11 +20,9 @@ try {
 
   if (result.status !== 0) throw new Error('Tauri Android icon generation failed.');
 
-  cpSync(
-    join(output, 'android'),
-    resolve('src-tauri/gen/android/app/src/main/res'),
-    { recursive: true },
-  );
+  cpSync(join(output, 'android'), resolve('src-tauri/gen/android/app/src/main/res'), {
+    recursive: true,
+  });
 } finally {
   rmSync(output, { recursive: true, force: true });
 }

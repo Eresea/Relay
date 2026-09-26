@@ -92,6 +92,7 @@ const MOBILE_MODULES: readonly MobileModule[] = [
   template: `
     <div
       class="mobile-shell"
+      tabindex="0"
       (keydown)="onShellKeydown($event)"
       (pointerdown)="startRailGesture($event)"
       (pointermove)="moveRailGesture($event)"
@@ -180,6 +181,7 @@ const MOBILE_MODULES: readonly MobileModule[] = [
             placeholder="Find a module"
             aria-label="Find a module"
             role="combobox"
+            aria-autocomplete="list"
             [value]="moduleQuery()"
             [attr.aria-expanded]="railOpen()"
             aria-controls="mobile-module-results"
@@ -1128,14 +1130,18 @@ export class Mobile {
         break;
       case 'Enter':
         event.preventDefault();
-        if (this.activeModule()) this.selectModule(this.activeModule()!);
+        {
+          const active = this.activeModule();
+          if (active) this.selectModule(active);
+        }
         break;
       case 'Tab':
-        if (this.moduleQuery().trim() && this.activeModule()) {
+        if (this.moduleQuery().trim()) {
           event.preventDefault();
+          const active = this.activeModule();
           const input = this.moduleSearch()?.nativeElement;
-          if (input) {
-            input.value = this.activeModule()!.title;
+          if (active && input) {
+            input.value = active.title;
             this.onModuleQuery(input.value);
           }
         }

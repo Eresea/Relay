@@ -707,6 +707,11 @@ mod tests {
                 last_seen: 200,
             },
         );
+        cache.prs = cache
+            .details
+            .iter()
+            .map(|(key, snapshot)| (key.clone(), tracked(&snapshot.state, false, None, false)))
+            .collect();
         save_cache(&path, &cache);
 
         let result = recent_pull_requests(&path);

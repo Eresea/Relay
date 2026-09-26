@@ -213,6 +213,7 @@ fn git_lines(path: &Path, args: &[&str]) -> Vec<String> {
 }
 
 fn hidden_command(program: &str) -> Command {
+    #[allow(unused_mut)] // `creation_flags` mutates the command on Windows only.
     let mut command = Command::new(program);
     #[cfg(windows)]
     {

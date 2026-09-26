@@ -264,15 +264,14 @@ impl CodexClient {
                     continue;
                 }
                 match message.get("method").and_then(Value::as_str) {
-                    Some("item/agentMessage/delta") => {
+                    Some("item/agentMessage/delta")
                         if message.pointer("/params/turnId").and_then(Value::as_str)
-                            == Some(turn_id)
+                            == Some(turn_id) =>
+                    {
+                        if let Some(delta) =
+                            message.pointer("/params/delta").and_then(Value::as_str)
                         {
-                            if let Some(delta) =
-                                message.pointer("/params/delta").and_then(Value::as_str)
-                            {
-                                response.push_str(delta);
-                            }
+                            response.push_str(delta);
                         }
                     }
                     Some("turn/completed")

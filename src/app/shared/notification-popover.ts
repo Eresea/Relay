@@ -1,11 +1,11 @@
 import {
   ChangeDetectionStrategy,
   Component,
-  ElementRef,
   computed,
   effect,
   inject,
   signal,
+  type ElementRef,
   viewChild,
 } from '@angular/core';
 
