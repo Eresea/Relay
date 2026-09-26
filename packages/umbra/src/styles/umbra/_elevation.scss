@@ -1,0 +1,24 @@
+/* Umbra — elevation. Ported verbatim from Umbra tokens/elevation.css.
+   Borders do the work shadows usually do. There are no glows and no coloured shadows. */
+:root {
+  --shadow-none: none;
+  --shadow-xs: 0 1px 1px rgba(0, 0, 0, 0.28);
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.34), 0 0 0 1px rgba(0, 0, 0, 0.12);
+  --shadow-md: 0 6px 16px -6px rgba(0, 0, 0, 0.55);
+  --shadow-lg: 0 18px 44px -12px rgba(0, 0, 0, 0.66);
+  --shadow-control-halo: 0 0 0 3px var(--control-hover-halo-color, transparent);
+  --inset-hairline: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  --focus-ring: 0 0 0 1px var(--ring-edge), 0 0 0 3px var(--ring);
+  --focus-field: 0 0 0 3px var(--ring);
+}
+
+:root.light,
+[data-theme="light"] {
+  --shadow-xs: 0 1px 1px rgba(9, 9, 11, 0.05);
+  --shadow-sm: 0 1px 2px rgba(9, 9, 11, 0.08), 0 0 0 1px rgba(9, 9, 11, 0.04);
+  --shadow-md: 0 8px 20px -8px rgba(9, 9, 11, 0.16);
+  --shadow-lg: 0 20px 48px -16px rgba(9, 9, 11, 0.22);
+  --inset-hairline: inset 0 1px 0 rgba(255, 255, 255, 0.7);
+  --focus-ring: 0 0 0 1px var(--ring-edge), 0 0 0 3px var(--ring);
+  --focus-field: 0 0 0 3px var(--ring);
+}

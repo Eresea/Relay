@@ -1,0 +1,79 @@
+:host {
+  display: block;
+  color: var(--text-body);
+}
+
+:host([data-variant="linear"]) {
+  width: 100%;
+}
+
+:host([data-variant="circular"]) {
+  display: inline-block;
+  width: var(--space-10);
+  aspect-ratio: 1;
+}
+
+.track {
+  display: block;
+  height: var(--space-3);
+  overflow: hidden;
+  border-radius: var(--radius-pill);
+  background: var(--bg-sunken);
+}
+
+.indicator {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: currentColor;
+  transition: width var(--dur-base) var(--ease-standard);
+}
+
+.indicator.indeterminate {
+  animation: umbra-progress-linear var(--dur-indeterminate) linear infinite;
+}
+
+svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  transform: rotate(-90deg);
+}
+
+circle {
+  fill: none;
+  stroke-width: 2.5;
+}
+
+.circle-track {
+  stroke: var(--border-default);
+}
+
+.circle-indicator {
+  stroke: currentColor;
+  stroke-dasharray: 100;
+  stroke-linecap: round;
+  transition: stroke-dashoffset var(--dur-base) var(--ease-standard);
+}
+
+.circle-indicator.indeterminate {
+  stroke-dasharray: 28 72;
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: umbra-progress-spin var(--dur-indeterminate) linear infinite;
+}
+
+@keyframes umbra-progress-linear {
+  from {
+    transform: translateX(-110%);
+  }
+  to {
+    transform: translateX(260%);
+  }
+}
+
+@keyframes umbra-progress-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}

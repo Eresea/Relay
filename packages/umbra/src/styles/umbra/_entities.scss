@@ -1,0 +1,67 @@
+/* Umbra — entity hues. Identity colour for long-lived objects (workspaces,
+   services, resources and active processes).
+
+   Recipe, never improvised: 13% fill, 30% edge, full-saturation glyph, matching track.
+   Hue means WHICH object. Status means HOW IT IS GOING. Never colour a tile red for
+   failure — that is --status-blocked on the dot and the track. */
+:root {
+  --entity-indigo: #6aa6ff;
+  --entity-indigo-fill: rgba(106, 166, 255, 0.13);
+  --entity-indigo-edge: rgba(106, 166, 255, 0.3);
+  --entity-violet: #a78bfa;
+  --entity-violet-fill: rgba(167, 139, 250, 0.13);
+  --entity-violet-edge: rgba(167, 139, 250, 0.3);
+  --entity-cyan: #22d3ee;
+  --entity-cyan-fill: rgba(34, 211, 238, 0.13);
+  --entity-cyan-edge: rgba(34, 211, 238, 0.3);
+  --entity-emerald: #34d399;
+  --entity-emerald-fill: rgba(52, 211, 153, 0.13);
+  --entity-emerald-edge: rgba(52, 211, 153, 0.3);
+  --entity-amber: #fbbf24;
+  --entity-amber-fill: rgba(251, 191, 36, 0.13);
+  --entity-amber-edge: rgba(251, 191, 36, 0.3);
+  --entity-orange: #fb923c;
+  --entity-orange-fill: rgba(251, 146, 60, 0.13);
+  --entity-orange-edge: rgba(251, 146, 60, 0.3);
+  --entity-rose: #fb7185;
+  --entity-rose-fill: rgba(251, 113, 133, 0.13);
+  --entity-rose-edge: rgba(251, 113, 133, 0.3);
+
+  /* status — lifecycle state, orthogonal to entity hue */
+  --status-running: var(--green-400);
+  --status-waiting: var(--amber-400);
+  --status-blocked: var(--red-400);
+  --status-done: var(--zinc-500);
+  --status-idle: var(--zinc-600);
+}
+
+:root.light,
+[data-theme="light"] {
+  --entity-indigo: #2563eb;
+  --entity-indigo-fill: rgba(37, 99, 235, 0.09);
+  --entity-indigo-edge: rgba(37, 99, 235, 0.22);
+  --entity-violet: #7c3aed;
+  --entity-violet-fill: rgba(124, 58, 237, 0.09);
+  --entity-violet-edge: rgba(124, 58, 237, 0.22);
+  --entity-cyan: #0e7490;
+  --entity-cyan-fill: rgba(14, 116, 144, 0.09);
+  --entity-cyan-edge: rgba(14, 116, 144, 0.22);
+  --entity-emerald: #059669;
+  --entity-emerald-fill: rgba(5, 150, 105, 0.09);
+  --entity-emerald-edge: rgba(5, 150, 105, 0.22);
+  --entity-amber: #b45309;
+  --entity-amber-fill: rgba(180, 83, 9, 0.09);
+  --entity-amber-edge: rgba(180, 83, 9, 0.22);
+  --entity-orange: #c2410c;
+  --entity-orange-fill: rgba(194, 65, 12, 0.09);
+  --entity-orange-edge: rgba(194, 65, 12, 0.22);
+  --entity-rose: #e11d48;
+  --entity-rose-fill: rgba(225, 29, 72, 0.09);
+  --entity-rose-edge: rgba(225, 29, 72, 0.22);
+
+  --status-running: var(--green-500);
+  --status-waiting: var(--amber-500);
+  --status-blocked: var(--red-600);
+  --status-done: var(--zinc-400);
+  --status-idle: var(--zinc-300);
+}

@@ -1,0 +1,207 @@
+<div class="date-field">
+  @if (label()) {
+    <label class="date-label" [for]="controlId()">
+      {{ label() }}
+      @if (required()) { <span aria-hidden="true">*</span> }
+    </label>
+  }
+
+  <div
+    class="date-control"
+    [attr.data-invalid]="!!resolvedError() || null"
+    [attr.data-disabled]="disabled() || null"
+    (focusout)="onControlBlur($event)"
+  >
+    <input type="hidden" [attr.name]="name()" [value]="value() ?? ''" [disabled]="disabled()" />
+    <div class="date-segments" role="group" [attr.aria-label]="label() || ariaLabel() || 'Date'">
+      <input
+        #segment
+        class="date-segment date-segment-day"
+        type="text"
+        [id]="controlId()"
+        [value]="day()"
+        [placeholder]="placeholderParts()[0]"
+        [attr.aria-label]="label() ? null : ariaLabel() ? ariaLabel() + ', day' : 'Day'"
+        [attr.aria-describedby]="describedBy()"
+        [attr.aria-invalid]="!!resolvedError() || null"
+        [attr.aria-required]="required() || null"
+        inputmode="numeric"
+        autocomplete="off"
+        maxlength="2"
+        [required]="required()"
+        [disabled]="disabled()"
+        [readOnly]="readonly()"
+        (input)="onSegmentInput($event, 0)"
+        (keydown)="onSegmentKeydown($event, 0)"
+        (focus)="onSegmentFocus($event)"
+        (paste)="onSegmentPaste($event)"
+      />
+      <span class="date-separator" aria-hidden="true">/</span>
+      <input
+        #segment
+        class="date-segment date-segment-month"
+        type="text"
+        [value]="month()"
+        [placeholder]="placeholderParts()[1]"
+        [attr.aria-label]="(ariaLabel() || label() || 'Date') + ', month'"
+        [attr.aria-describedby]="describedBy()"
+        [attr.aria-invalid]="!!resolvedError() || null"
+        [attr.aria-required]="required() || null"
+        inputmode="numeric"
+        autocomplete="off"
+        maxlength="2"
+        [required]="required()"
+        [disabled]="disabled()"
+        [readOnly]="readonly()"
+        (input)="onSegmentInput($event, 1)"
+        (keydown)="onSegmentKeydown($event, 1)"
+        (focus)="onSegmentFocus($event)"
+        (paste)="onSegmentPaste($event)"
+      />
+      <span class="date-separator" aria-hidden="true">/</span>
+      <input
+        #segment
+        class="date-segment date-segment-year"
+        type="text"
+        [value]="year()"
+        [placeholder]="placeholderParts()[2]"
+        [attr.aria-label]="(ariaLabel() || label() || 'Date') + ', year'"
+        [attr.aria-describedby]="describedBy()"
+        [attr.aria-invalid]="!!resolvedError() || null"
+        [attr.aria-required]="required() || null"
+        inputmode="numeric"
+        autocomplete="off"
+        maxlength="4"
+        [required]="required()"
+        [disabled]="disabled()"
+        [readOnly]="readonly()"
+        (input)="onSegmentInput($event, 2)"
+        (keydown)="onSegmentKeydown($event, 2)"
+        (focus)="onSegmentFocus($event)"
+        (paste)="onSegmentPaste($event)"
+      />
+    </div>
+
+    @if (showClear() && value() && !disabled() && !readonly()) {
+      <button type="button" class="date-action" aria-label="Clear date" (click)="clearDate()">
+        <svg class="date-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18" /></svg>
+      </button>
+    }
+
+    <button
+      #calendarTrigger
+      type="button"
+      class="date-action date-calendar-trigger"
+      [attr.aria-label]="calendarTriggerLabel()"
+      [attr.aria-controls]="calendarId"
+      [attr.aria-expanded]="open()"
+      aria-haspopup="dialog"
+      [disabled]="disabled() || readonly()"
+      (click)="openCalendar()"
+    >
+      <svg class="date-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="2" /><path d="M16 3v4M8 3v4M3 10h18" /></svg>
+    </button>
+
+    <ng-template #calendarTemplate>
+      <div [id]="calendarId" class="calendar" role="dialog" aria-label="Choose date" (keydown.escape)="closeCalendar($event)">
+        <div class="calendar-heading">
+          <button
+            type="button"
+            class="calendar-nav"
+            [attr.aria-label]="calendarView() === 'days' ? 'Previous month' : calendarView() === 'months' ? 'Previous year' : 'Previous decade'"
+            [disabled]="!canGoPrevious()"
+            (click)="previousPeriod()"
+          >
+            <svg class="date-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m15 18-6-6 6-6" /></svg>
+          </button>
+          <div class="calendar-period">
+            <button
+              type="button"
+              class="calendar-period-button"
+              [attr.data-viewed]="calendarView() === 'months' ? '' : null"
+              [attr.aria-expanded]="calendarView() === 'months'"
+              [attr.aria-label]="'Choose month, ' + monthLabel()"
+              (click)="showMonths()"
+            >{{ monthLabel() }}</button>
+            <button
+              type="button"
+              class="calendar-period-button"
+              [attr.data-viewed]="calendarView() === 'years' ? '' : null"
+              [attr.aria-expanded]="calendarView() === 'years'"
+              [attr.aria-label]="'Choose year, ' + yearLabel()"
+              (click)="showYears()"
+            >{{ yearLabel() }}</button>
+          </div>
+          <button
+            type="button"
+            class="calendar-nav"
+            [attr.aria-label]="calendarView() === 'days' ? 'Next month' : calendarView() === 'months' ? 'Next year' : 'Next decade'"
+            [disabled]="!canGoNext()"
+            (click)="nextPeriod()"
+          >
+            <svg class="date-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m9 18 6-6-6-6" /></svg>
+          </button>
+        </div>
+
+        @switch (calendarView()) {
+          @case ('days') {
+            <div class="calendar-grid calendar-weekdays" aria-hidden="true">
+              @for (day of weekdays; track day) { <span>{{ day }}</span> }
+            </div>
+            <div class="calendar-grid calendar-days">
+              @for (item of calendarDays(); track item.date.getTime()) {
+                <button
+                  type="button"
+                  class="calendar-day"
+                  [attr.data-outside]="item.outsideMonth ? '' : null"
+                  [attr.data-today]="item.today ? '' : null"
+                  [attr.data-selected]="item.selected ? '' : null"
+                  [attr.aria-current]="item.today ? 'date' : null"
+                  [attr.aria-label]="item.ariaLabel"
+                  (click)="selectDate(item.date)"
+                >{{ item.date.getDate() }}</button>
+              }
+            </div>
+          }
+          @case ('months') {
+            <div class="calendar-choice-grid calendar-months" role="group" aria-label="Choose month">
+              @for (month of months; track $index) {
+                <button
+                  type="button"
+                  class="calendar-choice"
+                  [attr.data-viewed]="$index === viewDate().getMonth() ? '' : null"
+                  [attr.aria-label]="month + ($index === viewDate().getMonth() ? ', currently displayed' : '')"
+                  (click)="selectMonth($index)"
+                >{{ month.slice(0, 3) }}</button>
+              }
+            </div>
+          }
+          @case ('years') {
+            <div class="calendar-choice-grid calendar-years" role="group" aria-label="Choose year">
+              @for (year of yearRange(); track year) {
+                <button
+                  type="button"
+                  class="calendar-choice"
+                  [attr.data-viewed]="year === viewDate().getFullYear() ? '' : null"
+                  [attr.aria-label]="year + (year === viewDate().getFullYear() ? ', currently displayed' : '')"
+                  (click)="selectYear(year)"
+                >{{ year }}</button>
+              }
+            </div>
+          }
+        }
+
+        <div class="calendar-footer">
+          <button type="button" (click)="selectToday()">Today</button>
+          <button type="button" (click)="closeCalendar()">Cancel</button>
+        </div>
+      </div>
+    </ng-template>
+  </div>
+
+  @if (resolvedError()) {
+    <small class="date-message date-error" [id]="errorId">{{ resolvedError() }}</small>
+  } @else if (hint()) {
+    <small class="date-message" [id]="hintId">{{ hint() }}</small>
+  }
+</div>

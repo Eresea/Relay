@@ -1,0 +1,87 @@
+<div class="layout">
+  @if (label()) {
+    <label class="label" [for]="controlId()">
+      {{ label() }}
+      @if (required()) {
+        <span class="required" aria-hidden="true">*</span>
+      }
+    </label>
+  }
+
+  <div
+    class="field"
+    [attr.data-invalid]="hasError() || null"
+    [attr.data-disabled]="disabled() || null"
+  >
+    <span class="slot prefix">
+      <ng-content select="[umbraInputPrefix]" />
+    </span>
+    <input
+      #control
+      [id]="controlId()"
+      [type]="visibleType()"
+      [value]="value()"
+      [attr.name]="name()"
+      [placeholder]="placeholder()"
+      [attr.autocomplete]="autocomplete()"
+      [attr.inputmode]="inputMode()"
+      [attr.minlength]="minLength()"
+      [attr.maxlength]="maxLength()"
+      [attr.min]="nativeMin()"
+      [attr.max]="nativeMax()"
+      [attr.step]="step()"
+      [attr.pattern]="nativePattern()"
+      [disabled]="disabled()"
+      [readOnly]="readonly()"
+      [required]="required()"
+      [attr.spellcheck]="spellcheck()"
+      [attr.aria-invalid]="hasError() || null"
+      [attr.aria-label]="ariaLabelledBy() || label() ? null : ariaLabel()"
+      [attr.aria-labelledby]="ariaLabelledBy()"
+      [attr.aria-describedby]="describedBy()"
+      (input)="onInput($event)"
+      (blur)="touch.emit()"
+      (keydown)="onKeydown($event)"
+    />
+    <span class="slot suffix">
+      <ng-content select="[umbraInputSuffix]" />
+    </span>
+    @if (showClear() && value() && !disabled() && !readonly()) {
+      <button
+        type="button"
+        class="action"
+        [attr.aria-label]="clearLabel()"
+        (click)="clear()"
+      >
+        Clear
+      </button>
+    }
+    @if (type() === 'password' && !disabled()) {
+      <button
+        type="button"
+        class="action"
+        [attr.aria-label]="
+          passwordVisible() ? 'Hide password' : passwordLabel()
+        "
+        [attr.aria-pressed]="passwordVisible()"
+        (click)="togglePassword()"
+      >
+        {{ passwordVisible() ? 'Hide password' : 'Show password' }}
+      </button>
+    }
+  </div>
+
+  @if (error()) {
+    <small class="description error" [id]="errorId">{{ error() }}</small>
+  } @else if (hint()) {
+    <small class="description" [id]="hintId">{{ hint() }}</small>
+  }
+  @if (showCount()) {
+    <small class="count" [id]="countId">
+      {{ value().length }}
+      @if (maxLength() !== undefined) {
+        / {{ maxLength() }}
+      }
+    </small>
+  }
+</div>

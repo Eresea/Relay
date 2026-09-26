@@ -1,0 +1,152 @@
+:host {
+  position: relative;
+  display: inline-block;
+  vertical-align: middle;
+}
+
+:host(.umbra-button-host--icon) { width: var(--control-h); height: var(--control-h); }
+
+@property --umbra-button-progress-angle {
+  syntax: "<angle>";
+  initial-value: 0deg;
+  inherits: false;
+}
+
+.umbra-button {
+  position: relative;
+  display: inline-flex;
+  width: 100%;
+  height: var(--control-h);
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-3);
+  padding: 0 var(--space-6);
+  border: var(--border-width) solid transparent;
+  border-radius: var(--radius-md);
+  background: var(--primary);
+  color: var(--primary-text);
+  font: var(--type-ui);
+  white-space: nowrap;
+  user-select: none;
+  box-shadow: var(--shadow-xs);
+  transition: var(--transition-control), opacity var(--dur-fast) var(--ease-standard);
+  --control-hover-halo-color: var(--primary-quiet);
+}
+.umbra-button:hover:not(:disabled) {
+  background: var(--primary-hover);
+  box-shadow: var(--shadow-xs), var(--shadow-control-halo);
+}
+.umbra-button:active:not(:disabled) { transform: translateY(var(--control-press-offset)); }
+.umbra-button[aria-pressed="true"] {
+  background: color-mix(in srgb, var(--primary) 94%, var(--text-inverted));
+  font-weight: var(--weight-semibold);
+}
+.umbra-button:focus-visible { outline: none; box-shadow: var(--focus-ring); }
+.umbra-button:disabled { cursor: not-allowed; }
+.umbra-button:disabled:not([data-loading]) { opacity: 0.45; }
+.umbra-button[data-loading]:not([data-size="icon"])::after {
+  content: "";
+  position: absolute;
+  inset: calc(-1 * var(--border-width));
+  padding: var(--space-1);
+  border-radius: inherit;
+  background: conic-gradient(from var(--umbra-button-progress-angle), transparent 0 64%, currentColor 78%, transparent 92%);
+  pointer-events: none;
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  animation: umbra-button-border-progress var(--dur-indeterminate) linear infinite;
+}
+.umbra-button[data-variant="secondary"] {
+  border-color: var(--border-default);
+  background: var(--surface-raised);
+  color: var(--text-body);
+}
+.umbra-button[data-variant="secondary"]:hover:not(:disabled),
+.umbra-button[data-variant="ghost"]:hover:not(:disabled) { background: var(--surface-hover); }
+.umbra-button[data-variant="secondary"]:hover:not(:disabled) { border-color: var(--border-strong); }
+.umbra-button[data-variant="secondary"][aria-pressed="true"] {
+  background: color-mix(in srgb, var(--surface-raised) 94%, var(--text-body));
+}
+.umbra-button[data-variant="outline"] {
+  border-color: var(--border-default);
+  background: var(--bg-app);
+  color: var(--text-body);
+  box-shadow: none;
+}
+.umbra-button[data-variant="outline"]:hover:not(:disabled) {
+  border-color: var(--border-strong);
+  background: var(--surface-hover);
+}
+.umbra-button[data-variant="outline"][aria-pressed="true"] {
+  background: color-mix(in srgb, var(--bg-app) 94%, var(--text-body));
+}
+.umbra-button[data-variant="ghost"],
+.umbra-button[data-variant="link"] { background: transparent; color: var(--text-body); box-shadow: none; }
+.umbra-button[data-variant="ghost"][aria-pressed="true"],
+.umbra-button[data-variant="link"][aria-pressed="true"] { background: var(--surface-selected); }
+.umbra-button[data-variant="destructive"] {
+  background: var(--danger);
+  color: var(--text-inverted);
+  --control-hover-halo-color: var(--danger-quiet);
+}
+.umbra-button[data-variant="destructive"][aria-pressed="true"] {
+  background: color-mix(in srgb, var(--danger) 94%, var(--text-inverted));
+}
+.umbra-button[data-variant="destructive"]:hover:not(:disabled) {
+  background: var(--danger-hover);
+  box-shadow: var(--shadow-xs), var(--shadow-control-halo);
+}
+.umbra-button[data-variant="link"] { height: auto; padding: 0; text-underline-offset: var(--space-2); }
+.umbra-button[data-variant="link"]:hover:not(:disabled) { color: var(--text-link-hover); text-decoration: underline; }
+
+.umbra-button[data-size="sm"] { height: var(--control-h-sm); padding-inline: var(--space-5); font-size: var(--text-xs); }
+.umbra-button[data-size="lg"] { height: var(--control-h-lg); padding-inline: var(--space-8); font-size: var(--text-base); }
+.umbra-button[data-size="icon"] {
+  width: var(--control-h);
+  height: var(--control-h);
+  padding: 0;
+  border-radius: var(--radius-md);
+}
+.umbra-button[data-size="icon"] .labels { display: none; }
+
+.icon-slot { position: relative; display: inline-grid; width: var(--space-7); height: var(--space-7); flex: 0 0 auto; place-items: center; }
+.icon-slot:empty { display: none; }
+.icon-slot :where(svg, img) { width: 100%; height: 100%; }
+.umbra-button[data-size="sm"] .icon-slot { width: var(--space-6); height: var(--space-6); }
+.umbra-button[data-size="lg"] .icon-slot { width: var(--space-8); height: var(--space-8); }
+.umbra-button[data-icon-position="end"] .icon-slot { order: 2; }
+
+.labels { display: inline-grid; }
+.label,
+.loading-label { grid-area: 1 / 1; transition: opacity var(--dur-fast) var(--ease-standard), transform var(--dur-fast) var(--ease-standard); }
+.loading-label { opacity: 0; transform: translateY(var(--space-1)); }
+.umbra-button[data-loading] .loading-label { opacity: 1; transform: translateY(0); }
+.umbra-button[data-loading]:has(.loading-label) .label { opacity: 0; transform: translateY(calc(-1 * var(--space-1))); }
+
+.progress-ring {
+  position: absolute;
+  inset: var(--space-1);
+  width: calc(100% - 2 * var(--space-1));
+  height: calc(100% - 2 * var(--space-1));
+  fill: none;
+  stroke-width: var(--space-1);
+  transform: rotate(-90deg);
+  pointer-events: none;
+  color: var(--primary-text);
+}
+:host:has(.umbra-button[data-variant="secondary"]) .progress-ring,
+:host:has(.umbra-button[data-variant="outline"]) .progress-ring,
+:host:has(.umbra-button[data-variant="ghost"]) .progress-ring,
+:host:has(.umbra-button[data-variant="link"]) .progress-ring { color: var(--text-body); }
+:host:has(.umbra-button[data-variant="destructive"]) .progress-ring { color: var(--text-inverted); }
+.progress-ring__track { stroke: color-mix(in srgb, currentColor 20%, transparent); }
+.progress-ring__value { stroke: currentColor; stroke-linecap: round; stroke-dasharray: 100; transition: stroke-dashoffset var(--dur-fast); }
+.progress-ring--indeterminate { animation: umbra-fade-in var(--dur-fast) var(--ease-out), umbra-spin var(--dur-indeterminate) linear infinite; }
+.progress-ring--indeterminate .progress-ring__value { stroke-dashoffset: 72; }
+@keyframes umbra-button-border-progress { to { --umbra-button-progress-angle: 360deg; } }
+
+@media (prefers-reduced-motion: reduce) {
+  .umbra-button,
+  .progress-ring__value { transition: none; }
+}

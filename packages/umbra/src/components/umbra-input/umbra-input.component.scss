@@ -1,0 +1,143 @@
+:host {
+  display: block;
+  width: 100%;
+  min-width: 0;
+}
+
+:host([data-type='color']) {
+  width: fit-content;
+}
+
+.layout {
+  display: grid;
+  gap: var(--space-3);
+  min-width: 0;
+}
+
+.label {
+  color: var(--text-body);
+  font: var(--type-ui);
+}
+
+.required {
+  margin-inline-start: var(--space-1);
+  color: var(--text-muted);
+}
+
+.field {
+  display: flex;
+  min-width: 0;
+  min-height: var(--control-h);
+  align-items: center;
+  border: var(--border-width) solid var(--border-default);
+  border-radius: var(--radius-md);
+  background: var(--bg-sunken);
+  color: var(--text-body);
+  transition: var(--transition-control);
+}
+
+.field:hover:not([data-disabled='true']) {
+  border-color: var(--border-strong);
+}
+
+.field:focus-within {
+  border-color: var(--border-focus);
+  background: var(--bg-app);
+  box-shadow: var(--focus-field);
+}
+
+.field[data-invalid='true'] {
+  border-color: var(--danger);
+}
+
+.field[data-disabled='true'] {
+  opacity: 0.5;
+}
+
+.slot {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  color: var(--text-muted);
+}
+
+.slot:empty {
+  display: none;
+}
+
+.prefix {
+  padding-inline-start: var(--space-3);
+}
+
+.suffix {
+  padding-inline-end: var(--space-3);
+}
+
+input {
+  box-sizing: border-box;
+  display: block;
+  width: 100%;
+  min-width: 0;
+  min-height: calc(var(--control-h) - 2 * var(--border-width));
+  flex: 1 1 auto;
+  border: 0;
+  padding-inline: var(--space-3);
+  background: transparent;
+  color: inherit;
+  font: var(--type-ui);
+  outline: none;
+}
+
+input::placeholder {
+  color: var(--text-muted);
+  opacity: 1;
+}
+
+input:disabled {
+  cursor: not-allowed;
+}
+
+.action {
+  display: inline-flex;
+  min-height: var(--control-h-sm);
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: var(--radius-sm);
+  padding-inline: var(--space-2);
+  background: transparent;
+  color: var(--text-muted);
+  font: var(--type-caption);
+  white-space: nowrap;
+  transition: var(--transition-control);
+}
+
+.action:hover {
+  background: var(--surface-hover);
+  color: var(--text-body);
+}
+
+.action:active {
+  transform: translateY(0.5px);
+}
+
+.action:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+.description,
+.count {
+  color: var(--text-muted);
+  font: var(--type-caption);
+}
+
+.error {
+  color: var(--danger);
+}
+
+.count {
+  justify-self: end;
+  font: var(--type-mono);
+}

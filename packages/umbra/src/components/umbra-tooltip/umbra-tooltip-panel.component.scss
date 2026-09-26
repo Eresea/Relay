@@ -1,0 +1,15 @@
+:host {
+  display: block;
+  max-inline-size: min(calc(var(--space-32) * 4), calc(100vw - var(--space-8)));
+  overflow-wrap: anywhere;
+  border: var(--border-width) solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  padding: var(--space-2) var(--space-3);
+  background: var(--surface-overlay);
+  color: var(--text-body);
+  box-shadow: var(--shadow-md);
+  font: var(--type-caption);
+  white-space: pre-line;
+  pointer-events: none;
+  animation: umbra-scale-in var(--dur-fast) var(--ease-out) both;
+}

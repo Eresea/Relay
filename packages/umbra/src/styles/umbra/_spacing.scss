@@ -1,0 +1,32 @@
+/* Umbra spacing tokens. 2px base unit. */
+:root {
+  --border-width: 1px;
+  --space-0: 0px;
+  --space-1: 2px;
+  --space-2: 4px;
+  --space-3: 6px;
+  --space-4: 8px;
+  --space-5: 10px;
+  --space-6: 12px;
+  --space-7: 14px;
+  --space-8: 16px;
+  --space-10: 20px;
+  --space-12: 24px;
+  --space-14: 28px;
+  --space-16: 32px;
+  --space-20: 40px;
+  --space-24: 48px;
+  --space-32: 64px;
+
+  /* layout constants for desktop shells */
+  --sidebar-w: 248px;
+  --sidebar-w-collapsed: 56px;
+  --titlebar-h: 38px;
+  --toolbar-h: 44px;
+  --row-h: 34px;
+  --control-h-sm: 28px;
+  --control-h: 32px;
+  --control-h-lg: 38px;
+  --content-max: 760px;
+  --overlay-min-w: 12rem;
+}

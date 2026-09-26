@@ -1,0 +1,116 @@
+/* Umbra baseline styles. Consumers may include these globally. */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  color-scheme: dark;
+}
+
+html.light,
+html[data-theme="light"] {
+  color-scheme: light;
+}
+
+body {
+  margin: 0;
+  background: var(--bg-app);
+  color: var(--text-body);
+  font: var(--type-body);
+  letter-spacing: var(--tracking-snug);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+a {
+  color: var(--text-link);
+  text-decoration: none;
+}
+
+a:hover {
+  color: var(--text-link-hover);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+::selection {
+  background: var(--accent-quiet);
+  color: var(--text-body);
+}
+
+input::selection,
+textarea::selection {
+  background: var(--input-selection-background);
+  color: var(--text-body);
+}
+
+/* Focus must always be obvious. One ring, on the element that owns the state. */
+:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+/* Text-entry elements never draw their own ring — their wrapper owns the single
+   surrounding border that changes with state. */
+input:focus,
+input:focus-visible,
+textarea:focus,
+textarea:focus-visible,
+select:focus,
+select:focus-visible {
+  outline: none !important;
+  box-shadow: none;
+}
+
+/* The cursor never changes. Affordance is carried by the hover tint and ink lift.
+   Only disabled controls override the default arrow. */
+button,
+[role="button"],
+summary {
+  cursor: default;
+}
+
+button:disabled,
+[aria-disabled="true"] {
+  cursor: not-allowed;
+}
+
+/* Numbers never jitter while the clock runs. */
+.u-mono,
+[data-mono] {
+  font: var(--type-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+/* The uppercase micro-caption — the single exception to sentence case. */
+.u-caption {
+  font: var(--type-ui);
+  font-size: var(--text-2xs);
+  font-weight: var(--weight-medium);
+  letter-spacing: var(--tracking-wide);
+  text-transform: uppercase;
+  color: var(--text-subtle);
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--border-strong);
+  border-radius: var(--radius-pill);
+  border: 3px solid transparent;
+  background-clip: content-box;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-strong) transparent;
+}

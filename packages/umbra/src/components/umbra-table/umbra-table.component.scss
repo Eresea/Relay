@@ -1,0 +1,192 @@
+:host {
+  display: block;
+  min-width: 0;
+}
+
+.umbra-table {
+  position: relative;
+  overflow: auto;
+  isolation: isolate;
+  border: var(--border-width) solid var(--border-default);
+  border-radius: var(--radius-md);
+  background: var(--bg-app);
+  color: var(--text-body);
+  font: var(--type-ui);
+  contain: strict;
+  overscroll-behavior: contain;
+}
+
+.umbra-table__header {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  display: flex;
+  height: var(--control-h-lg);
+  border-bottom: var(--border-width) solid var(--border-default);
+  background: var(--bg-sunken);
+}
+
+.umbra-table__body {
+  position: relative;
+  min-height: var(--row-h);
+}
+
+.umbra-table__row {
+  position: absolute;
+  top: 0;
+  left: 0;
+  display: flex;
+  border-bottom: var(--border-width) solid var(--border-subtle);
+  background: var(--bg-app);
+}
+
+.umbra-table__row:hover {
+  background: var(--surface-hover);
+}
+
+.umbra-table__row[aria-selected='true'] {
+  background: var(--surface-selected);
+  font-weight: var(--weight-medium);
+}
+
+.umbra-table__row[aria-selected='true']:hover {
+  background: var(--surface-active);
+}
+
+.umbra-table__row--skeleton {
+  pointer-events: none;
+}
+
+.umbra-table__skeleton-cell {
+  max-width: 100%;
+}
+
+.umbra-table__cell {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  box-sizing: border-box;
+  overflow: hidden;
+  padding-inline: var(--space-6);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.umbra-table__cell--pinned {
+  position: sticky;
+  flex: 0 0 auto;
+  z-index: 2;
+  background: inherit;
+}
+
+.umbra-table__right-start {
+  margin-inline-start: auto;
+}
+
+.umbra-table__header-cell {
+  z-index: 11;
+  padding: 0;
+  font: var(--type-caption);
+  font-weight: var(--weight-semibold);
+  letter-spacing: var(--tracking-wide);
+  text-transform: uppercase;
+}
+
+.umbra-table__header-cell.umbra-table__cell--pinned {
+  z-index: 12;
+}
+
+.umbra-table__sort-button {
+  display: flex;
+  width: 100%;
+  height: 100%;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  overflow: hidden;
+  border: 0;
+  padding-inline: var(--space-6);
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: start;
+}
+
+.umbra-table__sort-button:not(:disabled):hover,
+.umbra-table__resize-handle:hover {
+  background: var(--surface-hover);
+}
+
+.umbra-table__sort-button:disabled {
+  color: var(--text-muted);
+}
+
+.umbra-table__sort-button:focus-visible,
+.umbra-table__data-cell:focus-visible,
+.umbra-table__resize-handle:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+.umbra-table__sort-indicator {
+  flex: 0 0 auto;
+  width: var(--space-3);
+  height: var(--space-3);
+  border-block-start: var(--border-width) solid currentColor;
+  border-inline-end: var(--border-width) solid currentColor;
+  color: var(--text-subtle);
+}
+
+.umbra-table__sort-indicator[data-direction="asc"] {
+  transform: rotate(-45deg);
+}
+
+.umbra-table__sort-indicator[data-direction="desc"] {
+  transform: rotate(135deg);
+}
+
+.umbra-table__sort-indicator[data-direction="false"] {
+  visibility: hidden;
+}
+
+.umbra-table__resize-handle {
+  position: absolute;
+  top: 0;
+  inset-inline-end: 0;
+  z-index: 2;
+  width: var(--space-3);
+  height: 100%;
+  border: 0;
+  padding: 0;
+  background: transparent;
+  color: inherit;
+  appearance: none;
+  touch-action: none;
+}
+
+.umbra-table__selection-cell {
+  justify-content: center;
+  border-inline-end: var(--border-width) solid var(--border-subtle);
+  padding: 0;
+}
+
+.umbra-table__cell--pinned:last-of-type {
+  border-inline-end: var(--border-width) solid var(--border-subtle);
+}
+
+.umbra-table__selection-cell input {
+  width: var(--space-7);
+  height: var(--space-7);
+  margin: 0;
+  accent-color: var(--primary);
+}
+
+.umbra-table__empty {
+  display: grid;
+  min-height: var(--row-h);
+  place-items: center;
+  color: var(--text-muted);
+}

@@ -1,0 +1,51 @@
+<fieldset
+  [disabled]="disabled()"
+  [attr.aria-invalid]="hasError() || null"
+  [attr.aria-describedby]="describedBy()"
+  [attr.aria-label]="label() || ariaLabelledBy() ? null : ariaLabel()"
+  [attr.aria-labelledby]="ariaLabelledBy()"
+>
+  @if (label()) {
+    <legend>
+      {{ label() }}
+      @if (required()) {
+        <span class="required" aria-hidden="true">*</span>
+      }
+    </legend>
+  }
+
+  <div class="options">
+    @for (option of options(); track option.value) {
+      <label class="option" [attr.data-disabled]="option.disabled || null">
+        <span class="control">
+          <input
+            type="radio"
+            [name]="controlName()"
+            [value]="option.value"
+            [checked]="value() === option.value"
+            [disabled]="option.disabled"
+            [required]="required()"
+            (change)="select(option.value)"
+            (blur)="touch.emit()"
+          />
+          <span class="indicator" aria-hidden="true"></span>
+        </span>
+        <span class="copy">
+          <span>{{ option.label }}</span>
+          @if (option.hint) {
+            <small>{{ option.hint }}</small>
+          }
+          @if (option.disabled) {
+            <small class="disabled-label">Disabled</small>
+          }
+        </span>
+      </label>
+    }
+  </div>
+
+  @if (error()) {
+    <small class="message error" [id]="errorId">{{ error() }}</small>
+  } @else if (hint()) {
+    <small class="message" [id]="hintId">{{ hint() }}</small>
+  }
+</fieldset>

@@ -1,0 +1,44 @@
+@if (label()) {
+  <label class="row" [for]="controlId()">
+    <ng-container [ngTemplateOutlet]="control" />
+    <span class="label-text">
+      {{ label() }}
+      @if (required()) {
+        <span class="required" aria-hidden="true">*</span>
+      }
+    </span>
+  </label>
+} @else {
+  <span class="row">
+    <ng-container [ngTemplateOutlet]="control" />
+  </span>
+}
+
+@if (error()) {
+  <small class="description error" [id]="errorId">{{ error() }}</small>
+} @else if (hint()) {
+  <small class="description" [id]="hintId">{{ hint() }}</small>
+}
+
+<ng-template #control>
+  <span class="control">
+    <input
+      [id]="controlId()"
+      type="checkbox"
+      role="switch"
+      [checked]="value()"
+      [disabled]="disabled()"
+      [required]="required()"
+      [attr.name]="name()"
+      [attr.value]="formValue()"
+      [attr.aria-invalid]="hasError() || null"
+      [attr.aria-label]="label() || ariaLabelledBy() ? null : ariaLabel()"
+      [attr.aria-labelledby]="ariaLabelledBy()"
+      [attr.aria-describedby]="describedBy()"
+      (change)="onChange($event)"
+      (blur)="touch.emit()"
+    />
+    <span class="track" aria-hidden="true"></span>
+    <span class="thumb" aria-hidden="true"></span>
+  </span>
+</ng-template>
