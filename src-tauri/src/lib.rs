@@ -126,6 +126,11 @@ pub fn run() {
                 commands::github_disconnect,
                 commands::nexus_auth_status,
                 commands::nexus_auth_start,
+                commands::nexus_auth_login,
+                commands::nexus_auth_register,
+                commands::nexus_auth_verify_email,
+                commands::nexus_auth_verify_mfa,
+                commands::nexus_auth_google_start,
                 commands::nexus_auth_logout,
                 commands::gmail_status,
                 commands::gmail_get_settings,
@@ -196,6 +201,11 @@ pub fn run() {
             commands::github_disconnect,
             commands::nexus_auth_status,
             commands::nexus_auth_start,
+            commands::nexus_auth_login,
+            commands::nexus_auth_register,
+            commands::nexus_auth_verify_email,
+            commands::nexus_auth_verify_mfa,
+            commands::nexus_auth_google_start,
             commands::nexus_auth_logout,
             commands::gmail_status,
             commands::gmail_get_settings,
@@ -242,6 +252,11 @@ pub fn run() {
 
     builder
         .setup(|app| {
+            #[cfg(windows)]
+            if let Err(error) = app.deep_link().register_all() {
+                log::warn!("could not register Relay deep links: {error}");
+            }
+
             let callback_app = app.handle().clone();
             app.deep_link().on_open_url(move |event| {
                 for url in event.urls() {

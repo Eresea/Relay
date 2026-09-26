@@ -538,6 +538,7 @@ export class TauriBridge {
     return (
       (await this.invoke<NexusAuthStatus>('nexus_auth_status')) ?? {
         connected: false,
+        mfaRequired: false,
         userId: null,
         email: null,
         displayName: null,
@@ -547,6 +548,28 @@ export class TauriBridge {
 
   async nexusAuthStart(): Promise<void> {
     await this.invoke('nexus_auth_start');
+  }
+
+  async nexusAuthLogin(email: string, password: string): Promise<NexusAuthLoginResult> {
+    const result = await this.invoke<NexusAuthLoginResult>('nexus_auth_login', { email, password });
+    if (!result) throw new Error('Nexus returned no sign-in result.');
+    return result;
+  }
+
+  async nexusAuthRegister(email: string, password: string, displayName: string): Promise<void> {
+    await this.invoke('nexus_auth_register', { email, password, displayName });
+  }
+
+  async nexusAuthVerifyEmail(token: string): Promise<void> {
+    await this.invoke('nexus_auth_verify_email', { token });
+  }
+
+  async nexusAuthVerifyMfa(code: string, recoveryCode = ''): Promise<void> {
+    await this.invoke('nexus_auth_verify_mfa', { code, recoveryCode });
+  }
+
+  async nexusAuthGoogleStart(): Promise<void> {
+    await this.invoke('nexus_auth_google_start');
   }
 
   async nexusAuthLogout(): Promise<void> {
@@ -847,9 +870,15 @@ export interface GithubStatus {
 
 export interface NexusAuthStatus {
   readonly connected: boolean;
+  readonly mfaRequired?: boolean;
   readonly userId: string | null;
   readonly email: string | null;
   readonly displayName: string | null;
+  readonly error?: string | null;
+}
+
+export interface NexusAuthLoginResult {
+  readonly mfaRequired: boolean;
 }
 
 /** Mirrors `github::oauth::DeviceAuthorization`. */

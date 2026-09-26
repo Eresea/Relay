@@ -312,6 +312,43 @@ pub fn nexus_auth_start(app: AppHandle) -> Result<()> {
 }
 
 #[tauri::command]
+pub async fn nexus_auth_login(
+    app: AppHandle,
+    email: String,
+    password: String,
+) -> Result<nexus_auth::LoginResult> {
+    nexus_auth::login(&app, email, password).await
+}
+
+#[tauri::command]
+pub async fn nexus_auth_register(
+    email: String,
+    password: String,
+    display_name: String,
+) -> Result<()> {
+    nexus_auth::register(email, password, display_name).await
+}
+
+#[tauri::command]
+pub async fn nexus_auth_verify_email(token: String) -> Result<()> {
+    nexus_auth::verify_email(token).await
+}
+
+#[tauri::command]
+pub async fn nexus_auth_verify_mfa(
+    app: AppHandle,
+    code: String,
+    recovery_code: String,
+) -> Result<()> {
+    nexus_auth::verify_mfa(&app, code, recovery_code).await
+}
+
+#[tauri::command]
+pub fn nexus_auth_google_start() -> Result<()> {
+    nexus_auth::google_start()
+}
+
+#[tauri::command]
 pub fn nexus_auth_logout() -> Result<()> {
     nexus_auth::logout()
 }
