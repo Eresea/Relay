@@ -176,6 +176,9 @@ const RAIL_EXPANDED_SETTING_KEY = 'rail.expanded';
                 @if (account.status().email && account.status().displayName) {
                   <p class="account-email">{{ account.status().email }}</p>
                 }
+                <button type="button" role="menuitem" (click)="view.set('account')">
+                  Account details
+                </button>
                 <button
                   type="button"
                   role="menuitem"
@@ -399,6 +402,63 @@ const RAIL_EXPANDED_SETTING_KEY = 'rail.expanded';
       }
 
       <main class="content">
+        @if (view() === 'account') {
+          <section class="account-page" aria-labelledby="account-page-title">
+            <header class="account-page-header">
+              <button type="button" class="account-back" (click)="view.set('home')">
+                <rl-icon name="arrow-left" [size]="14" /> Back to projects
+              </button>
+              <p class="u-caption">PROFILE</p>
+              <h1 id="account-page-title">Your account</h1>
+              <p>Identity and connection details provided by Nexus.</p>
+            </header>
+            @if (account.status().connected) {
+              <div class="account-profile-card">
+                <div class="account-profile-avatar" aria-hidden="true">{{ avatar() }}</div>
+                <div class="account-profile-heading">
+                  <h2>{{ accountName() }}</h2>
+                  <p>{{ account.status().email || 'Email unavailable' }}</p>
+                </div>
+                <span class="account-connected"><span></span> Connected</span>
+              </div>
+              <section class="account-details-card" aria-labelledby="account-details-title">
+                <div class="account-details-heading">
+                  <div>
+                    <h2 id="account-details-title">Profile details</h2>
+                    <p>Synced from your Nexus account.</p>
+                  </div>
+                  <rl-icon name="lock" [size]="16" />
+                </div>
+                <dl>
+                  <div><dt>Name</dt><dd>{{ account.status().displayName || 'Not provided' }}</dd></div>
+                  <div><dt>Email</dt><dd>{{ account.status().email || 'Not provided' }}</dd></div>
+                  <div class="account-id-row">
+                    <dt>Nexus account ID</dt>
+                    <dd>{{ account.status().userId || 'Not available' }}</dd>
+                  </div>
+                </dl>
+              </section>
+              <div class="account-page-actions">
+                <div>
+                  <h2>Sign out of Relay</h2>
+                  <p>Your Nexus account stays active on other devices.</p>
+                </div>
+                <button type="button" [disabled]="account.busy()" (click)="account.logout()">
+                  {{ account.busy() ? 'Signing out…' : 'Sign out' }}
+                </button>
+              </div>
+            } @else {
+              <div class="account-connect-card">
+                <div class="account-profile-avatar" aria-hidden="true">N</div>
+                <h2>Connect a Nexus account</h2>
+                <p>Sign in to see the profile details Nexus shares with Relay.</p>
+                <button type="button" [disabled]="!account.available" (click)="openNexusDialog()">
+                  Connect through Nexus
+                </button>
+              </div>
+            }
+          </section>
+        }
         @if (view() === 'settings') {
           <rl-settings [initialTab]="settingsTab()" />
         } @else if (view() === 'codex') {
@@ -652,6 +712,187 @@ const RAIL_EXPANDED_SETTING_KEY = 'rail.expanded';
       opacity: 0.5;
     }
 
+    .account-page {
+      inline-size: min(680px, calc(100% - 40px));
+      margin: clamp(24px, 7vh, 64px) auto;
+    }
+
+    .account-back {
+      display: inline-flex;
+      align-items: center;
+      gap: var(--space-2);
+      margin-block-end: var(--space-5);
+      color: var(--text-subtle);
+      font-size: var(--text-12);
+    }
+
+    .account-page-header .u-caption {
+      margin: 0 0 var(--space-2);
+      color: var(--accent);
+    }
+
+    .account-page-header h1 {
+      margin: 0;
+      color: var(--text-strong);
+      font-size: clamp(26px, 4vw, 32px);
+      font-weight: var(--weight-semibold);
+    }
+
+    .account-page-header > p:last-child {
+      margin: var(--space-2) 0 0;
+      color: var(--text-subtle);
+      font-size: var(--text-12);
+    }
+
+    .account-profile-card,
+    .account-details-card,
+    .account-page-actions,
+    .account-connect-card {
+      border: 1px solid var(--border-default);
+      border-radius: var(--radius-lg);
+      background: var(--bg-sunken);
+    }
+
+    .account-profile-card {
+      display: flex;
+      align-items: center;
+      gap: var(--space-4);
+      padding: var(--space-5);
+    }
+
+    .account-profile-avatar {
+      display: grid;
+      place-items: center;
+      inline-size: 44px;
+      block-size: 44px;
+      flex: none;
+      border: 1px solid var(--border-default);
+      border-radius: var(--radius-pill);
+      color: var(--text-strong);
+      background: var(--bg-overlay);
+      font-size: 18px;
+      font-weight: var(--weight-semibold);
+    }
+
+    .account-profile-heading {
+      min-inline-size: 0;
+      flex: 1;
+    }
+
+    .account-profile-heading h2,
+    .account-details-heading h2,
+    .account-page-actions h2,
+    .account-connect-card h2 {
+      margin: 0;
+      color: var(--text-strong);
+      font-size: var(--text-14);
+      font-weight: var(--weight-semibold);
+    }
+
+    .account-profile-heading p,
+    .account-details-heading p,
+    .account-page-actions p,
+    .account-connect-card p {
+      margin: var(--space-1) 0 0;
+      color: var(--text-subtle);
+      font-size: var(--text-12);
+      overflow-wrap: anywhere;
+    }
+
+    .account-connected {
+      display: inline-flex;
+      align-items: center;
+      gap: var(--space-2);
+      color: var(--text-subtle);
+      font-size: var(--text-11);
+    }
+
+    .account-connected span {
+      inline-size: 7px;
+      block-size: 7px;
+      border-radius: var(--radius-pill);
+      background: var(--status-done);
+    }
+
+    .account-details-heading {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding-block-end: var(--space-3);
+      border-block-end: 1px solid var(--border-subtle);
+    }
+
+    .account-details-card {
+      margin-block-start: var(--space-4);
+      padding: var(--space-5);
+    }
+
+    .account-details-card dl { margin: 0; }
+    .account-details-card dl > div {
+      display: grid;
+      grid-template-columns: minmax(110px, 0.7fr) minmax(0, 1.3fr);
+      gap: var(--space-3);
+      padding-block: var(--space-2);
+      border-block-end: 1px solid var(--border-subtle);
+    }
+
+    .account-details-card dt {
+      color: var(--text-subtle);
+      font-size: var(--text-12);
+    }
+
+    .account-details-card dd {
+      margin: 0;
+      color: var(--text-body);
+      font-size: var(--text-12);
+      overflow-wrap: anywhere;
+    }
+
+    .account-id-row dd {
+      font-family: var(--font-mono);
+      color: var(--text-muted);
+    }
+
+    .account-details-card dl > div:last-child { border: 0; }
+
+    .account-page-actions {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: var(--space-4);
+      margin-block-start: var(--space-4);
+      padding: var(--space-5);
+    }
+
+    .account-page-actions button,
+    .account-connect-card button {
+      flex: none;
+      padding: var(--space-2) var(--space-3);
+      border: 1px solid var(--border-default);
+      border-radius: var(--radius-sm);
+      color: var(--text-body);
+      background: var(--bg-overlay);
+      font-size: var(--text-12);
+    }
+
+    .account-page-actions button:disabled,
+    .account-connect-card button:disabled {
+      opacity: 0.5;
+    }
+
+    .account-connect-card {
+      display: grid;
+      justify-items: start;
+      gap: var(--space-3);
+      padding: var(--space-6);
+    }
+
+    @media (max-width: 540px) {
+      .account-page { inline-size: calc(100% - 32px); }
+      .account-details-card dl > div { grid-template-columns: 1fr; gap: var(--space-1); }
+      .account-page-actions { align-items: flex-start; flex-direction: column; }
+    }
+
     .account-dialog {
       inline-size: min(420px, calc(100% - 32px));
       max-block-size: calc(100dvh - 32px);
@@ -892,7 +1133,7 @@ export class Home {
     this.account.status().connected ? this.accountName().trim().charAt(0).toLocaleUpperCase() : 'N',
   );
   protected readonly theme = inject(ThemeService);
-  protected readonly view = signal<'home' | 'settings' | 'vault' | 'runtime' | 'agents' | 'codex'>(
+  protected readonly view = signal<'home' | 'settings' | 'vault' | 'runtime' | 'agents' | 'codex' | 'account'>(
     'home',
   );
   protected readonly requestedAgentThreadId = signal<string | null>(null);

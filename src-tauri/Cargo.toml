@@ -1,6 +1,6 @@
 [package]
 name = "relay"
-version = "0.1.2"
+version = "0.2.0"
 description = "A lightweight desktop control layer"
 authors = ["Eresea"]
 edition = "2021"

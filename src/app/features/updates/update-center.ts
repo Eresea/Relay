@@ -2,7 +2,6 @@ import {
   ChangeDetectionStrategy,
   Component,
   computed,
-  DestroyRef,
   inject,
   Injectable,
   signal,
@@ -44,20 +43,11 @@ export class UpdateCenter {
   }
 }
 
-const POPOVER_CLOSE_DELAY_MS = 200;
-
 @Component({
   selector: 'rl-update-status-bar',
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
-    <div
-      class="update-wrap"
-      [attr.data-state]="snapshot().state"
-      (mouseenter)="showPopover()"
-      (mouseleave)="scheduleHidePopover()"
-      (focusin)="showPopover()"
-      (focusout)="scheduleHidePopover()"
-    >
+    <div class="update-wrap" [attr.data-state]="snapshot().state">
       <button
         type="button"
         class="indicator"
@@ -73,19 +63,10 @@ const POPOVER_CLOSE_DELAY_MS = 200;
             }
           </span>
         }
+        <span class="version">v{{ snapshot().currentVersion }}</span>
         <span class="u-sr-only">{{ label() }}</span>
       </button>
 
-      <div class="popover" [class.visible]="popoverVisible()" role="status" aria-live="polite">
-        <p class="eyebrow">Update</p>
-        <p class="title">{{ title() }}</p>
-        <p class="detail">{{ detail() }}</p>
-        @if (actionLabel()) {
-          <button type="button" class="action" (click)="activate()">
-            {{ actionLabel() }}
-          </button>
-        }
-      </div>
     </div>
   `,
   styles: `
@@ -117,6 +98,12 @@ const POPOVER_CLOSE_DELAY_MS = 200;
     .indicator:focus-visible {
       color: var(--text-body);
       background: var(--tint-hover);
+    }
+
+    .version {
+      color: var(--text-muted);
+      font-size: var(--text-11);
+      font-variant-numeric: tabular-nums;
     }
 
     .dot {
@@ -172,73 +159,6 @@ const POPOVER_CLOSE_DELAY_MS = 200;
       animation: update-slide 1.2s ease-in-out infinite;
     }
 
-    .popover {
-      position: absolute;
-      inset-block-end: calc(100% + var(--space-2));
-      inset-inline-start: var(--space-3);
-      z-index: 2;
-      inline-size: 240px;
-      padding: var(--space-5);
-      color: var(--text-body);
-      background: var(--bg-overlay);
-      border: 1px solid var(--border-default);
-      border-radius: var(--radius-md);
-      box-shadow: var(--shadow-lg);
-      opacity: 0;
-      pointer-events: none;
-      transform: translateY(var(--space-2));
-      transition:
-        opacity var(--dur-hover) var(--ease-standard),
-        transform var(--dur-hover) var(--ease-standard);
-    }
-
-    /* Visibility is driven by JS (mouseenter/leave with a close delay,
-     * see showPopover/scheduleHidePopover) rather than a pure :hover
-     * chain — a CSS-only :hover has no grace period, so the instant the
-     * pointer crosses the gap between the dot and the popover, hover drops
-     * and the popover closes before the pointer ever reaches it. */
-    .popover.visible {
-      opacity: 1;
-      pointer-events: auto;
-      transform: translateY(0);
-    }
-
-    .eyebrow {
-      margin: 0;
-      color: var(--text-subtle);
-      font-size: var(--text-11);
-      font-weight: var(--weight-semibold);
-      letter-spacing: 0.08em;
-      text-transform: uppercase;
-    }
-
-    .title {
-      margin: var(--space-2) 0 0;
-      color: var(--text-strong);
-      font-size: var(--text-13);
-      font-weight: var(--weight-medium);
-    }
-
-    .detail {
-      margin: var(--space-2) 0 0;
-      color: var(--text-muted);
-      font-size: var(--text-12);
-      line-height: 1.4;
-    }
-
-    .action {
-      margin-block-start: var(--space-4);
-      padding: var(--space-2) var(--space-3);
-      color: var(--text-body);
-      background: var(--tint-hover);
-      border-radius: var(--radius-sm);
-      font-size: var(--text-12);
-    }
-
-    .action:hover {
-      background: var(--tint-selected);
-    }
-
     @keyframes update-pulse {
       50% {
         opacity: 0.45;
@@ -261,9 +181,6 @@ const POPOVER_CLOSE_DELAY_MS = 200;
 })
 export class UpdateStatusBar {
   private readonly center = inject(UpdateCenter);
-
-  protected readonly popoverVisible = signal(false);
-  private hideTimer: ReturnType<typeof setTimeout> | null = null;
 
   protected readonly snapshot = this.center.snapshot;
   protected readonly progress = computed(() => {
@@ -293,35 +210,6 @@ export class UpdateStatusBar {
         return 'Relay is up to date';
     }
   });
-  protected readonly title = computed(() => {
-    const snapshot = this.snapshot();
-    if (snapshot.state === 'ready') return `Relay ${snapshot.version ?? 'update'} is ready`;
-    if (snapshot.state === 'available') return `Relay ${snapshot.version ?? 'update'} available`;
-    return this.label();
-  });
-  protected readonly detail = computed(() => {
-    const snapshot = this.snapshot();
-    if (snapshot.state === 'error') return snapshot.error ?? 'Try checking again.';
-    if (snapshot.state === 'installing') return 'Relay will restart when installation is complete.';
-    if (snapshot.notes) return snapshot.notes;
-    if (snapshot.state === 'ready') return 'Restart Relay to apply the downloaded update.';
-    return `Current version ${snapshot.currentVersion}`;
-  });
-  protected readonly actionLabel = computed(() => {
-    switch (this.snapshot().state) {
-      case 'available':
-        return 'Download update';
-      case 'ready':
-        return 'Restart to update';
-      case 'error':
-        return 'Retry update';
-      case 'idle':
-        return 'Check for updates';
-      default:
-        return '';
-    }
-  });
-
   protected activate(): void {
     switch (this.snapshot().state) {
       case 'idle':
@@ -337,24 +225,4 @@ export class UpdateStatusBar {
     }
   }
 
-  protected showPopover(): void {
-    this.clearHideTimer();
-    this.popoverVisible.set(true);
-  }
-
-  protected scheduleHidePopover(): void {
-    this.clearHideTimer();
-    this.hideTimer = setTimeout(() => this.popoverVisible.set(false), POPOVER_CLOSE_DELAY_MS);
-  }
-
-  private clearHideTimer(): void {
-    if (this.hideTimer) {
-      clearTimeout(this.hideTimer);
-      this.hideTimer = null;
-    }
-  }
-
-  constructor() {
-    inject(DestroyRef).onDestroy(() => this.clearHideTimer());
-  }
 }
