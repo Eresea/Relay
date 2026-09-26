@@ -1,0 +1,83 @@
+<section class="timeline" [attr.aria-label]="ariaLabel()">
+  @if (headerData().length > 0) {
+    <dl class="header-data">
+      @for (data of headerData(); track data.label) {
+        <div class="header-data-item">
+          <dt class="u-caption">{{ data.label }}</dt>
+          <dd>{{ data.value }}</dd>
+        </div>
+      }
+    </dl>
+  }
+
+  @if (entries().length > 0) {
+    <ol class="items">
+      @for (entry of entries(); track entry.key) {
+        @if (entry.showGroup && entry.group !== null && entry.groupLabel !== null) {
+          <li class="group-header u-caption">
+            @if (groupTemplate) {
+              <ng-container
+                [ngTemplateOutlet]="groupTemplate"
+                [ngTemplateOutletContext]="{
+                  $implicit: entry.group,
+                  group: entry.group,
+                  label: entry.groupLabel,
+                  index: entry.index,
+                }"
+              />
+            } @else {
+              <span>{{ entry.groupLabel }}</span>
+            }
+          </li>
+        }
+
+        <li class="item">
+          <div class="slot slot-left">
+            @if (leftTemplate) {
+              <ng-container
+                [ngTemplateOutlet]="leftTemplate"
+                [ngTemplateOutletContext]="entry.context"
+              />
+            }
+          </div>
+          <div class="slot slot-middle">
+            <span class="node" aria-hidden="true"></span>
+            @if (middleTemplate) {
+              <ng-container
+                [ngTemplateOutlet]="middleTemplate"
+                [ngTemplateOutletContext]="entry.context"
+              />
+            }
+          </div>
+          <div class="slot slot-right">
+            @if (rightTemplate) {
+              <ng-container
+                [ngTemplateOutlet]="rightTemplate"
+                [ngTemplateOutletContext]="entry.context"
+              />
+            }
+          </div>
+        </li>
+      }
+    </ol>
+  } @else if (loading()) {
+    <div class="loading-items" aria-hidden="true">
+      @for (row of loadingIndexes(); track row) {
+        <div class="loading-row">
+          <umbra-skeleton height="var(--text-xs)" width="35%" />
+          <umbra-skeleton height="var(--text-xs)" width="55%" />
+        </div>
+      }
+    </div>
+  } @else {
+    <p class="empty-message" role="status">{{ emptyMessage() }}</p>
+  }
+
+  @if (hasMore()) {
+    <div #sentinel class="sentinel" aria-hidden="true">
+      @if (loading() && entries().length > 0) {
+        <umbra-skeleton height="var(--text-xs)" width="var(--space-32)" />
+      }
+    </div>
+  }
+</section>

@@ -1,0 +1,316 @@
+:host {
+  display: block;
+  width: 100%;
+  max-width: calc(var(--space-32) * 4);
+  min-width: 0;
+}
+
+.date-field {
+  display: grid;
+  min-width: 0;
+  gap: var(--space-2);
+}
+
+.date-label {
+  color: var(--text-muted);
+  font: var(--type-caption);
+}
+
+.date-control {
+  display: flex;
+  min-width: 0;
+  min-height: var(--control-h-lg);
+  align-items: center;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  background: var(--bg-sunken);
+  box-shadow: var(--shadow-xs);
+  transition:
+    background-color var(--dur-fast) var(--ease-standard),
+    border-color var(--dur-fast) var(--ease-standard),
+    box-shadow var(--dur-fast) var(--ease-standard);
+}
+
+.date-control:hover:not([data-disabled]) {
+  border-color: var(--border-strong);
+}
+
+.date-control:focus-within:not([data-disabled]) {
+  border-color: var(--border-focus);
+  box-shadow: var(--focus-ring);
+}
+
+.date-control[data-invalid] {
+  border-color: var(--danger);
+}
+
+.date-control[data-disabled] {
+  opacity: 0.5;
+}
+
+.date-segments {
+  display: flex;
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  min-height: var(--control-h-lg);
+  flex: 1 1 auto;
+  align-items: center;
+  gap: var(--space-1);
+  padding: 0 0 0 var(--space-2);
+}
+
+.date-segment {
+  box-sizing: border-box;
+  height: var(--control-h);
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-sm);
+  outline: 0;
+  color: var(--text-body);
+  background: transparent;
+  font: var(--type-mono);
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+}
+
+.date-segment-day,
+.date-segment-month {
+  width: var(--space-20);
+}
+
+.date-segment-year {
+  width: var(--space-24);
+}
+
+.date-segment::placeholder {
+  color: var(--text-subtle);
+}
+
+.date-segment:hover:not(:disabled) {
+  background: var(--surface-hover);
+}
+
+.date-segment:focus-visible {
+  background: var(--surface-hover);
+}
+
+.date-segment:disabled,
+.date-segment[readonly] {
+  color: var(--text-muted);
+}
+
+.date-separator {
+  color: var(--text-subtle);
+  font: var(--type-caption);
+}
+
+.date-action {
+  display: grid;
+  width: var(--control-h);
+  height: var(--control-h);
+  flex: 0 0 auto;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-sm);
+  color: var(--text-muted);
+  background: transparent;
+  font: inherit;
+}
+
+.date-action:hover {
+  color: var(--text-body);
+  background: var(--surface-hover);
+}
+
+.date-action:focus-visible,
+.calendar button:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+.date-calendar-trigger {
+  flex: 0 0 auto;
+}
+
+.date-icon {
+  width: var(--space-5);
+  height: var(--space-5);
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.75;
+}
+
+.calendar {
+  box-sizing: border-box;
+  width: min(calc(var(--space-32) * 4), calc(100vw - var(--space-8)));
+  padding: var(--space-6);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-lg);
+  color: var(--text-body);
+  background: var(--surface-overlay);
+  box-shadow: var(--shadow-md);
+}
+
+.calendar-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: var(--space-3);
+}
+
+.calendar-period {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.calendar-period-button {
+  min-width: 0;
+  padding: var(--space-2);
+  border: 0;
+  border-radius: var(--radius-sm);
+  color: var(--text-body);
+  background: transparent;
+  font: var(--type-ui);
+}
+
+.calendar-period-button:hover,
+.calendar-period-button[data-viewed] {
+  background: var(--surface-hover);
+}
+
+.calendar-period-button:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+.calendar-nav {
+  display: grid;
+  width: var(--control-h);
+  height: var(--control-h);
+  place-items: center;
+}
+
+.calendar-grid {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+}
+
+.calendar-weekdays {
+  padding-bottom: var(--space-2);
+  color: var(--text-subtle);
+  font: var(--type-caption);
+  text-align: center;
+}
+
+.calendar-days {
+  gap: var(--space-1);
+}
+
+.calendar-choice-grid {
+  display: grid;
+  min-height: calc(var(--control-h) * 5 + var(--space-2) * 2);
+  align-content: center;
+  gap: var(--space-1);
+}
+
+.calendar-months {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.calendar-years {
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+}
+
+.calendar button,
+.calendar-nav {
+  border: 0;
+  border-radius: var(--radius-sm);
+  color: var(--text-body);
+  background: transparent;
+  font: var(--type-ui);
+}
+
+.calendar-nav {
+  color: var(--text-muted);
+}
+
+.calendar button:hover:not([data-selected]):not(:disabled) {
+  color: var(--text-body);
+  background: var(--surface-hover);
+}
+
+.calendar-nav:disabled {
+  color: var(--text-subtle);
+}
+
+.calendar-choice {
+  min-width: 0;
+  min-height: var(--control-h);
+  padding: var(--space-1);
+}
+
+.calendar-choice[data-viewed] {
+  color: var(--primary-text);
+  background: var(--primary);
+}
+
+.calendar-day {
+  position: relative;
+  display: grid;
+  aspect-ratio: 1;
+  place-items: center;
+  padding: 0;
+  font-variant-numeric: tabular-nums;
+}
+
+.calendar-day[data-outside] {
+  color: var(--text-subtle);
+}
+
+.calendar-day[data-today]::after {
+  position: absolute;
+  bottom: var(--space-2);
+  width: var(--space-1);
+  height: var(--space-1);
+  border-radius: var(--radius-pill);
+  background: var(--accent);
+  content: "";
+}
+
+.calendar-day[data-selected] {
+  color: var(--primary-text);
+  background: var(--primary);
+}
+
+.calendar-footer {
+  display: flex;
+  justify-content: space-between;
+  margin-top: var(--space-4);
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--border-subtle);
+}
+
+.calendar-footer button {
+  padding: var(--space-2) var(--space-3);
+  color: var(--text-muted);
+}
+
+.date-message {
+  color: var(--text-muted);
+  font: var(--type-caption);
+}
+
+.date-error {
+  color: var(--danger);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .date-control {
+    transition: none;
+  }
+}

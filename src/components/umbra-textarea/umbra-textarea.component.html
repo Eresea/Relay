@@ -1,0 +1,54 @@
+<div class="layout">
+  @if (label()) {
+    <label class="label" [for]="controlId()">
+      {{ label() }}
+      @if (required()) {
+        <span class="required" aria-hidden="true">*</span>
+      }
+    </label>
+  }
+
+  <div
+    class="field"
+    [attr.data-invalid]="hasError() || null"
+    [attr.data-disabled]="disabled() || null"
+  >
+    <textarea
+      #control
+      [id]="controlId()"
+      [value]="value()"
+      [attr.name]="name()"
+      [attr.placeholder]="placeholder()"
+      [rows]="rows()"
+      [style.resize]="autoResize() ? 'none' : resize()"
+      [style.overflow-y]="autoResize() ? 'hidden' : null"
+      [attr.autocomplete]="autocomplete()"
+      [attr.minlength]="minLength()"
+      [attr.maxlength]="maxLength()"
+      [disabled]="disabled()"
+      [readOnly]="readonly()"
+      [required]="required()"
+      [attr.spellcheck]="spellcheck()"
+      [attr.aria-invalid]="hasError() || null"
+      [attr.aria-label]="ariaLabelledBy() || label() ? null : ariaLabel()"
+      [attr.aria-labelledby]="ariaLabelledBy()"
+      [attr.aria-describedby]="describedBy()"
+      (input)="onInput($event)"
+      (blur)="touch.emit()"
+    ></textarea>
+  </div>
+
+  @if (error()) {
+    <small class="description error" [id]="errorId">{{ error() }}</small>
+  } @else if (hint()) {
+    <small class="description" [id]="hintId">{{ hint() }}</small>
+  }
+  @if (showCount()) {
+    <small class="count" [id]="countId">
+      {{ value().length }}
+      @if (maxLength() !== undefined) {
+        / {{ maxLength() }}
+      }
+    </small>
+  }
+</div>

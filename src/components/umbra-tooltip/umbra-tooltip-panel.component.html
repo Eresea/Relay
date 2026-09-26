@@ -1,0 +1,5 @@
+@if (sanitizedHtml(); as safeHtml) {
+  <div [innerHTML]="safeHtml"></div>
+} @else {
+  {{ text() }}
+}

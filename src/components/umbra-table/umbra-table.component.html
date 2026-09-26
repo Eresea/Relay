@@ -1,0 +1,383 @@
+<div
+  #viewport
+  class="umbra-table"
+  role="grid"
+  tabindex="-1"
+  [attr.aria-label]="ariaLabel()"
+  [attr.aria-busy]="loading() ? 'true' : null"
+  [attr.aria-rowcount]="tableRows().length + 1"
+  [attr.aria-colcount]="visibleColumns().length + (selectable() ? 1 : 0)"
+  [style.height]="height()"
+>
+  <div class="umbra-table__header" role="row" [style.width.px]="contentWidth()">
+    @if (selectable()) {
+      <div
+        class="umbra-table__cell umbra-table__cell--pinned umbra-table__selection-cell"
+        role="columnheader"
+        [style.width.px]="selectionColumnWidth()"
+        [style.left.px]="0"
+      >
+        <input
+          type="checkbox"
+          aria-label="Select all rows"
+          [checked]="tanstack.getIsAllRowsSelected()"
+          [indeterminate]="
+            tanstack.getIsSomeRowsSelected() && !tanstack.getIsAllRowsSelected()
+          "
+          (change)="toggleAllRows($event)"
+        />
+      </div>
+    }
+
+    @for (column of leftColumns(); track column.id) {
+      <div
+        class="umbra-table__cell umbra-table__cell--pinned umbra-table__header-cell"
+        role="columnheader"
+        [attr.aria-sort]="
+          column.getIsSorted() === 'asc'
+            ? 'ascending'
+            : column.getIsSorted() === 'desc'
+              ? 'descending'
+              : 'none'
+        "
+        [style.width.px]="columnSize(column)"
+        [style.left.px]="leftOffset(column)"
+      >
+        <button
+          type="button"
+          class="umbra-table__sort-button"
+          [disabled]="!column.getCanSort()"
+          (click)="column.toggleSorting($event.shiftKey)"
+        >
+          <span>{{ column.columnDef.header }}</span>
+          <span
+            class="umbra-table__sort-indicator"
+            [attr.data-direction]="column.getIsSorted()"
+            aria-hidden="true"
+          ></span>
+        </button>
+        @if (resizable()) {
+          <button
+            type="button"
+            class="umbra-table__resize-handle"
+            aria-label="Resize {{ column.columnDef.header }}"
+            (pointerdown)="startResize(column, $event)"
+            (keydown)="resizeByKey(column, $event)"
+          ></button>
+        }
+      </div>
+    }
+
+    @for (
+      virtualColumn of columnVirtualizer.getVirtualItems();
+      track virtualColumn.key
+    ) {
+      @if (centerColumns()[virtualColumn.index]; as column) {
+        <div
+          class="umbra-table__cell umbra-table__header-cell"
+          role="columnheader"
+          [attr.aria-sort]="
+            column.getIsSorted() === 'asc'
+              ? 'ascending'
+              : column.getIsSorted() === 'desc'
+                ? 'descending'
+                : 'none'
+          "
+          [style.width.px]="virtualColumn.size"
+          [style.left.px]="leftWidth() + virtualColumn.start"
+        >
+          <button
+            type="button"
+            class="umbra-table__sort-button"
+            [disabled]="!column.getCanSort()"
+            (click)="column.toggleSorting($event.shiftKey)"
+          >
+            <span>{{ column.columnDef.header }}</span>
+            <span
+              class="umbra-table__sort-indicator"
+              [attr.data-direction]="column.getIsSorted()"
+              aria-hidden="true"
+            ></span>
+          </button>
+          @if (resizable()) {
+            <button
+              type="button"
+              class="umbra-table__resize-handle"
+              aria-label="Resize {{ column.columnDef.header }}"
+              (pointerdown)="startResize(column, $event)"
+              (keydown)="resizeByKey(column, $event)"
+            ></button>
+          }
+        </div>
+      }
+    }
+
+    @for (column of rightColumns(); track column.id; let isFirst = $first) {
+      <div
+        class="umbra-table__cell umbra-table__cell--pinned umbra-table__header-cell"
+        [class.umbra-table__right-start]="isFirst"
+        role="columnheader"
+        [attr.aria-sort]="
+          column.getIsSorted() === 'asc'
+            ? 'ascending'
+            : column.getIsSorted() === 'desc'
+              ? 'descending'
+              : 'none'
+        "
+        [style.width.px]="columnSize(column)"
+        [style.right.px]="rightOffset(column)"
+      >
+        <button
+          type="button"
+          class="umbra-table__sort-button"
+          [disabled]="!column.getCanSort()"
+          (click)="column.toggleSorting($event.shiftKey)"
+        >
+          <span>{{ column.columnDef.header }}</span>
+          <span
+            class="umbra-table__sort-indicator"
+            [attr.data-direction]="column.getIsSorted()"
+            aria-hidden="true"
+          ></span>
+        </button>
+        @if (resizable()) {
+          <button
+            type="button"
+            class="umbra-table__resize-handle"
+            aria-label="Resize {{ column.columnDef.header }}"
+            (pointerdown)="startResize(column, $event)"
+            (keydown)="resizeByKey(column, $event)"
+          ></button>
+        }
+      </div>
+    }
+  </div>
+
+  <div
+    class="umbra-table__body"
+    role="rowgroup"
+    [style.width.px]="contentWidth()"
+    [style.height.px]="rowVirtualizer.getTotalSize()"
+  >
+    @for (
+      virtualRow of rowVirtualizer.getVirtualItems();
+      track virtualRow.key
+    ) {
+      @if (tableRows()[virtualRow.index]; as row) {
+        <div
+          class="umbra-table__row"
+          role="row"
+          [attr.aria-rowindex]="virtualRow.index + 2"
+          [attr.aria-selected]="selectable() && row.getIsSelected()"
+          [style.width.px]="contentWidth()"
+          [style.height.px]="virtualRow.size"
+          [style.top.px]="virtualRow.start"
+        >
+          @if (selectable()) {
+            <div
+              class="umbra-table__cell umbra-table__cell--pinned umbra-table__selection-cell"
+              role="gridcell"
+              [style.width.px]="selectionColumnWidth()"
+              [style.left.px]="0"
+            >
+              <input
+                type="checkbox"
+                [attr.aria-label]="'Select row ' + row.id"
+                [checked]="row.getIsSelected()"
+                (click)="captureSelectionModifiers($event)"
+                (change)="toggleRow(row, $event)"
+              />
+            </div>
+          }
+
+          @for (column of leftColumns(); track column.id) {
+            @if (cellFor(row, column.id); as cell) {
+              @let content = cellContent(cell);
+              <div
+                class="umbra-table__cell umbra-table__cell--pinned umbra-table__data-cell"
+                role="gridcell"
+                [attr.data-umbra-cell]="true"
+                [attr.data-row-id]="row.id"
+                [attr.data-column-id]="column.id"
+                [attr.tabindex]="isFocused(row, column) ? 0 : -1"
+                [style.width.px]="columnSize(column)"
+                [style.left.px]="leftOffset(column)"
+                (focus)="
+                  focusedCell.set({ rowId: row.id, columnId: column.id })
+                "
+                (keydown)="onCellKeydown($event, row, column)"
+              >
+                @if (isTemplate(content)) {
+                  <ng-container
+                    *ngTemplateOutlet="
+                      content;
+                      context: { $implicit: cellContext(cell) }
+                    "
+                  />
+                } @else {
+                  {{ content }}
+                }
+              </div>
+            }
+          }
+
+          @for (
+            virtualColumn of columnVirtualizer.getVirtualItems();
+            track virtualColumn.key
+          ) {
+            @if (centerColumns()[virtualColumn.index]; as column) {
+              @if (cellFor(row, column.id); as cell) {
+                @let content = cellContent(cell);
+                <div
+                  class="umbra-table__cell umbra-table__data-cell"
+                  role="gridcell"
+                  [attr.data-umbra-cell]="true"
+                  [attr.data-row-id]="row.id"
+                  [attr.data-column-id]="column.id"
+                  [attr.tabindex]="isFocused(row, column) ? 0 : -1"
+                  [style.width.px]="virtualColumn.size"
+                  [style.left.px]="leftWidth() + virtualColumn.start"
+                  (focus)="
+                    focusedCell.set({ rowId: row.id, columnId: column.id })
+                  "
+                  (keydown)="onCellKeydown($event, row, column)"
+                >
+                  @if (isTemplate(content)) {
+                    <ng-container
+                      *ngTemplateOutlet="
+                        content;
+                        context: { $implicit: cellContext(cell) }
+                      "
+                    />
+                  } @else {
+                    {{ content }}
+                  }
+                </div>
+              }
+            }
+          }
+
+          @for (
+            column of rightColumns();
+            track column.id;
+            let isFirst = $first
+          ) {
+            @if (cellFor(row, column.id); as cell) {
+              @let content = cellContent(cell);
+              <div
+                class="umbra-table__cell umbra-table__cell--pinned umbra-table__data-cell"
+                [class.umbra-table__right-start]="isFirst"
+                role="gridcell"
+                [attr.data-umbra-cell]="true"
+                [attr.data-row-id]="row.id"
+                [attr.data-column-id]="column.id"
+                [attr.tabindex]="isFocused(row, column) ? 0 : -1"
+                [style.width.px]="columnSize(column)"
+                [style.right.px]="rightOffset(column)"
+                (focus)="
+                  focusedCell.set({ rowId: row.id, columnId: column.id })
+                "
+                (keydown)="onCellKeydown($event, row, column)"
+              >
+                @if (isTemplate(content)) {
+                  <ng-container
+                    *ngTemplateOutlet="
+                      content;
+                      context: { $implicit: cellContext(cell) }
+                    "
+                  />
+                } @else {
+                  {{ content }}
+                }
+              </div>
+            }
+          }
+        </div>
+      } @else if (loading()) {
+        <div
+          class="umbra-table__row umbra-table__row--skeleton"
+          aria-hidden="true"
+          [style.width.px]="contentWidth()"
+          [style.height.px]="virtualRow.size"
+          [style.top.px]="virtualRow.start"
+        >
+          @if (selectable()) {
+            <div
+              class="umbra-table__cell umbra-table__cell--pinned umbra-table__selection-cell"
+              [style.width.px]="selectionColumnWidth()"
+              [style.left.px]="0"
+            >
+              <umbra-skeleton
+                shape="circle"
+                width="var(--space-7)"
+                height="var(--space-7)"
+              />
+            </div>
+          }
+
+          @for (column of leftColumns(); track column.id) {
+            <div
+              class="umbra-table__cell umbra-table__cell--pinned umbra-table__data-cell"
+              [style.width.px]="columnSize(column)"
+              [style.left.px]="leftOffset(column)"
+            >
+              <umbra-skeleton
+                class="umbra-table__skeleton-cell"
+                width="68%"
+                height="var(--space-6)"
+              />
+            </div>
+          }
+
+          @for (
+            virtualColumn of columnVirtualizer.getVirtualItems();
+            track virtualColumn.key
+          ) {
+            @if (centerColumns()[virtualColumn.index]; as column) {
+              <div
+                class="umbra-table__cell umbra-table__data-cell"
+                [style.width.px]="virtualColumn.size"
+                [style.left.px]="leftWidth() + virtualColumn.start"
+              >
+                <umbra-skeleton
+                  class="umbra-table__skeleton-cell"
+                  width="68%"
+                  height="var(--space-6)"
+                />
+              </div>
+            }
+          }
+
+          @for (
+            column of rightColumns();
+            track column.id;
+            let isFirst = $first
+          ) {
+            <div
+              class="umbra-table__cell umbra-table__cell--pinned umbra-table__data-cell"
+              [class.umbra-table__right-start]="isFirst"
+              [style.width.px]="columnSize(column)"
+              [style.right.px]="rightOffset(column)"
+            >
+              <umbra-skeleton
+                class="umbra-table__skeleton-cell"
+                width="68%"
+                height="var(--space-6)"
+              />
+            </div>
+          }
+        </div>
+      }
+    }
+
+    @if (tableRows().length === 0 && !loading()) {
+      <div
+        class="umbra-table__empty"
+        role="row"
+        [style.width.px]="contentWidth()"
+      >
+        No rows to display.
+      </div>
+    }
+  </div>
+</div>

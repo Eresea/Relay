@@ -1,0 +1,53 @@
+:host {
+  display: block;
+  overflow: hidden;
+  position: relative;
+  border-radius: var(--radius-sm);
+  background: var(--surface-active);
+}
+
+:host([data-shape='circle']) {
+  display: inline-block;
+  border-radius: var(--radius-pill);
+}
+
+:host([data-radius='md']:not([data-shape='circle'])) {
+  border-radius: var(--radius-md);
+}
+
+:host([data-radius='lg']:not([data-shape='circle'])) {
+  border-radius: var(--radius-lg);
+}
+
+:host([data-animation='shimmer'])::after {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    100deg,
+    transparent 15%,
+    color-mix(in srgb, var(--text-body) 8%, transparent) 35%,
+    color-mix(in srgb, var(--text-body) 16%, transparent) 50%,
+    color-mix(in srgb, var(--text-body) 8%, transparent) 65%,
+    transparent 85%
+  );
+  content: '';
+  transform: translateX(-120%);
+  animation: umbra-skeleton-wave var(--dur-skeleton) linear infinite;
+  will-change: transform;
+}
+
+:host([data-animation='pulse']) {
+  animation: umbra-skeleton-pulse var(--dur-skeleton) ease-in-out infinite;
+}
+
+@keyframes umbra-skeleton-wave {
+  to {
+    transform: translateX(120%);
+  }
+}
+
+@keyframes umbra-skeleton-pulse {
+  50% {
+    opacity: 0.5;
+  }
+}

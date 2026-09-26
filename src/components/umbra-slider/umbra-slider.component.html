@@ -1,0 +1,32 @@
+<div class="heading">
+  @if (label()) {
+    <label [for]="controlId()">{{ label() }}</label>
+  }
+  @if (showValue()) {
+    <output [for]="controlId()">{{ value() }}</output>
+  }
+</div>
+<input
+  #control
+  type="range"
+  [id]="controlId()"
+  [value]="value()"
+  [min]="min()"
+  [max]="max()"
+  [step]="step()"
+  [disabled]="disabled()"
+  [required]="required()"
+  [attr.name]="name()"
+  [attr.aria-label]="ariaLabelledBy() ? null : (ariaLabel() ?? label())"
+  [attr.aria-labelledby]="ariaLabelledBy()"
+  [attr.aria-describedby]="describedBy()"
+  [attr.aria-invalid]="hasError() || null"
+  [style.--umbra-slider-fill]="percent() + '%'"
+  (input)="onInput($event)"
+  (blur)="touch.emit()"
+/>
+@if (error()) {
+  <small class="error" [id]="errorId">{{ error() }}</small>
+} @else if (hint()) {
+  <small class="hint" [id]="hintId">{{ hint() }}</small>
+}

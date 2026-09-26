@@ -1,0 +1,43 @@
+/* Umbra — glass overlay tier. Ported verbatim from Umbra tokens/overlay.css.
+
+   For surfaces that float over the OS, not over the app: tray popovers, HUD
+   notifications, context menus, the command palette. In-app cards keep
+   --surface-card and the regular shadow scale. Never blur a card or a sidebar. */
+:root {
+  --glass-blur: 22px;
+  --glass-saturate: 1.35;
+  --glass-fill: rgba(13, 15, 22, 0.8);
+  --glass-fill-solid: #0e1017; /* used when backdrop-filter is unavailable */
+  --glass-fill-raised: rgba(24, 27, 36, 0.72); /* nested rows/sections inside glass */
+  --glass-edge: rgba(255, 255, 255, 0.1);
+  --glass-rim: inset 0 1px 0 rgba(255, 255, 255, 0.09);
+  --glass-shadow: 0 24px 60px -18px rgba(0, 0, 0, 0.75), 0 6px 16px -6px rgba(0, 0, 0, 0.55);
+  --ambient-tint: rgba(106, 166, 255, 0.055); /* cool-blue cast so glass never reads flat grey */
+}
+
+:root.light,
+[data-theme="light"] {
+  --glass-fill: rgba(252, 253, 255, 0.8);
+  --glass-fill-solid: #fbfcff;
+  --glass-fill-raised: rgba(255, 255, 255, 0.72);
+  --glass-edge: rgba(9, 9, 11, 0.1);
+  --glass-rim: inset 0 1px 0 rgba(255, 255, 255, 0.85);
+  --glass-shadow: 0 24px 56px -18px rgba(9, 9, 11, 0.26), 0 4px 12px -4px rgba(9, 9, 11, 0.1);
+  --ambient-tint: rgba(37, 99, 235, 0.045);
+}
+
+/* Utility for hand-written markup. Every glass surface must stay legible when the
+   blur silently does nothing, so the solid fill is the base and the blur is additive. */
+.u-glass {
+  background: var(--glass-fill-solid);
+  border: 1px solid var(--glass-edge);
+  box-shadow: var(--glass-shadow), var(--glass-rim);
+}
+
+@supports ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .u-glass {
+    background: linear-gradient(var(--ambient-tint), var(--ambient-tint)), var(--glass-fill);
+    -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+    backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+  }
+}

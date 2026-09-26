@@ -1,0 +1,64 @@
+@if (label()) {
+  <label class="row" [for]="controlId()">
+    <ng-container [ngTemplateOutlet]="mark" />
+    <span class="label-text">
+      {{ label() }}
+      @if (required()) {
+        <span class="required" aria-hidden="true">*</span>
+      }
+    </span>
+  </label>
+} @else {
+  <span class="row">
+    <ng-container [ngTemplateOutlet]="mark" />
+  </span>
+}
+
+@if (error()) {
+  <small class="description error" [id]="errorId">{{ error() }}</small>
+} @else if (hint()) {
+  <small class="description" [id]="hintId">{{ hint() }}</small>
+}
+
+<ng-template #mark>
+  <span class="mark">
+    <input
+      #control
+      [id]="controlId()"
+      type="checkbox"
+      [checked]="value()"
+      [indeterminate]="indeterminate()"
+      [disabled]="disabled()"
+      [required]="required()"
+      [attr.name]="name()"
+      [attr.value]="formValue()"
+      [attr.aria-invalid]="hasError() || null"
+      [attr.aria-label]="label() || ariaLabelledBy() ? null : ariaLabel()"
+      [attr.aria-labelledby]="ariaLabelledBy()"
+      [attr.aria-describedby]="describedBy()"
+      (change)="onChange($event)"
+      (blur)="touch.emit()"
+    />
+    <span class="indicator" aria-hidden="true">
+      @if (indeterminate()) {
+        <svg
+          viewBox="0 0 12 12"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2"
+        >
+          <path d="M2 6h8" />
+        </svg>
+      } @else if (value()) {
+        <svg
+          viewBox="0 0 12 12"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2"
+        >
+          <path d="m2.5 6 2.2 2.2L9.5 3.5" />
+        </svg>
+      }
+    </span>
+  </span>
+</ng-template>

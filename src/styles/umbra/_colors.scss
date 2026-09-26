@@ -1,0 +1,124 @@
+/* Umbra — palette. Dark is the default theme; .light (or [data-theme="light"]) opts out.
+   Ported from Umbra tokens/colors.css. Values are verbatim: do not retint them here. */
+:root {
+  /* base neutrals — cool zinc ramp */
+  --zinc-50: #fafafa;
+  --zinc-100: #f4f4f5;
+  --zinc-200: #e4e4e7;
+  --zinc-300: #d4d4d8;
+  --zinc-400: #a1a1aa;
+  --zinc-500: #71717a;
+  --zinc-600: #52525b;
+  --zinc-700: #3f3f46;
+  --zinc-800: #27272a;
+  --zinc-900: #18181b;
+  --zinc-950: #09090b;
+  --zinc-1000: #050506;
+
+  /* brand accent — single cool blue, used sparingly */
+  --blue-300: #93c2ff;
+  --blue-400: #6aa6ff;
+  --blue-500: #3b82f6;
+  --blue-600: #2563eb;
+  --blue-700: #1d4ed8;
+
+  /* semantics */
+  --green-400: #4ade80;
+  --green-500: #22c55e;
+  --amber-400: #fbbf24;
+  --amber-500: #f59e0b;
+  --red-400: #f87171;
+  --red-500: #ef4444;
+  --red-600: #dc2626;
+
+  /* ---- semantic aliases: DARK (default) ---- */
+  --bg-app: var(--zinc-950);
+  --bg-sunken: var(--zinc-1000);
+  --surface-card: #0d0d10;
+  --surface-raised: var(--zinc-900);
+  --surface-overlay: #101013;
+  --surface-hover: rgba(255, 255, 255, 0.04);
+  --surface-active: rgba(255, 255, 255, 0.07);
+  --surface-selected: rgba(255, 255, 255, 0.06);
+
+  --text-body: var(--zinc-50);
+  --text-muted: var(--zinc-400);
+  --text-subtle: var(--zinc-500);
+  --text-inverted: var(--zinc-950);
+  --text-link: var(--blue-400);
+  --text-link-hover: var(--blue-300);
+
+  --border-subtle: rgba(255, 255, 255, 0.06);
+  --border-default: var(--zinc-800);
+  --border-strong: var(--zinc-700);
+  --border-focus: var(--blue-400);
+
+  --accent: var(--blue-500);
+  --accent-hover: var(--blue-400);
+  --accent-quiet: rgba(59, 130, 246, 0.14);
+  --input-selection-background: color-mix(in srgb, var(--accent) 32%, transparent);
+  --accent-text: #ffffff;
+
+  --primary: var(--zinc-50);
+  --primary-hover: #ffffff;
+  --primary-quiet: rgba(250, 250, 250, 0.12);
+  --primary-text: var(--zinc-950);
+
+  --danger: var(--red-500);
+  --danger-hover: var(--red-400);
+  --danger-quiet: rgba(239, 68, 68, 0.14);
+  --success: var(--green-500);
+  --success-quiet: rgba(34, 197, 94, 0.14);
+  --warning: var(--amber-500);
+  --warning-quiet: rgba(245, 158, 11, 0.14);
+
+  --ring: rgba(122, 162, 247, 0.3);
+  --ring-edge: var(--blue-400);
+  --scrim: rgba(0, 0, 0, 0.66);
+}
+
+:root.light,
+[data-theme="light"] {
+  --bg-app: #ffffff;
+  --bg-sunken: var(--zinc-100);
+  --surface-card: #ffffff;
+  --surface-raised: #ffffff;
+  --surface-overlay: #ffffff;
+  --surface-hover: rgba(9, 9, 11, 0.04);
+  --surface-active: rgba(9, 9, 11, 0.07);
+  --surface-selected: rgba(9, 9, 11, 0.05);
+
+  --text-body: var(--zinc-950);
+  --text-muted: var(--zinc-500);
+  --text-subtle: var(--zinc-400);
+  --text-inverted: var(--zinc-50);
+  --text-link: var(--blue-600);
+  --text-link-hover: var(--blue-700);
+
+  --border-subtle: rgba(9, 9, 11, 0.07);
+  --border-default: var(--zinc-200);
+  --border-strong: var(--zinc-300);
+  --border-focus: var(--blue-600);
+
+  --accent: var(--blue-600);
+  --accent-hover: var(--blue-500);
+  --accent-quiet: rgba(37, 99, 235, 0.1);
+  --input-selection-background: color-mix(in srgb, var(--accent) 32%, transparent);
+
+  --primary: var(--zinc-900);
+  --primary-hover: var(--zinc-800);
+  --primary-quiet: rgba(24, 24, 27, 0.12);
+  --primary-text: var(--zinc-50);
+
+  --danger: var(--red-600);
+  --danger-hover: var(--red-500);
+  --danger-quiet: rgba(220, 38, 38, 0.1);
+  --success: var(--green-500);
+  --success-quiet: rgba(34, 197, 94, 0.12);
+  --warning: var(--amber-500);
+  --warning-quiet: rgba(245, 158, 11, 0.14);
+
+  --ring: rgba(37, 99, 235, 0.26);
+  --ring-edge: var(--blue-600);
+  --scrim: rgba(9, 9, 11, 0.35);
+}

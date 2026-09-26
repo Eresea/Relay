@@ -1,0 +1,29 @@
+:host {
+  display: inline-flex;
+  min-height: var(--space-10);
+  align-items: center;
+  border: var(--border-width) solid transparent;
+  border-radius: var(--radius-sm);
+  padding: var(--space-1) var(--space-4);
+  color: var(--text-body);
+  font: var(--type-caption);
+  white-space: nowrap;
+}
+
+:host([data-variant='default']) {
+  background: var(--surface-active);
+}
+
+:host([data-variant='secondary']) {
+  background: var(--bg-sunken);
+  color: var(--text-muted);
+}
+
+:host([data-variant='outline']) {
+  border-color: var(--border-default);
+}
+
+:host([data-variant='destructive']) {
+  background: var(--danger);
+  color: var(--text-inverted);
+}

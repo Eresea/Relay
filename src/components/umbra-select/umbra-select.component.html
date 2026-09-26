@@ -1,0 +1,113 @@
+<div class="select-shell">
+  <button
+    #triggerButton
+    class="select-trigger"
+    type="button"
+    [attr.aria-expanded]="isOpen()"
+    [attr.aria-controls]="listboxId"
+    aria-haspopup="listbox"
+    [attr.aria-label]="triggerAriaLabel()"
+    [attr.aria-labelledby]="ariaLabelledBy() || null"
+    [attr.aria-describedby]="ariaDescribedBy() || null"
+    [attr.aria-invalid]="invalid() || null"
+    [attr.aria-required]="required() || null"
+    [disabled]="disabled()"
+    (click)="toggle()"
+    (keydown)="onTriggerKeydown($event)"
+    (blur)="onTriggerBlur()"
+  >
+    <span class="select-copy">
+      @if (label()) { <span class="select-label">{{ label() }}</span> }
+      <span class="select-value" [attr.data-placeholder]="displayLabel() === null ? '' : null">
+        {{ displayLabel() ?? placeholder() }}
+      </span>
+    </span>
+    <svg class="select-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+      <path d="m6 9 6 6 6-6" />
+    </svg>
+  </button>
+
+  @if (showClear() && hasValue() && !disabled()) {
+    <button
+      type="button"
+      class="select-clear"
+      [attr.aria-label]="resolvedLabels().clear"
+      (click)="clear($event)"
+    >
+      <svg class="select-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
+        <path d="m18 6-12 12M6 6l12 12" />
+      </svg>
+    </button>
+  }
+</div>
+
+<ng-template #panelTemplate>
+  <div class="select-panel">
+    <input
+      #searchInput
+      class="select-search"
+      type="text"
+      role="combobox"
+      autocomplete="off"
+      aria-autocomplete="list"
+      [value]="state().query"
+      [placeholder]="searchPlaceholder()"
+      [attr.aria-label]="resolvedLabels().search"
+      [attr.aria-expanded]="isOpen()"
+      [attr.aria-controls]="listboxId"
+      [attr.aria-activedescendant]="activeOptionId()"
+      (input)="onSearchChange($event)"
+      (keydown)="onSearchKeydown($event)"
+    />
+
+    <div #listbox class="select-listbox" [id]="listboxId" role="listbox" [attr.aria-label]="ariaLabel()" [attr.aria-busy]="state().loadingInitial || state().loadingMore" (scroll)="onScroll($event)">
+      @for (item of visibleItems(); track valueWith()(item); let index = $index) {
+        <div
+          class="select-option"
+          role="option"
+          [id]="id + '-option-' + index"
+          [attr.data-index]="index"
+          [attr.data-active]="activeIndex() === index || null"
+          [attr.data-selected]="isSelected(item) || null"
+          [attr.data-disabled]="isOptionDisabled()(item) || null"
+          [attr.aria-selected]="isSelected(item)"
+          [attr.aria-disabled]="isOptionDisabled()(item) || null"
+          (mouseenter)="activateOption(index)"
+          (mousedown)="$event.preventDefault()"
+          (click)="selectOption(item)"
+        >
+          <span class="select-option-label">{{ displayWith()(item) }}</span>
+          @if (isSelected(item)) {
+            <svg class="select-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+              <path d="m5 12 4 4L19 6" />
+            </svg>
+          }
+        </div>
+      }
+
+      @if (state().loadingInitial && !visibleItems().length) {
+        <div class="select-feedback" role="status">{{ resolvedLabels().loading }}</div>
+      } @else if (state().searchError) {
+        <div class="select-feedback" role="alert">
+          {{ resolvedLabels().unableToLoad }}
+          <button type="button" (click)="retrySearch()">{{ resolvedLabels().retry }}</button>
+        </div>
+      } @else if (!visibleItems().length) {
+        <div class="select-feedback">
+          {{ state().query ? resolvedLabels().noResults(state().query) : resolvedLabels().noOptions }}
+        </div>
+      }
+
+      @if (state().loadingMore) {
+        <div class="select-feedback" role="status">{{ resolvedLabels().loadingMore }}</div>
+      } @else if (state().paginationError) {
+        <div class="select-feedback" role="alert">
+          {{ resolvedLabels().unableToLoadMore }}
+          <button type="button" (click)="retryPagination()">{{ resolvedLabels().retry }}</button>
+        </div>
+      }
+    </div>
+
+    <div class="sr-only" aria-live="polite" aria-atomic="true">{{ announcement() }}</div>
+  </div>
+</ng-template>

@@ -1,0 +1,9 @@
+<label class="trigger">
+  <ng-content />
+  <input
+    type="file"
+    [attr.accept]="accept() || null"
+    [multiple]="multiple()"
+    (change)="fileSelected.emit($event)"
+  />
+</label>

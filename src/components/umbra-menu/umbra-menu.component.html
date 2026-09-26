@@ -1,0 +1,16 @@
+<div class="menu" role="menu" [attr.aria-label]="ariaLabel()" (keydown)="handleKeydown($event)">
+  @for (item of items(); track item.id; let index = $index) {
+    <button
+      #menuItem
+      type="button"
+      role="menuitem"
+      [tabIndex]="tabIndex(index)"
+      [disabled]="item.disabled ?? false"
+      [class.destructive]="item.destructive ?? false"
+      (click)="select(item)"
+    >
+      <span>{{ item.label }}</span>
+      @if (item.shortcut) { <kbd>{{ item.shortcut }}</kbd> }
+    </button>
+  }
+</div>

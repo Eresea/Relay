@@ -1,0 +1,11 @@
+/* Umbra — corner radii. Ported verbatim from Umbra tokens/radius.css.
+   Small controls get 5–7; cards and dialogs get 10–14. Nothing is fully rounded
+   except tracks, dots and avatars. */
+:root {
+  --radius-xs: 3px;
+  --radius-sm: 5px;
+  --radius-md: 7px;
+  --radius-lg: 10px;
+  --radius-xl: 14px;
+  --radius-pill: 999px;
+}
