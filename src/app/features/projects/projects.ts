@@ -1,6 +1,7 @@
 import { ChangeDetectionStrategy, Component, inject, signal } from '@angular/core';
 
 import { BackgroundTasks } from '@core/background-tasks';
+import { NotificationCenter } from '@core/notification-center';
 import {
   TauriBridge,
   type GithubPullRequestSummary,
@@ -393,6 +394,7 @@ export class Projects {
   private static readonly CACHE_KEY = 'projects.scan';
   private readonly tauri = inject(TauriBridge);
   private readonly backgroundTasks = inject(BackgroundTasks);
+  private readonly notificationCenter = inject(NotificationCenter);
   protected readonly projects = signal<readonly ProjectSummary[]>([]);
   protected readonly loading = signal(true);
   protected readonly syncing = signal(false);
@@ -479,10 +481,34 @@ export class Projects {
           void this.tauri.openUrl(project.githubUrl.replace(/\/$/, '') + '/pulls');
         return;
       case 'copyPath':
-        if (project.path) void navigator.clipboard?.writeText(project.path);
+        if (project.path) {
+          void navigator.clipboard?.writeText(project.path);
+          this.notificationCenter.handle({
+            type: 'notification',
+            notificationId: `copy-path-${projectKey(project)}`,
+            jobId: `copy-path-${projectKey(project)}`,
+            hueSource: project.name,
+            title: 'Path copied to clipboard',
+            detail: project.path,
+            status: 'done',
+            autoDismissMs: 2000,
+          });
+        }
         return;
       case 'copyUrl':
-        if (project.githubUrl) void navigator.clipboard?.writeText(project.githubUrl);
+        if (project.githubUrl) {
+          void navigator.clipboard?.writeText(project.githubUrl);
+          this.notificationCenter.handle({
+            type: 'notification',
+            notificationId: `copy-url-${projectKey(project)}`,
+            jobId: `copy-url-${projectKey(project)}`,
+            hueSource: project.name,
+            title: 'GitHub URL copied to clipboard',
+            detail: project.githubUrl,
+            status: 'done',
+            autoDismissMs: 2000,
+          });
+        }
         return;
       default:
         if (!project.path) return;
