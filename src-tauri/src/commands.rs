@@ -524,6 +524,28 @@ pub async fn linear_create_project_update(
 }
 
 #[tauri::command]
+pub async fn linear_update_project_update(
+    app: AppHandle,
+    organization_id: String,
+    update_id: String,
+    body: String,
+    health: String,
+) -> Result<LinearProjectUpdate> {
+    let body = body.trim();
+    if update_id.trim().is_empty() || body.is_empty() || body.chars().count() > 10_000 {
+        return Err(
+            std::io::Error::other("A project update up to 10,000 characters is required").into(),
+        );
+    }
+    if !matches!(health.as_str(), "onTrack" | "atRisk" | "offTrack") {
+        return Err(
+            std::io::Error::other("Project health must be onTrack, atRisk, or offTrack").into(),
+        );
+    }
+    linear::update_project_update(&app, &organization_id, &update_id, body, &health).await
+}
+
+#[tauri::command]
 pub async fn linear_create_milestone(
     app: AppHandle,
     organization_id: String,

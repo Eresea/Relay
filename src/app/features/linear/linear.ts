@@ -918,7 +918,58 @@ interface LinearIssueDraft {
                         >{{ update.user.name }} · {{ projectUpdateDate(update.createdAt) }}</span
                       >
                       <p>{{ update.body }}</p>
+                      @if (!selectedProject()!.archivedAt) {
+                        <umbra-button
+                          size="sm"
+                          variant="link"
+                          type="button"
+                          (click)="editProjectUpdate(update)"
+                        >
+                          Edit update
+                        </umbra-button>
+                      }
                     </article>
+                    @if (editingProjectUpdateId() === update.id) {
+                      <form class="project-edit" (submit)="saveProjectUpdate($event, update)">
+                        <label>
+                          <span>Health</span>
+                          <select
+                            [value]="editProjectUpdateHealth()"
+                            (change)="editProjectUpdateHealth.set($any($event.target).value)"
+                          >
+                            <option value="onTrack">On track</option>
+                            <option value="atRisk">At risk</option>
+                            <option value="offTrack">Off track</option>
+                          </select>
+                        </label>
+                        <label>
+                          <span>Update</span>
+                          <textarea
+                            required
+                            maxlength="10000"
+                            rows="3"
+                            [value]="editProjectUpdateBody()"
+                            (input)="editProjectUpdateBody.set($any($event.target).value)"
+                          ></textarea>
+                        </label>
+                        <div class="issue-actions">
+                          <umbra-button
+                            size="sm"
+                            [disabled]="savingProjectUpdate() || !editProjectUpdateBody().trim()"
+                          >
+                            {{ savingProjectUpdate() ? 'Saving' : 'Save update' }}
+                          </umbra-button>
+                          <umbra-button
+                            size="sm"
+                            variant="link"
+                            type="button"
+                            (click)="editingProjectUpdateId.set(null)"
+                          >
+                            Cancel
+                          </umbra-button>
+                        </div>
+                      </form>
+                    }
                   } @empty {
                     <p class="hint">No status updates yet.</p>
                   }
@@ -1728,6 +1779,10 @@ export class Linear {
   protected readonly newProjectUpdateBody = signal('');
   protected readonly newProjectUpdateHealth = signal<LinearProjectHealth>('onTrack');
   protected readonly creatingProjectUpdate = signal(false);
+  protected readonly editingProjectUpdateId = signal<string | null>(null);
+  protected readonly editProjectUpdateBody = signal('');
+  protected readonly editProjectUpdateHealth = signal<LinearProjectHealth>('onTrack');
+  protected readonly savingProjectUpdate = signal(false);
   protected readonly projects = signal<readonly LinearProject[]>([]);
   protected readonly projectStatuses = signal<readonly LinearProjectStatus[]>([]);
   protected readonly initiatives = signal<readonly LinearInitiative[]>([]);
@@ -2826,6 +2881,37 @@ export class Linear {
 
   protected projectUpdateDate(createdAt: string): string {
     return new Date(createdAt).toLocaleString();
+  }
+
+  protected editProjectUpdate(update: LinearProjectUpdate): void {
+    this.editingProjectUpdateId.set(update.id);
+    this.editProjectUpdateBody.set(update.body);
+    this.editProjectUpdateHealth.set(update.health);
+  }
+
+  protected async saveProjectUpdate(event: Event, current: LinearProjectUpdate): Promise<void> {
+    event.preventDefault();
+    const connection = this.selected();
+    const body = this.editProjectUpdateBody().trim();
+    if (!connection || !body || this.savingProjectUpdate()) return;
+    this.savingProjectUpdate.set(true);
+    this.error.set(null);
+    try {
+      const updated = await this.tauri.linearUpdateProjectUpdate(
+        connection.organizationId,
+        current.id,
+        body,
+        this.editProjectUpdateHealth(),
+      );
+      this.projectUpdates.update((updates) =>
+        updates.map((update) => (update.id === updated.id ? updated : update)),
+      );
+      this.editingProjectUpdateId.set(null);
+    } catch (error) {
+      this.error.set(error instanceof Error ? error.message : String(error));
+    } finally {
+      this.savingProjectUpdate.set(false);
+    }
   }
 
   protected async createProjectUpdate(event: Event): Promise<void> {

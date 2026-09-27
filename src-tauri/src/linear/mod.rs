@@ -293,6 +293,22 @@ pub async fn create_project_update(
     .await
 }
 
+pub async fn update_project_update(
+    app: &AppHandle,
+    organization_id: &str,
+    update_id: &str,
+    body: &str,
+    health: &str,
+) -> Result<LinearProjectUpdate> {
+    api::update_project_update(
+        &access_token(app, organization_id).await?,
+        update_id,
+        body,
+        health,
+    )
+    .await
+}
+
 pub async fn create_milestone(
     app: &AppHandle,
     organization_id: &str,

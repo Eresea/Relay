@@ -684,6 +684,22 @@ export class TauriBridge {
     return update;
   }
 
+  async linearUpdateProjectUpdate(
+    organizationId: string,
+    updateId: string,
+    body: string,
+    health: LinearProjectHealth,
+  ): Promise<LinearProjectUpdate> {
+    const update = await this.invoke<LinearProjectUpdate>('linear_update_project_update', {
+      organizationId,
+      updateId,
+      body,
+      health,
+    });
+    if (!update) throw new Error('Linear returned no updated project update.');
+    return update;
+  }
+
   async linearCreateMilestone(
     organizationId: string,
     projectId: string,

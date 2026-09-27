@@ -572,6 +572,27 @@ pub async fn create_project_update(
         .into_value("Linear did not create the project update")
 }
 
+pub async fn update_project_update(
+    token: &str,
+    update_id: &str,
+    body: &str,
+    health: &str,
+) -> Result<LinearProjectUpdate> {
+    #[derive(Deserialize)]
+    struct Data {
+        #[serde(rename = "projectUpdateUpdate")]
+        result: ProjectUpdateMutation,
+    }
+    let data: Data = query(
+        token,
+        "mutation RelayProjectUpdateEdit($id: String!, $input: ProjectUpdateUpdateInput!) { projectUpdateUpdate(id: $id, input: $input) { success projectUpdate { id body health createdAt user { id name } } } }",
+        json!({ "id": update_id, "input": { "body": body, "health": health } }),
+    )
+    .await?;
+    data.result
+        .into_value("Linear did not update the project update")
+}
+
 pub async fn create_milestone(
     token: &str,
     project_id: &str,
