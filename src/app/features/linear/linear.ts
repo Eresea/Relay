@@ -11,6 +11,7 @@ import {
   type LinearInitiative,
   type LinearIssue,
   type LinearIssueDetail,
+  type LinearIssuePage,
   type LinearLabel,
   type LinearMilestone,
   type LinearProject,
@@ -433,6 +434,11 @@ interface LinearIssueDraft {
                   <p class="hint">Draft saved on this device.</p>
                 }
               }
+              @if (issueCacheStale()) {
+                <p class="hint" role="status">
+                  Showing saved issues; refresh to check for updates.
+                </p>
+              }
               @if (issues().length === 0 && !loading()) {
                 <p class="hint">No assigned issues found.</p>
               }
@@ -470,6 +476,11 @@ interface LinearIssueDraft {
             </section>
           } @else if (section() === 'projects') {
             <section class="issues" aria-label="Linear projects">
+              @if (projectCacheStale()) {
+                <p class="hint" role="status">
+                  Showing saved projects; refresh to check for updates.
+                </p>
+              }
               <div class="issue-heading">
                 <h2>{{ selectedProject()?.name ?? 'Projects' }}</h2>
                 @if (selectedProject()) {
@@ -1320,6 +1331,8 @@ export class Linear {
   protected readonly newDescription = signal('');
   protected readonly hasNextPage = signal(false);
   protected readonly error = signal<string | null>(null);
+  protected readonly issueCacheStale = signal(false);
+  protected readonly projectCacheStale = signal(false);
   protected readonly pending = signal(false);
   protected readonly syncing = signal(false);
   protected readonly oauthConfigured = signal(false);
@@ -1403,6 +1416,8 @@ export class Linear {
   protected select(connection: LinearConnection): void {
     this.selected.set(connection);
     this.restoreIssueDraft(connection);
+    this.issueCacheStale.set(false);
+    this.projectCacheStale.set(false);
     this.issues.set([]);
     this.issueDetail.set(null);
     this.codexContext.set(null);
@@ -1747,18 +1762,34 @@ export class Linear {
     return `relay.linear.projectIssueDraft.${organizationId}.${projectId}`;
   }
 
-  private readIssueDraft(key: string): Partial<LinearIssueDraft> | null {
+  private issueCacheKey(connection: LinearConnection): string {
+    return `relay.linear.issues.${connection.organizationId}.${connection.viewerId}`;
+  }
+
+  private projectCacheKey(connection: LinearConnection): string {
+    return `relay.linear.projects.${connection.organizationId}.${connection.viewerId}`;
+  }
+
+  private saveIssueCache(connection: LinearConnection): void {
+    this.writeLocal(this.issueCacheKey(connection), {
+      issues: this.issues(),
+      endCursor: this.nextCursor,
+      hasNextPage: this.hasNextPage(),
+    } satisfies LinearIssuePage);
+  }
+
+  private readLocal<T>(key: string): T | null {
     try {
       const saved = localStorage.getItem(key);
-      return saved ? (JSON.parse(saved) as Partial<LinearIssueDraft>) : null;
+      return saved ? (JSON.parse(saved) as T) : null;
     } catch {
       return null;
     }
   }
 
-  private writeIssueDraft(key: string, draft: LinearIssueDraft | null): void {
+  private writeLocal<T>(key: string, value: T | null): void {
     try {
-      if (draft) localStorage.setItem(key, JSON.stringify(draft));
+      if (value) localStorage.setItem(key, JSON.stringify(value));
       else localStorage.removeItem(key);
     } catch {
       // Keep the composer usable if local persistence is unavailable.
@@ -1768,7 +1799,7 @@ export class Linear {
   private saveIssueDraft(): void {
     const connection = this.selected();
     if (!connection) return;
-    this.writeIssueDraft(this.issueDraftKey(connection.organizationId), {
+    this.writeLocal(this.issueDraftKey(connection.organizationId), {
       teamId: this.createTeamId(),
       title: this.newTitle(),
       description: this.newDescription(),
@@ -1776,7 +1807,9 @@ export class Linear {
   }
 
   private restoreIssueDraft(connection: LinearConnection): void {
-    const draft = this.readIssueDraft(this.issueDraftKey(connection.organizationId));
+    const draft = this.readLocal<Partial<LinearIssueDraft>>(
+      this.issueDraftKey(connection.organizationId),
+    );
     this.newTitle.set(typeof draft?.title === 'string' ? draft.title : '');
     this.newDescription.set(typeof draft?.description === 'string' ? draft.description : '');
     if (typeof draft?.teamId === 'string') this.createTeamId.set(draft.teamId);
@@ -1797,7 +1830,7 @@ export class Linear {
     const connection = this.selected();
     const project = this.selectedProject();
     if (!connection || !project) return;
-    this.writeIssueDraft(this.projectIssueDraftKey(connection.organizationId, project.id), {
+    this.writeLocal(this.projectIssueDraftKey(connection.organizationId, project.id), {
       teamId: this.createTeamId(),
       title: this.newProjectIssueTitle(),
       description: this.newProjectIssueDescription(),
@@ -1806,7 +1839,7 @@ export class Linear {
   }
 
   private restoreProjectIssueDraft(connection: LinearConnection, projectId: string): void {
-    const draft = this.readIssueDraft(
+    const draft = this.readLocal<Partial<LinearIssueDraft>>(
       this.projectIssueDraftKey(connection.organizationId, projectId),
     );
     this.newProjectIssueTitle.set(typeof draft?.title === 'string' ? draft.title : '');
@@ -1833,10 +1866,27 @@ export class Linear {
   protected async loadProjects(): Promise<void> {
     const connection = this.selected();
     if (!connection) return;
+    this.projectCacheStale.set(false);
+    const cached = this.readLocal<readonly LinearProject[]>(this.projectCacheKey(connection));
+    const hasCache = Array.isArray(cached);
+    if (hasCache) {
+      this.projects.set(cached);
+      this.projectCacheStale.set(true);
+    }
     try {
-      this.projects.set(await this.tauri.linearProjects(connection.organizationId));
+      const projects = await this.tauri.linearProjects(connection.organizationId);
+      this.projects.set(projects);
+      this.writeLocal(this.projectCacheKey(connection), projects);
+      this.projectCacheStale.set(false);
     } catch (error) {
-      this.error.set(error instanceof Error ? error.message : String(error));
+      this.projectCacheStale.set(hasCache);
+      this.error.set(
+        hasCache
+          ? 'Linear is unavailable. Showing saved projects.'
+          : error instanceof Error
+            ? error.message
+            : String(error),
+      );
     }
   }
 
@@ -2004,6 +2054,7 @@ export class Linear {
       this.newProjectLeadId.set('');
       this.createProjectOpen.set(false);
       this.projects.update((projects) => [project, ...projects]);
+      this.writeLocal(this.projectCacheKey(connection), this.projects());
       await this.openProject(project);
     } catch (error) {
       this.error.set(error instanceof Error ? error.message : String(error));
@@ -2036,6 +2087,7 @@ export class Linear {
       this.projects.update((projects) =>
         projects.map((entry) => (entry.id === updated.id ? updated : entry)),
       );
+      this.writeLocal(this.projectCacheKey(connection), this.projects());
     } catch (error) {
       this.error.set(error instanceof Error ? error.message : String(error));
     } finally {
@@ -2120,8 +2172,9 @@ export class Linear {
       );
       this.newTitle.set('');
       this.newDescription.set('');
-      this.writeIssueDraft(this.issueDraftKey(connection.organizationId), null);
+      this.writeLocal(this.issueDraftKey(connection.organizationId), null);
       this.issues.update((issues) => [created, ...issues]);
+      this.saveIssueCache(connection);
     } catch (error) {
       this.error.set(error instanceof Error ? error.message : String(error));
     } finally {
@@ -2152,7 +2205,7 @@ export class Linear {
       this.newProjectIssueTitle.set('');
       this.newProjectIssueDescription.set('');
       this.newProjectIssueMilestoneId.set('');
-      this.writeIssueDraft(this.projectIssueDraftKey(connection.organizationId, project.id), null);
+      this.writeLocal(this.projectIssueDraftKey(connection.organizationId, project.id), null);
     } catch (error) {
       this.error.set(error instanceof Error ? error.message : String(error));
     } finally {
@@ -2165,6 +2218,8 @@ export class Linear {
     if (!connection) return;
     try {
       await this.tauri.linearDisconnect(connection.organizationId);
+      this.writeLocal(this.issueCacheKey(connection), null);
+      this.writeLocal(this.projectCacheKey(connection), null);
       const connections = this.connections().filter(
         (entry) => entry.organizationId !== connection.organizationId,
       );
@@ -2238,6 +2293,7 @@ export class Linear {
       this.issueDetail.update((detail) =>
         detail?.issue.id === issue.id ? { ...detail, issue: updated } : detail,
       );
+      this.saveIssueCache(connection);
     } catch (error) {
       this.error.set(error instanceof Error ? error.message : String(error));
     }
@@ -2246,6 +2302,14 @@ export class Linear {
   protected async loadIssues(): Promise<void> {
     const connection = this.selected();
     if (!connection || this.loading()) return;
+    const cached = this.readLocal<LinearIssuePage>(this.issueCacheKey(connection));
+    const hasCache = !!cached && Array.isArray(cached.issues);
+    if (hasCache && cached) {
+      this.issues.set(cached.issues);
+      this.nextCursor = typeof cached.endCursor === 'string' ? cached.endCursor : null;
+      this.hasNextPage.set(cached.hasNextPage === true);
+      this.issueCacheStale.set(true);
+    }
     this.loading.set(true);
     this.error.set(null);
     try {
@@ -2253,8 +2317,17 @@ export class Linear {
       this.issues.set(page.issues);
       this.nextCursor = page.endCursor;
       this.hasNextPage.set(page.hasNextPage);
+      this.saveIssueCache(connection);
+      this.issueCacheStale.set(false);
     } catch (error) {
-      this.error.set(error instanceof Error ? error.message : String(error));
+      this.issueCacheStale.set(hasCache);
+      this.error.set(
+        hasCache
+          ? 'Linear is unavailable. Showing saved issues.'
+          : error instanceof Error
+            ? error.message
+            : String(error),
+      );
     } finally {
       this.loading.set(false);
     }
@@ -2269,7 +2342,9 @@ export class Linear {
       this.issues.update((issues) => [...issues, ...page.issues]);
       this.nextCursor = page.endCursor;
       this.hasNextPage.set(page.hasNextPage);
+      this.saveIssueCache(connection);
     } catch (error) {
+      this.issueCacheStale.set(true);
       this.error.set(error instanceof Error ? error.message : String(error));
     } finally {
       this.loading.set(false);
