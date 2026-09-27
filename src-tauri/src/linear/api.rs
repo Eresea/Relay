@@ -68,6 +68,8 @@ pub struct Issue {
     #[serde(default)]
     pub priority: u8,
     #[serde(default)]
+    pub due_date: Option<String>,
+    #[serde(default)]
     pub updated_at: String,
     pub state: Option<WorkflowState>,
     pub assignee: Option<Person>,
@@ -786,7 +788,7 @@ pub async fn issue_detail(token: &str, issue_id: &str) -> Result<IssueDetail> {
     }
     let data: Data = query(
         token,
-        "query RelayIssueDetail($id: String!) { issue(id: $id) { id identifier title description url priority updatedAt state { id name type } assignee { id name } project { id name } projectMilestone { id name } cycle { id name number } labels { nodes { id name color } } team { id name key } children(first: 50) { nodes { id identifier title description url priority updatedAt state { id name type } assignee { id name } project { id name } cycle { id name number } labels { nodes { id name color } } team { id name key } } } comments(first: 50) { nodes { id body createdAt user { id name } } } } }",
+        "query RelayIssueDetail($id: String!) { issue(id: $id) { id identifier title description url priority dueDate updatedAt state { id name type } assignee { id name } project { id name } projectMilestone { id name } cycle { id name number } labels { nodes { id name color } } team { id name key } children(first: 50) { nodes { id identifier title description url priority updatedAt state { id name type } assignee { id name } project { id name } cycle { id name number } labels { nodes { id name color } } team { id name key } } } comments(first: 50) { nodes { id body createdAt user { id name } } } } }",
         json!({ "id": issue_id }),
     )
     .await?;
@@ -828,6 +830,8 @@ pub async fn update_issue(
     clear_project: bool,
     project_milestone_id: Option<&str>,
     clear_project_milestone: bool,
+    due_date: Option<&str>,
+    clear_due_date: bool,
 ) -> Result<Issue> {
     #[derive(Deserialize)]
     struct Data {
@@ -877,9 +881,15 @@ pub async fn update_issue(
     if clear_project_milestone {
         input.insert("projectMilestoneId".into(), Value::Null);
     }
+    if let Some(due_date) = due_date {
+        input.insert("dueDate".into(), json!(due_date));
+    }
+    if clear_due_date {
+        input.insert("dueDate".into(), Value::Null);
+    }
     let data: Data = query(
         token,
-        "mutation RelayIssueUpdate($id: String!, $input: IssueUpdateInput!) { issueUpdate(id: $id, input: $input) { success issue { id identifier title description url priority updatedAt state { id name type } assignee { id name } project { id name } projectMilestone { id name } cycle { id name number } labels { nodes { id name color } } team { id name key } } } }",
+        "mutation RelayIssueUpdate($id: String!, $input: IssueUpdateInput!) { issueUpdate(id: $id, input: $input) { success issue { id identifier title description url priority dueDate updatedAt state { id name type } assignee { id name } project { id name } projectMilestone { id name } cycle { id name number } labels { nodes { id name color } } team { id name key } } } }",
         json!({
             "id": issue_id,
             "input": input

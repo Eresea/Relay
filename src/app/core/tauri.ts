@@ -858,6 +858,8 @@ export class TauriBridge {
       clearProject?: boolean;
       projectMilestoneId?: string;
       clearProjectMilestone?: boolean;
+      dueDate?: string;
+      clearDueDate?: boolean;
       stateId?: string;
       assigneeId?: string;
       clearAssignee?: boolean;
@@ -1362,6 +1364,7 @@ export interface LinearIssue {
   readonly description: string | null;
   readonly url: string;
   readonly priority: number;
+  readonly dueDate?: string | null;
   readonly updatedAt: string;
   readonly state: { readonly id: string; readonly name: string; readonly kind: string } | null;
   readonly assignee: { readonly id: string; readonly name: string } | null;

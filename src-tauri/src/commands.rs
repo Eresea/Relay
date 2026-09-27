@@ -789,6 +789,8 @@ pub async fn linear_update_issue(
     clear_project: Option<bool>,
     project_milestone_id: Option<String>,
     clear_project_milestone: Option<bool>,
+    due_date: Option<String>,
+    clear_due_date: Option<bool>,
 ) -> Result<Issue> {
     if organization_id.trim().is_empty()
         || issue_id.trim().is_empty()
@@ -805,6 +807,17 @@ pub async fn linear_update_issue(
             .is_some_and(|value| value.trim().is_empty())
         || (clear_project_milestone.unwrap_or(false) && project_milestone_id.is_some())
         || (clear_project.unwrap_or(false) && project_milestone_id.is_some())
+        || due_date.as_ref().is_some_and(|value| {
+            let bytes = value.as_bytes();
+            bytes.len() != 10
+                || bytes[4] != b'-'
+                || bytes[7] != b'-'
+                || bytes
+                    .iter()
+                    .enumerate()
+                    .any(|(index, byte)| index != 4 && index != 7 && !byte.is_ascii_digit())
+        })
+        || (clear_due_date.unwrap_or(false) && due_date.is_some())
         || assignee_id
             .as_ref()
             .is_some_and(|value| value.trim().is_empty())
@@ -836,6 +849,8 @@ pub async fn linear_update_issue(
         clear_project.unwrap_or(false),
         project_milestone_id.as_deref(),
         clear_project_milestone.unwrap_or(false),
+        due_date.as_deref(),
+        clear_due_date.unwrap_or(false),
     )
     .await
 }

@@ -255,6 +255,14 @@ interface LinearIssueDraft {
                   </select>
                 </label>
                 <label>
+                  <span>Due date</span>
+                  <input
+                    type="date"
+                    [value]="detail.issue.dueDate ?? ''"
+                    (change)="updateDueDate(detail.issue, $any($event.target).value)"
+                  />
+                </label>
+                <label>
                   <span>Assignee</span>
                   <select
                     [value]="detail.issue.assignee?.id ?? ''"
@@ -2655,6 +2663,11 @@ export class Linear {
   protected async updatePriority(issue: LinearIssue, priority: number): Promise<void> {
     if (priority === issue.priority) return;
     await this.saveIssueUpdate(issue, { priority });
+  }
+
+  protected async updateDueDate(issue: LinearIssue, dueDate: string): Promise<void> {
+    if (dueDate === (issue.dueDate ?? '')) return;
+    await this.saveIssueUpdate(issue, dueDate ? { dueDate } : { clearDueDate: true });
   }
 
   protected async updateAssignee(issue: LinearIssue, assigneeId: string): Promise<void> {

@@ -40,6 +40,15 @@ describe('Linear issue update drafts', () => {
     ).toEqual({ projectId: 'project-2', clearProjectMilestone: true });
   });
 
+  it('keeps only the latest due-date change in an offline draft', () => {
+    expect(mergeLinearIssueUpdates({ dueDate: '2026-10-01' }, { clearDueDate: true })).toEqual({
+      clearDueDate: true,
+    });
+    expect(mergeLinearIssueUpdates({ clearDueDate: true }, { dueDate: '2026-10-15' })).toEqual({
+      dueDate: '2026-10-15',
+    });
+  });
+
   it('replaces mutually exclusive assignee and cycle changes', () => {
     expect(mergeLinearIssueUpdates({ clearAssignee: true }, { assigneeId: 'user-1' })).toEqual({
       assigneeId: 'user-1',
