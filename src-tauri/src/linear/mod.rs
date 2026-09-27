@@ -9,8 +9,9 @@ use tauri_plugin_store::StoreExt;
 use crate::error::{Error, Result};
 
 pub use api::{
-    Initiative, Issue, IssueDetail, IssuePage, LinearComment, LinearCycle, LinearLabel,
-    LinearMilestone, LinearProject, LinearProjectStatus, Person, Team, Viewer, WorkflowState,
+    Initiative, InitiativeProject, Issue, IssueDetail, IssuePage, LinearComment, LinearCycle,
+    LinearLabel, LinearMilestone, LinearProject, LinearProjectStatus, Person, Team, Viewer,
+    WorkflowState,
 };
 use oauth::TokenBundle;
 pub use oauth::{LinearCodexLink, LinearCodexProjectPolicy};
@@ -320,6 +321,28 @@ pub async fn update_initiative(
         target_date,
     )
     .await
+}
+
+pub async fn add_project_to_initiative(
+    app: &AppHandle,
+    organization_id: &str,
+    initiative_id: &str,
+    project_id: &str,
+) -> Result<api::InitiativeProject> {
+    api::add_project_to_initiative(
+        &access_token(app, organization_id).await?,
+        initiative_id,
+        project_id,
+    )
+    .await
+}
+
+pub async fn remove_project_from_initiative(
+    app: &AppHandle,
+    organization_id: &str,
+    link_id: &str,
+) -> Result<()> {
+    api::remove_project_from_initiative(&access_token(app, organization_id).await?, link_id).await
 }
 
 pub async fn cycles(

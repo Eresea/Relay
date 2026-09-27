@@ -997,15 +997,64 @@ interface LinearIssueDraft {
                     }}</span>
                     @if (initiative.projects.length) {
                       <div class="initiative-projects">
-                        @for (project of initiative.projects; track project.id) {
-                          <button
-                            type="button"
-                            class="issue-link"
-                            (click)="openProjectById(project.id)"
-                          >
-                            {{ project.name }}
-                          </button>
+                        @for (link of initiative.projects; track link.id) {
+                          <div class="issue-actions">
+                            <button
+                              type="button"
+                              class="issue-link"
+                              (click)="openProjectById(link.project.id)"
+                            >
+                              {{ link.project.name }}
+                            </button>
+                            <umbra-button
+                              size="sm"
+                              variant="link"
+                              [disabled]="savingInitiativeProjectId() === initiative.id"
+                              [ariaLabel]="
+                                'Remove ' + link.project.name + ' from ' + initiative.name
+                              "
+                              (click)="removeInitiativeProject(initiative, link.id)"
+                            >
+                              Remove
+                            </umbra-button>
+                          </div>
                         }
+                      </div>
+                    }
+                    @if (availableInitiativeProjects(initiative).length) {
+                      <div class="issue-actions">
+                        <label>
+                          <span class="sr-only">Project to add to {{ initiative.name }}</span>
+                          <select
+                            [value]="initiativeProjectSelection()[initiative.id] ?? ''"
+                            (change)="
+                              setInitiativeProject(initiative.id, $any($event.target).value)
+                            "
+                          >
+                            <option value="">Choose project</option>
+                            @for (
+                              project of availableInitiativeProjects(initiative);
+                              track project.id
+                            ) {
+                              <option [value]="project.id">{{ project.name }}</option>
+                            }
+                          </select>
+                        </label>
+                        <umbra-button
+                          size="sm"
+                          variant="outline"
+                          [disabled]="
+                            !initiativeProjectSelection()[initiative.id] ||
+                            savingInitiativeProjectId() === initiative.id
+                          "
+                          (click)="addInitiativeProject(initiative)"
+                        >
+                          {{
+                            savingInitiativeProjectId() === initiative.id
+                              ? 'Linking'
+                              : 'Link project'
+                          }}
+                        </umbra-button>
                       </div>
                     }
                   </div>
@@ -1363,6 +1412,8 @@ export class Linear {
   protected readonly editInitiativeDescription = signal('');
   protected readonly editInitiativeTargetDate = signal('');
   protected readonly savingInitiative = signal(false);
+  protected readonly initiativeProjectSelection = signal<Readonly<Record<string, string>>>({});
+  protected readonly savingInitiativeProjectId = signal<string | null>(null);
   protected readonly cycles = signal<Readonly<Record<string, readonly LinearCycle[]>>>({});
   protected readonly editingCycleId = signal<string | null>(null);
   protected readonly editCycleStartDate = signal('');
@@ -2065,6 +2116,8 @@ export class Linear {
     if (hasCache) {
       this.projects.set(cached);
       this.projectCacheStale.set(true);
+    } else {
+      this.projects.set([]);
     }
     try {
       const projects = await this.tauri.linearProjects(connection.organizationId);
@@ -2080,6 +2133,73 @@ export class Linear {
             ? error.message
             : String(error),
       );
+    }
+  }
+
+  protected setInitiativeProject(initiativeId: string, projectId: string): void {
+    this.initiativeProjectSelection.update((selection) => ({
+      ...selection,
+      [initiativeId]: projectId,
+    }));
+  }
+
+  protected availableInitiativeProjects(initiative: LinearInitiative): readonly LinearProject[] {
+    const assigned = new Set(
+      this.initiatives().flatMap((item) => item.projects.map((link) => link.project.id)),
+    );
+    return this.projects().filter(
+      (project) =>
+        !assigned.has(project.id) ||
+        initiative.projects.some((link) => link.project.id === project.id),
+    );
+  }
+
+  protected async addInitiativeProject(initiative: LinearInitiative): Promise<void> {
+    const connection = this.selected();
+    const projectId = this.initiativeProjectSelection()[initiative.id];
+    if (!connection || !projectId || this.savingInitiativeProjectId()) return;
+    this.savingInitiativeProjectId.set(initiative.id);
+    this.error.set(null);
+    try {
+      const link = await this.tauri.linearAddProjectToInitiative(
+        connection.organizationId,
+        initiative.id,
+        projectId,
+      );
+      this.initiatives.update((items) =>
+        items.map((item) =>
+          item.id === initiative.id ? { ...item, projects: [...item.projects, link] } : item,
+        ),
+      );
+      this.initiativeProjectSelection.update(({ [initiative.id]: _, ...selection }) => selection);
+    } catch (error) {
+      this.error.set(error instanceof Error ? error.message : String(error));
+    } finally {
+      this.savingInitiativeProjectId.set(null);
+    }
+  }
+
+  protected async removeInitiativeProject(
+    initiative: LinearInitiative,
+    linkId: string,
+  ): Promise<void> {
+    const connection = this.selected();
+    if (!connection || this.savingInitiativeProjectId()) return;
+    this.savingInitiativeProjectId.set(initiative.id);
+    this.error.set(null);
+    try {
+      await this.tauri.linearRemoveProjectFromInitiative(connection.organizationId, linkId);
+      this.initiatives.update((items) =>
+        items.map((item) =>
+          item.id === initiative.id
+            ? { ...item, projects: item.projects.filter((link) => link.id !== linkId) }
+            : item,
+        ),
+      );
+    } catch (error) {
+      this.error.set(error instanceof Error ? error.message : String(error));
+    } finally {
+      this.savingInitiativeProjectId.set(null);
     }
   }
 
@@ -2305,6 +2425,7 @@ export class Linear {
     if (this.section() === 'roadmap') {
       try {
         this.initiatives.set(await this.tauri.linearInitiatives(connection.organizationId));
+        await this.loadProjects();
       } catch (error) {
         this.error.set(error instanceof Error ? error.message : String(error));
       }

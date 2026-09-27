@@ -28,8 +28,8 @@ use crate::github::{
 use crate::gmail::{self, GmailSettings, GmailState, GmailStatus, HttpGoogleApi, OsKeyStore};
 use crate::jobs::{JobId, JobRegistry};
 use crate::linear::{
-    self, Initiative, Issue, IssueDetail, IssuePage, LinearCodexContext, LinearComment,
-    LinearConnection, LinearCycle, LinearLabel, LinearMilestone, LinearProject,
+    self, Initiative, InitiativeProject, Issue, IssueDetail, IssuePage, LinearCodexContext,
+    LinearComment, LinearConnection, LinearCycle, LinearLabel, LinearMilestone, LinearProject,
     LinearProjectStatus, Person, Team, WorkflowState,
 };
 #[cfg(mobile)]
@@ -565,6 +565,34 @@ pub async fn linear_update_initiative(
         target_date.as_deref(),
     )
     .await
+}
+
+#[tauri::command]
+pub async fn linear_add_project_to_initiative(
+    app: AppHandle,
+    organization_id: String,
+    initiative_id: String,
+    project_id: String,
+) -> Result<InitiativeProject> {
+    if organization_id.trim().is_empty()
+        || initiative_id.trim().is_empty()
+        || project_id.trim().is_empty()
+    {
+        return Err(std::io::Error::other("Initiative and project are required").into());
+    }
+    linear::add_project_to_initiative(&app, &organization_id, &initiative_id, &project_id).await
+}
+
+#[tauri::command]
+pub async fn linear_remove_project_from_initiative(
+    app: AppHandle,
+    organization_id: String,
+    link_id: String,
+) -> Result<()> {
+    if organization_id.trim().is_empty() || link_id.trim().is_empty() {
+        return Err(std::io::Error::other("Initiative project link is required").into());
+    }
+    linear::remove_project_from_initiative(&app, &organization_id, &link_id).await
 }
 
 #[tauri::command]

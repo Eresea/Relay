@@ -714,6 +714,24 @@ export class TauriBridge {
     return initiative;
   }
 
+  async linearAddProjectToInitiative(
+    organizationId: string,
+    initiativeId: string,
+    projectId: string,
+  ): Promise<LinearInitiativeProject> {
+    const link = await this.invoke<LinearInitiativeProject>('linear_add_project_to_initiative', {
+      organizationId,
+      initiativeId,
+      projectId,
+    });
+    if (!link) throw new Error('Linear returned no project link.');
+    return link;
+  }
+
+  async linearRemoveProjectFromInitiative(organizationId: string, linkId: string): Promise<void> {
+    await this.invoke('linear_remove_project_from_initiative', { organizationId, linkId });
+  }
+
   async linearCycles(organizationId: string, teamId: string): Promise<readonly LinearCycle[]> {
     return (await this.invoke<LinearCycle[]>('linear_cycles', { organizationId, teamId })) ?? [];
   }
@@ -1306,7 +1324,12 @@ export interface LinearInitiative {
   readonly name: string;
   readonly description: string | null;
   readonly targetDate: string | null;
-  readonly projects: readonly { readonly id: string; readonly name: string }[];
+  readonly projects: readonly LinearInitiativeProject[];
+}
+
+export interface LinearInitiativeProject {
+  readonly id: string;
+  readonly project: { readonly id: string; readonly name: string };
 }
 
 export interface LinearCycle {

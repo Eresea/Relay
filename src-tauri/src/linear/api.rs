@@ -3,6 +3,7 @@
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
+use std::collections::HashMap;
 
 use crate::error::{Error, Result};
 
@@ -217,7 +218,14 @@ pub struct Initiative {
     #[serde(default)]
     pub target_date: Option<String>,
     #[serde(default)]
-    pub projects: Vec<ProjectRef>,
+    pub projects: Vec<InitiativeProject>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct InitiativeProject {
+    pub id: String,
+    pub project: ProjectRef,
 }
 
 #[derive(Deserialize)]
@@ -494,29 +502,51 @@ pub async fn initiatives(token: &str) -> Result<Vec<Initiative>> {
         description: Option<String>,
         #[serde(rename = "targetDate")]
         target_date: Option<String>,
-        projects: Nodes<ProjectRef>,
     }
     #[derive(Deserialize)]
     struct Data {
         initiatives: Nodes<InitiativeNode>,
+        #[serde(rename = "initiativeToProjects")]
+        project_links: Nodes<InitiativeProjectNode>,
     }
-    Ok(query::<Data>(
+    #[derive(Deserialize)]
+    struct InitiativeProjectNode {
+        id: String,
+        initiative: InitiativeRef,
+        project: ProjectRef,
+    }
+    #[derive(Deserialize)]
+    struct InitiativeRef {
+        id: String,
+    }
+    let data = query::<Data>(
         token,
-        "query RelayInitiatives { initiatives(first: 100) { nodes { id name description targetDate projects { nodes { id name } } } } }",
+        "query RelayInitiatives { initiatives(first: 100) { nodes { id name description targetDate } } initiativeToProjects(first: 100) { nodes { id initiative { id } project { id name } } } }",
         json!({}),
     )
-    .await?
-    .initiatives
-    .nodes
-    .into_iter()
-    .map(|initiative| Initiative {
-        id: initiative.id,
-        name: initiative.name,
-        description: initiative.description,
-        target_date: initiative.target_date,
-        projects: initiative.projects.nodes,
-    })
-    .collect())
+    .await?;
+    let mut projects = HashMap::<String, Vec<InitiativeProject>>::new();
+    for link in data.project_links.nodes {
+        projects
+            .entry(link.initiative.id)
+            .or_default()
+            .push(InitiativeProject {
+                id: link.id,
+                project: link.project,
+            });
+    }
+    Ok(data
+        .initiatives
+        .nodes
+        .into_iter()
+        .map(|initiative| Initiative {
+            id: initiative.id.clone(),
+            name: initiative.name,
+            description: initiative.description,
+            target_date: initiative.target_date,
+            projects: projects.remove(&initiative.id).unwrap_or_default(),
+        })
+        .collect())
 }
 
 pub async fn create_initiative(
@@ -570,6 +600,45 @@ pub async fn update_initiative(
     .await?;
     data.result
         .into_value("Linear did not update the initiative")
+}
+
+pub async fn add_project_to_initiative(
+    token: &str,
+    initiative_id: &str,
+    project_id: &str,
+) -> Result<InitiativeProject> {
+    #[derive(Deserialize)]
+    struct Data {
+        #[serde(rename = "initiativeToProjectCreate")]
+        result: InitiativeProjectMutation,
+    }
+    let data: Data = query(
+        token,
+        "mutation RelayInitiativeProjectCreate($input: InitiativeToProjectCreateInput!) { initiativeToProjectCreate(input: $input) { success initiativeToProject { id project { id name } } } }",
+        json!({ "input": { "initiativeId": initiative_id, "projectId": project_id } }),
+    )
+    .await?;
+    data.result
+        .into_value("Linear did not link the project to the initiative")
+}
+
+pub async fn remove_project_from_initiative(token: &str, link_id: &str) -> Result<()> {
+    #[derive(Deserialize)]
+    struct Data {
+        #[serde(rename = "initiativeToProjectDelete")]
+        result: DeleteMutation,
+    }
+    let data: Data = query(
+        token,
+        "mutation RelayInitiativeProjectDelete($id: String!) { initiativeToProjectDelete(id: $id) { success } }",
+        json!({ "id": link_id }),
+    )
+    .await?;
+    if data.result.success {
+        Ok(())
+    } else {
+        Err(Error::LinearApi("Linear did not unlink the project".into()))
+    }
 }
 
 pub async fn cycles(token: &str, team_id: &str) -> Result<Vec<LinearCycle>> {
@@ -817,6 +886,18 @@ struct InitiativeMutation {
     initiative: Option<Initiative>,
 }
 
+#[derive(Deserialize)]
+struct InitiativeProjectMutation {
+    success: bool,
+    #[serde(rename = "initiativeToProject")]
+    initiative_project: Option<InitiativeProject>,
+}
+
+#[derive(Deserialize)]
+struct DeleteMutation {
+    success: bool,
+}
+
 impl InitiativeMutation {
     fn into_value(self, message: &str) -> Result<Initiative> {
         if !self.success {
@@ -824,6 +905,17 @@ impl InitiativeMutation {
         }
         self.initiative
             .ok_or_else(|| Error::LinearApi("Linear returned no initiative".into()))
+    }
+}
+
+impl InitiativeProjectMutation {
+    fn into_value(self, message: &str) -> Result<InitiativeProject> {
+        if self.success {
+            self.initiative_project
+                .ok_or_else(|| Error::LinearApi("Linear returned no project link".into()))
+        } else {
+            Err(Error::LinearApi(message.into()))
+        }
     }
 }
 
@@ -1022,5 +1114,16 @@ mod tests {
         let initiative = mutation.into_value("failed").unwrap();
         assert_eq!(initiative.target_date.as_deref(), Some("2026-12-31"));
         assert!(initiative.projects.is_empty());
+    }
+
+    #[test]
+    fn initiative_project_link_keeps_the_relation_id_for_unlinking() {
+        let link: InitiativeProject = serde_json::from_value(json!({
+            "id": "link-1",
+            "project": { "id": "project-1", "name": "Launch" }
+        }))
+        .unwrap();
+        assert_eq!(link.id, "link-1");
+        assert_eq!(link.project.id, "project-1");
     }
 }
