@@ -736,6 +736,24 @@ export class TauriBridge {
     return (await this.invoke<LinearCycle[]>('linear_cycles', { organizationId, teamId })) ?? [];
   }
 
+  async linearCreateCycle(
+    organizationId: string,
+    teamId: string,
+    name: string,
+    startsAt: string,
+    endsAt: string,
+  ): Promise<LinearCycle> {
+    const cycle = await this.invoke<LinearCycle>('linear_create_cycle', {
+      organizationId,
+      teamId,
+      name: name || null,
+      startsAt,
+      endsAt,
+    });
+    if (!cycle) throw new Error('Linear returned no cycle.');
+    return cycle;
+  }
+
   async linearUpdateCycle(
     organizationId: string,
     cycleId: string,

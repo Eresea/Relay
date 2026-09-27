@@ -353,6 +353,24 @@ pub async fn cycles(
     api::cycles(&access_token(app, organization_id).await?, team_id).await
 }
 
+pub async fn create_cycle(
+    app: &AppHandle,
+    organization_id: &str,
+    team_id: &str,
+    name: Option<&str>,
+    starts_at: &str,
+    ends_at: &str,
+) -> Result<LinearCycle> {
+    api::create_cycle(
+        &access_token(app, organization_id).await?,
+        team_id,
+        name,
+        starts_at,
+        ends_at,
+    )
+    .await
+}
+
 pub async fn update_cycle(
     app: &AppHandle,
     organization_id: &str,

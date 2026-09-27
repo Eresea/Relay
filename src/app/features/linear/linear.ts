@@ -1039,7 +1039,61 @@ interface LinearIssueDraft {
           } @else if (section() === 'cycles') {
             <section class="issues" aria-label="Linear cycles">
               @for (team of teams(); track team.id) {
-                <h2 class="group-title">{{ team.name }}</h2>
+                <div class="issue-heading">
+                  <h2 class="group-title">{{ team.name }}</h2>
+                  <umbra-button size="sm" variant="outline" (click)="toggleCreateCycle(team)">
+                    {{ createCycleTeamId() === team.id ? 'Cancel' : 'New cycle' }}
+                  </umbra-button>
+                </div>
+                @if (createCycleTeamId() === team.id) {
+                  <form class="project-edit" (submit)="createCycle($event, team)">
+                    <label>
+                      <span>Cycle name <span class="muted">Optional</span></span>
+                      <input
+                        maxlength="255"
+                        [value]="newCycleName()"
+                        (input)="newCycleName.set($any($event.target).value)"
+                        placeholder="Cycle name"
+                      />
+                    </label>
+                    <label>
+                      <span>Start date · {{ team.timezone || 'America/Los_Angeles' }}</span>
+                      <input
+                        type="date"
+                        required
+                        [min]="todayForTeam(team)"
+                        [value]="newCycleStartDate()"
+                        (input)="newCycleStartDate.set($any($event.target).value)"
+                      />
+                    </label>
+                    <label>
+                      <span>End date · {{ team.timezone || 'America/Los_Angeles' }}</span>
+                      <input
+                        type="date"
+                        required
+                        [min]="newCycleStartDate()"
+                        [value]="newCycleEndDate()"
+                        (input)="newCycleEndDate.set($any($event.target).value)"
+                      />
+                    </label>
+                    <div class="issue-actions">
+                      <umbra-button
+                        size="sm"
+                        [disabled]="creatingCycle() || !newCycleStartDate() || !newCycleEndDate()"
+                      >
+                        {{ creatingCycle() ? 'Creating' : 'Create cycle' }}
+                      </umbra-button>
+                      <umbra-button
+                        size="sm"
+                        variant="link"
+                        type="button"
+                        (click)="toggleCreateCycle(team)"
+                      >
+                        Cancel
+                      </umbra-button>
+                    </div>
+                  </form>
+                }
                 @for (cycle of cyclesFor(team.id); track cycle.id) {
                   <article class="resource-row">
                     <div>
@@ -1565,6 +1619,11 @@ export class Linear {
   protected readonly initiativeProjectSelection = signal<Readonly<Record<string, string>>>({});
   protected readonly savingInitiativeProjectId = signal<string | null>(null);
   protected readonly cycles = signal<Readonly<Record<string, readonly LinearCycle[]>>>({});
+  protected readonly createCycleTeamId = signal<string | null>(null);
+  protected readonly newCycleName = signal('');
+  protected readonly newCycleStartDate = signal('');
+  protected readonly newCycleEndDate = signal('');
+  protected readonly creatingCycle = signal(false);
   protected readonly editingCycleId = signal<string | null>(null);
   protected readonly editCycleStartDate = signal('');
   protected readonly editCycleEndDate = signal('');
@@ -2288,6 +2347,58 @@ export class Linear {
     return (
       cycle.isActive || cycleDateInTimezone(cycle.endsAt, team.timezone) >= this.todayForTeam(team)
     );
+  }
+
+  protected toggleCreateCycle(team: LinearTeam): void {
+    if (this.createCycleTeamId() === team.id) {
+      this.createCycleTeamId.set(null);
+      return;
+    }
+    this.error.set(null);
+    this.createCycleTeamId.set(team.id);
+    this.newCycleName.set('');
+    this.newCycleStartDate.set(this.todayForTeam(team));
+    this.newCycleEndDate.set('');
+  }
+
+  protected async createCycle(event: Event, team: LinearTeam): Promise<void> {
+    event.preventDefault();
+    const connection = this.selected();
+    const start = this.newCycleStartDate();
+    const end = this.newCycleEndDate();
+    if (
+      !connection ||
+      this.createCycleTeamId() !== team.id ||
+      !start ||
+      !end ||
+      end <= start ||
+      this.creatingCycle()
+    ) {
+      if (end && start && end <= start) this.error.set('End date must be after the start date.');
+      return;
+    }
+    this.creatingCycle.set(true);
+    this.error.set(null);
+    try {
+      const cycle = await this.tauri.linearCreateCycle(
+        connection.organizationId,
+        team.id,
+        this.newCycleName().trim(),
+        cycleDateToIso(start, team.timezone),
+        cycleDateToIso(end, team.timezone),
+      );
+      this.cycles.update((items) => ({
+        ...items,
+        [team.id]: [...(items[team.id] ?? []), cycle].sort((left, right) =>
+          (left.startsAt ?? '').localeCompare(right.startsAt ?? ''),
+        ),
+      }));
+      this.createCycleTeamId.set(null);
+    } catch (error) {
+      this.error.set(error instanceof Error ? error.message : String(error));
+    } finally {
+      this.creatingCycle.set(false);
+    }
   }
 
   protected editCycle(cycle: LinearCycle): void {

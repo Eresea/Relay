@@ -605,6 +605,37 @@ pub async fn linear_cycles(
 }
 
 #[tauri::command]
+pub async fn linear_create_cycle(
+    app: AppHandle,
+    organization_id: String,
+    team_id: String,
+    name: Option<String>,
+    starts_at: String,
+    ends_at: String,
+) -> Result<LinearCycle> {
+    if organization_id.trim().is_empty()
+        || team_id.trim().is_empty()
+        || starts_at.trim().is_empty()
+        || ends_at.trim().is_empty()
+        || starts_at >= ends_at
+        || name
+            .as_ref()
+            .is_some_and(|value| value.chars().count() > 255)
+    {
+        return Err(std::io::Error::other("A valid cycle schedule is required").into());
+    }
+    linear::create_cycle(
+        &app,
+        &organization_id,
+        &team_id,
+        name.as_deref(),
+        &starts_at,
+        &ends_at,
+    )
+    .await
+}
+
+#[tauri::command]
 pub async fn linear_update_cycle(
     app: AppHandle,
     organization_id: String,

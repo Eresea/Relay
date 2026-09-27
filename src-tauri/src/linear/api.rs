@@ -675,6 +675,38 @@ pub async fn cycles(token: &str, team_id: &str) -> Result<Vec<LinearCycle>> {
     .nodes)
 }
 
+pub async fn create_cycle(
+    token: &str,
+    team_id: &str,
+    name: Option<&str>,
+    starts_at: &str,
+    ends_at: &str,
+) -> Result<LinearCycle> {
+    #[derive(Deserialize)]
+    struct Data {
+        #[serde(rename = "cycleCreate")]
+        result: CycleMutation,
+    }
+    let data: Data = query(
+        token,
+        "mutation RelayCycleCreate($input: CycleCreateInput!) { cycleCreate(input: $input) { success cycle { id name number startsAt endsAt isActive team { id name key timezone } } } }",
+        json!({ "input": cycle_create_input(team_id, name, starts_at, ends_at) }),
+    )
+    .await?;
+    data.result.into_value("Linear did not create the cycle")
+}
+
+fn cycle_create_input(team_id: &str, name: Option<&str>, starts_at: &str, ends_at: &str) -> Value {
+    let mut input = serde_json::Map::new();
+    input.insert("teamId".into(), json!(team_id));
+    if let Some(name) = name.filter(|name| !name.trim().is_empty()) {
+        input.insert("name".into(), json!(name.trim()));
+    }
+    input.insert("startsAt".into(), json!(starts_at));
+    input.insert("endsAt".into(), json!(ends_at));
+    Value::Object(input)
+}
+
 pub async fn update_cycle(
     token: &str,
     cycle_id: &str,
@@ -1183,6 +1215,23 @@ mod tests {
         let initiative = mutation.into_value("failed").unwrap();
         assert_eq!(initiative.target_date.as_deref(), Some("2026-12-31"));
         assert!(initiative.projects.is_empty());
+    }
+
+    #[test]
+    fn cycle_create_input_keeps_required_dates_and_omits_an_empty_name() {
+        assert_eq!(
+            cycle_create_input(
+                "team-1",
+                Some("  "),
+                "2026-10-01T07:00:00.000Z",
+                "2026-10-15T07:00:00.000Z",
+            ),
+            json!({
+                "teamId": "team-1",
+                "startsAt": "2026-10-01T07:00:00.000Z",
+                "endsAt": "2026-10-15T07:00:00.000Z"
+            })
+        );
     }
 
     #[test]
