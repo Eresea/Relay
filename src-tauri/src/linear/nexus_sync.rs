@@ -228,6 +228,17 @@ fn merge_bundle(existing: &TokenBundle, incoming: &TokenBundle) -> TokenBundle {
     merged
 }
 
+pub(super) fn current_bundle_for(
+    connections: Vec<(String, LinearConnection, TokenBundle)>,
+    organization_id: &str,
+    now: u64,
+) -> Option<TokenBundle> {
+    connections.into_iter().find_map(|(_, connection, bundle)| {
+        (connection.organization_id == organization_id && bundle.expires_at > now + 60)
+            .then_some(bundle)
+    })
+}
+
 pub async fn discover(app: &AppHandle) -> Result<Vec<(String, LinearConnection, TokenBundle)>> {
     let client = client()?;
     let bearer = nexus_auth::access_token(app)
@@ -338,6 +349,45 @@ fn request_error(error: reqwest::Error) -> Error {
 mod tests {
     use super::*;
     use crate::linear::oauth::{LinearCodexLink, LinearCodexProjectPolicy};
+
+    #[test]
+    fn current_bundle_for_uses_only_a_fresh_matching_workspace_credential() {
+        let connection = |organization_id: &str| LinearConnection {
+            organization_id: organization_id.into(),
+            organization_name: organization_id.into(),
+            url_key: organization_id.into(),
+            viewer_id: "viewer".into(),
+            viewer_name: "Viewer".into(),
+            viewer_email: "viewer@example.com".into(),
+            nexus_credential_id: None,
+        };
+        let bundle = |expires_at| TokenBundle {
+            access_token: "fresh".into(),
+            refresh_token: "refresh".into(),
+            expires_at,
+            codex_links: vec![],
+            codex_project_policy: vec![],
+        };
+        let connections = vec![
+            ("other-credential".into(), connection("other"), bundle(500)),
+            (
+                "expired-credential".into(),
+                connection("target"),
+                bundle(100),
+            ),
+            (
+                "current-credential".into(),
+                connection("target"),
+                bundle(500),
+            ),
+        ];
+
+        assert_eq!(
+            current_bundle_for(connections, "target", 200).map(|bundle| bundle.expires_at),
+            Some(500)
+        );
+        assert!(current_bundle_for(vec![], "target", 200).is_none());
+    }
 
     #[test]
     fn merge_keeps_other_devices_and_applies_the_newest_project_policy() {

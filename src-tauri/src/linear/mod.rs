@@ -608,7 +608,29 @@ async fn access_token(app: &AppHandle, organization_id: &str) -> Result<String> 
     let mut bundle: TokenBundle = serde_json::from_str(&encoded)
         .map_err(|_| Error::LinearApi("stored Linear credentials are invalid".into()))?;
     if bundle.expires_at <= oauth::now_seconds().saturating_add(60) {
-        bundle = oauth::refresh(bundle).await?;
+        bundle = match oauth::refresh(bundle).await {
+            Ok(bundle) => bundle,
+            Err(refresh_error) => {
+                let current = if crate::nexus_auth::status().is_ok_and(|status| status.connected) {
+                    nexus_sync::discover(app)
+                        .await
+                        .ok()
+                        .and_then(|connections| {
+                            nexus_sync::current_bundle_for(
+                                connections,
+                                organization_id,
+                                oauth::now_seconds(),
+                            )
+                        })
+                } else {
+                    None
+                };
+                match current {
+                    Some(bundle) => bundle,
+                    None => return Err(refresh_error),
+                }
+            }
+        };
         entry
             .set_password(
                 &serde_json::to_string(&bundle)
