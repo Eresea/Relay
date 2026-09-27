@@ -222,6 +222,41 @@ interface LinearIssueDraft {
                   }
                 </div>
                 <div class="issue-actions">
+                  @if (detail.issue.archivedAt) {
+                    <span class="hint">Archived</span>
+                    <umbra-button
+                      size="sm"
+                      variant="outline"
+                      [disabled]="!!archivingIssueId()"
+                      (click)="setIssueArchived(detail.issue, false)"
+                    >
+                      {{ archivingIssueId() === detail.issue.id ? 'Restoring' : 'Restore issue' }}
+                    </umbra-button>
+                  } @else if (confirmArchiveIssueDetailId() === detail.issue.id) {
+                    <umbra-button
+                      size="sm"
+                      variant="outline"
+                      [disabled]="!!archivingIssueId()"
+                      (click)="setIssueArchived(detail.issue, true, true)"
+                    >
+                      {{ archivingIssueId() === detail.issue.id ? 'Archiving' : 'Confirm archive' }}
+                    </umbra-button>
+                    <umbra-button
+                      size="sm"
+                      variant="link"
+                      (click)="confirmArchiveIssueDetailId.set(null)"
+                    >
+                      Cancel
+                    </umbra-button>
+                  } @else {
+                    <umbra-button
+                      size="sm"
+                      variant="link"
+                      (click)="confirmArchiveIssueDetailId.set(detail.issue.id)"
+                    >
+                      Archive issue
+                    </umbra-button>
+                  }
                   @if (editingIssueDetailsId() !== detail.issue.id) {
                     <umbra-button
                       size="sm"
@@ -2239,6 +2274,7 @@ export class Linear {
   protected readonly issues = signal<readonly LinearIssue[]>([]);
   protected readonly includeArchivedIssues = signal(false);
   protected readonly confirmArchiveIssueId = signal<string | null>(null);
+  protected readonly confirmArchiveIssueDetailId = signal<string | null>(null);
   protected readonly archivingIssueId = signal<string | null>(null);
   protected readonly issueDetail = signal<LinearIssueDetail | null>(null);
   protected readonly editingIssueDetailsId = signal<string | null>(null);
@@ -2460,6 +2496,8 @@ export class Linear {
     this.projectCacheStale.set(false);
     this.issues.set([]);
     this.issueDetail.set(null);
+    this.confirmArchiveIssueId.set(null);
+    this.confirmArchiveIssueDetailId.set(null);
     this.codexContext.set(null);
     this.nextCursor = null;
     void this.loadTeams(connection);
@@ -2490,10 +2528,17 @@ export class Linear {
     void this.loadIssues();
   }
 
-  protected async setIssueArchived(issue: LinearIssue, archived: boolean): Promise<void> {
+  protected async setIssueArchived(
+    issue: LinearIssue,
+    archived: boolean,
+    fromDetail = false,
+  ): Promise<void> {
     const connection = this.selected();
     if (!connection || this.archivingIssueId()) return;
-    if (archived && this.confirmArchiveIssueId() !== issue.id) return;
+    const confirmed = fromDetail
+      ? this.confirmArchiveIssueDetailId() === issue.id
+      : this.confirmArchiveIssueId() === issue.id;
+    if (archived && !confirmed) return;
     this.archivingIssueId.set(issue.id);
     this.error.set(null);
     try {
@@ -2503,6 +2548,18 @@ export class Linear {
         await this.tauri.linearUnarchiveIssue(connection.organizationId, issue.id);
       }
       this.confirmArchiveIssueId.set(null);
+      this.confirmArchiveIssueDetailId.set(null);
+      this.issueDetail.update((detail) =>
+        detail?.issue.id === issue.id
+          ? {
+              ...detail,
+              issue: {
+                ...detail.issue,
+                archivedAt: archived ? new Date().toISOString() : null,
+              },
+            }
+          : detail,
+      );
       this.writeLocal(this.issueCacheKey(connection), null);
       const project = this.selectedProject();
       if (project) {
@@ -2536,6 +2593,8 @@ export class Linear {
     if (!connection) return;
     void this.loadProjects();
     this.issueDetail.set(null);
+    this.confirmArchiveIssueId.set(null);
+    this.confirmArchiveIssueDetailId.set(null);
     this.editingIssueDetailsId.set(null);
     this.codexRequest.set(null);
     this.error.set(null);
@@ -2800,6 +2859,7 @@ export class Linear {
   protected closeIssueDetail(): void {
     this.issueDetail.set(null);
     this.editingIssueDetailsId.set(null);
+    this.confirmArchiveIssueDetailId.set(null);
     this.codexContext.set(null);
     this.newComment.set('');
     this.editingCommentId.set(null);
