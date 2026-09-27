@@ -28,8 +28,8 @@ use crate::github::{
 use crate::gmail::{self, GmailSettings, GmailState, GmailStatus, HttpGoogleApi, OsKeyStore};
 use crate::jobs::{JobId, JobRegistry};
 use crate::linear::{
-    self, Initiative, Issue, IssueDetail, IssuePage, LinearComment, LinearConnection, LinearCycle,
-    LinearMilestone, LinearProject, Person, Team, WorkflowState,
+    self, Initiative, Issue, IssueDetail, IssuePage, LinearCodexContext, LinearComment,
+    LinearConnection, LinearCycle, LinearMilestone, LinearProject, Person, Team, WorkflowState,
 };
 #[cfg(mobile)]
 use crate::mobile_updates;
@@ -490,11 +490,15 @@ pub async fn linear_create_issue(
 ) -> Result<Issue> {
     if title.trim().is_empty()
         || title.chars().count() > 255
-        || project_id.as_ref().is_some_and(|value| value.trim().is_empty())
+        || project_id
+            .as_ref()
+            .is_some_and(|value| value.trim().is_empty())
         || project_milestone_id
             .as_ref()
             .is_some_and(|value| value.trim().is_empty())
-        || parent_id.as_ref().is_some_and(|value| value.trim().is_empty())
+        || parent_id
+            .as_ref()
+            .is_some_and(|value| value.trim().is_empty())
     {
         return Err(std::io::Error::other("Issue title must be 1–255 characters").into());
     }
@@ -537,6 +541,73 @@ pub async fn linear_create_comment(
 }
 
 #[tauri::command]
+pub fn linear_codex_context(
+    app: AppHandle,
+    organization_id: String,
+    issue_id: String,
+) -> Result<LinearCodexContext> {
+    if organization_id.trim().is_empty() {
+        return Err(std::io::Error::other("Linear workspace is required").into());
+    }
+    linear::codex_context(&app, &organization_id, &issue_id)
+}
+
+#[tauri::command]
+pub async fn linear_set_codex_project_allowed(
+    app: AppHandle,
+    organization_id: String,
+    project_id: String,
+    allowed: bool,
+    workspace_repo: Option<String>,
+) -> Result<()> {
+    if organization_id.trim().is_empty()
+        || project_id.trim().is_empty()
+        || workspace_repo
+            .as_ref()
+            .is_some_and(|repo| repo.trim().is_empty())
+        || (allowed && workspace_repo.is_none())
+    {
+        return Err(std::io::Error::other("Linear workspace and project are required").into());
+    }
+    linear::set_codex_project_allowed(
+        &app,
+        &organization_id,
+        &project_id,
+        allowed,
+        workspace_repo.as_deref(),
+    )
+    .await
+}
+
+#[tauri::command]
+pub async fn linear_save_codex_link(
+    app: AppHandle,
+    organization_id: String,
+    issue_id: String,
+    workspace_repo: String,
+    workspace_name: String,
+    thread_id: String,
+) -> Result<()> {
+    if organization_id.trim().is_empty()
+        || issue_id.trim().is_empty()
+        || workspace_repo.trim().is_empty()
+        || workspace_name.trim().is_empty()
+        || thread_id.trim().is_empty()
+    {
+        return Err(std::io::Error::other("Linear and Codex link details are required").into());
+    }
+    linear::save_codex_link(
+        &app,
+        &organization_id,
+        &issue_id,
+        &workspace_repo,
+        &workspace_name,
+        &thread_id,
+    )
+    .await
+}
+
+#[tauri::command]
 pub async fn linear_update_issue(
     app: AppHandle,
     organization_id: String,
@@ -550,8 +621,12 @@ pub async fn linear_update_issue(
 ) -> Result<Issue> {
     if issue_id.trim().is_empty()
         || priority.is_some_and(|value| value > 4)
-        || assignee_id.as_ref().is_some_and(|value| value.trim().is_empty())
-        || cycle_id.as_ref().is_some_and(|value| value.trim().is_empty())
+        || assignee_id
+            .as_ref()
+            .is_some_and(|value| value.trim().is_empty())
+        || cycle_id
+            .as_ref()
+            .is_some_and(|value| value.trim().is_empty())
         || (clear_assignee.unwrap_or(false) && assignee_id.is_some())
         || (clear_cycle.unwrap_or(false) && cycle_id.is_some())
     {

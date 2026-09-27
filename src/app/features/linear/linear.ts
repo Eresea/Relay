@@ -1,7 +1,10 @@
 import { ChangeDetectionStrategy, Component, DestroyRef, inject, signal } from '@angular/core';
 
 import { NexusAccount } from '@core/nexus-account';
+import { currentSurface } from '@core/surface';
 import {
+  type LinearCodexContext,
+  type LinearCodexLink,
   TauriBridge,
   type LinearConnection,
   type LinearCycle,
@@ -13,6 +16,7 @@ import {
   type LinearPerson,
   type LinearTeam,
   type LinearWorkflowState,
+  type WorkspaceSummary,
 } from '@core/tauri';
 import { UmbraButtonComponent } from '@umbra/components/umbra-button/umbra-button.component';
 
@@ -189,6 +193,70 @@ import { UmbraButtonComponent } from '@umbra/components/umbra-button/umbra-butto
                   <span class="muted">Cycle {{ detail.issue.cycle.name }}</span>
                 }
               </div>
+              @if (canUseCodex) {
+                <section class="detail-section" aria-label="Codex work">
+                  <h3>Codex</h3>
+                  @if (detail.issue.project && isCodexAllowed(detail.issue)) {
+                    <label>
+                      <span>Local code workspace</span>
+                      <select
+                        [value]="selectedCodexWorkspacePath()"
+                        (change)="selectCodexWorkspace($any($event.target).value)"
+                      >
+                        <option value="">Choose a repository</option>
+                        @for (workspace of codexWorkspaces(); track workspace.path) {
+                          @if (
+                            workspace.githubRepo === codexProjectRepo(detail.issue.project!.id)
+                          ) {
+                            <option [value]="workspace.path">
+                              {{ workspace.name }} — {{ workspace.githubRepo }}
+                            </option>
+                          }
+                        }
+                      </select>
+                    </label>
+                    <div class="issue-actions">
+                      <umbra-button
+                        size="sm"
+                        [disabled]="codexPending() || !selectedCodexWorkspacePath()"
+                        (click)="runIssueInCodex(detail.issue, false)"
+                      >
+                        {{ codexPending() ? 'Working in Codex' : 'Start new Codex thread' }}
+                      </umbra-button>
+                      @if (localCodexLink(); as link) {
+                        <umbra-button
+                          size="sm"
+                          variant="outline"
+                          [disabled]="codexPending() || !selectedCodexWorkspacePath()"
+                          (click)="runIssueInCodex(detail.issue, true)"
+                        >
+                          Continue Codex
+                        </umbra-button>
+                      }
+                    </div>
+                    @for (link of remoteCodexLinks(); track link.deviceId) {
+                      <p class="muted">
+                        This issue also has a Codex thread on {{ link.workspaceName }} on another
+                        device.
+                      </p>
+                    }
+                    @if (codexPending()) {
+                      <p class="hint" role="status">
+                        Codex is working in the selected local repository.
+                      </p>
+                    }
+                  } @else if (detail.issue.project) {
+                    <p class="hint">
+                      Codex is disabled for this Linear project. Enable it from the project page.
+                    </p>
+                  } @else {
+                    <p class="hint">
+                      Link this issue to a Linear project with Codex enabled before sending it to
+                      Codex.
+                    </p>
+                  }
+                </section>
+              }
               @if (detail.children.length) {
                 <section class="detail-section" aria-label="Sub-issues">
                   <h3>Sub-issues</h3>
@@ -380,6 +448,39 @@ import { UmbraButtonComponent } from '@umbra/components/umbra-button/umbra-butto
                     {{ savingProject() ? 'Saving' : 'Save project' }}
                   </umbra-button>
                 </form>
+                @if (canUseCodex) {
+                  <div class="codex-policy">
+                    <label>
+                      <span>Linked code repository</span>
+                      <select
+                        [value]="selectedCodexProjectRepo()"
+                        (change)="
+                          setCodexProjectRepo(selectedProject()!.id, $any($event.target).value)
+                        "
+                      >
+                        <option value="">Choose a GitHub repository</option>
+                        @for (workspace of codexWorkspaces(); track workspace.path) {
+                          @if (workspace.githubRepo) {
+                            <option [value]="workspace.githubRepo">
+                              {{ workspace.name }} — {{ workspace.githubRepo }}
+                            </option>
+                          }
+                        }
+                      </select>
+                    </label>
+                    <label class="codex-policy-toggle">
+                      <input
+                        type="checkbox"
+                        [disabled]="!selectedCodexProjectRepo()"
+                        [checked]="isCodexProjectAllowed(selectedProject()!.id)"
+                        (change)="
+                          setCodexProjectAllowed(selectedProject()!.id, $any($event.target).checked)
+                        "
+                      />
+                      <span>Allow Codex to work on issues in this project</span>
+                    </label>
+                  </div>
+                }
                 <section class="milestones" aria-label="Project milestones">
                   <h3>Milestones</h3>
                   @for (milestone of milestones(); track milestone.id) {
@@ -851,6 +952,17 @@ import { UmbraButtonComponent } from '@umbra/components/umbra-button/umbra-butto
       margin: 0 0 var(--space-1);
       white-space: pre-wrap;
     }
+
+    .codex-policy {
+      display: grid;
+      gap: var(--space-3);
+    }
+
+    .codex-policy-toggle {
+      align-items: center;
+      display: flex;
+      gap: var(--space-2);
+    }
     input,
     select,
     textarea {
@@ -914,11 +1026,16 @@ export class Linear {
   private readonly tauri = inject(TauriBridge);
   protected readonly nexus = inject(NexusAccount);
   private readonly destroyRef = inject(DestroyRef);
+  protected readonly canUseCodex = this.tauri.available && currentSurface() === 'main';
 
   protected readonly connections = signal<readonly LinearConnection[]>([]);
   protected readonly selected = signal<LinearConnection | null>(null);
   protected readonly issues = signal<readonly LinearIssue[]>([]);
   protected readonly issueDetail = signal<LinearIssueDetail | null>(null);
+  protected readonly codexContext = signal<LinearCodexContext | null>(null);
+  protected readonly codexWorkspaces = signal<readonly WorkspaceSummary[]>([]);
+  protected readonly selectedCodexWorkspacePath = signal('');
+  protected readonly selectedCodexProjectRepo = signal('');
   protected readonly projectIssues = signal<readonly LinearIssue[]>([]);
   protected readonly milestones = signal<readonly LinearMilestone[]>([]);
   protected readonly projects = signal<readonly LinearProject[]>([]);
@@ -964,6 +1081,7 @@ export class Linear {
   protected readonly creatingProjectIssue = signal(false);
   protected readonly creatingSubIssue = signal(false);
   protected readonly sendingComment = signal(false);
+  protected readonly codexPending = signal(false);
   private nextCursor: string | null = null;
 
   protected pageTitle(): string {
@@ -1016,6 +1134,8 @@ export class Linear {
   protected select(connection: LinearConnection): void {
     this.selected.set(connection);
     this.issues.set([]);
+    this.issueDetail.set(null);
+    this.codexContext.set(null);
     this.nextCursor = null;
     void this.loadTeams(connection);
     void this.loadIssues();
@@ -1039,6 +1159,216 @@ export class Linear {
       );
       this.cycles.update((items) => ({ ...items, [detail.issue.team.id]: teamCycles }));
       this.issueDetail.set(detail);
+      this.codexContext.set(
+        await this.tauri.linearCodexContext(connection.organizationId, issue.id),
+      );
+      if (this.canUseCodex && detail.issue.project && this.isCodexAllowed(detail.issue)) {
+        await this.loadCodexWorkspaces(this.codexProjectRepo(detail.issue.project.id));
+      }
+    } catch (error) {
+      this.error.set(error instanceof Error ? error.message : String(error));
+    }
+  }
+
+  protected isCodexAllowed(issue: LinearIssue): boolean {
+    return Boolean(issue.project && this.isCodexProjectAllowed(issue.project.id));
+  }
+
+  protected isCodexProjectAllowed(projectId: string): boolean {
+    return (
+      this.codexContext()?.allowedProjects.find((policy) => policy.projectId === projectId)
+        ?.allowed ?? false
+    );
+  }
+
+  protected codexProjectRepo(projectId: string): string {
+    return (
+      this.codexContext()?.allowedProjects.find((policy) => policy.projectId === projectId)
+        ?.workspaceRepo ?? ''
+    );
+  }
+
+  protected localCodexLink(): LinearCodexLink | null {
+    const context = this.codexContext();
+    return context?.links.find((link) => link.deviceId === context.deviceId) ?? null;
+  }
+
+  protected remoteCodexLinks(): readonly LinearCodexLink[] {
+    const context = this.codexContext();
+    return context?.links.filter((link) => link.deviceId !== context.deviceId) ?? [];
+  }
+
+  protected selectCodexWorkspace(path: string): void {
+    this.selectedCodexWorkspacePath.set(path);
+  }
+
+  protected async setCodexProjectAllowed(projectId: string, allowed: boolean): Promise<void> {
+    const connection = this.selected();
+    if (!connection) return;
+    this.error.set(null);
+    try {
+      await this.tauri.linearSetCodexProjectAllowed(
+        connection.organizationId,
+        projectId,
+        allowed,
+        this.selectedCodexProjectRepo() || null,
+      );
+      this.codexContext.set(await this.tauri.linearCodexContext(connection.organizationId));
+      if (allowed && this.canUseCodex) await this.loadCodexWorkspaces();
+    } catch (error) {
+      this.error.set(error instanceof Error ? error.message : String(error));
+      try {
+        this.codexContext.set(await this.tauri.linearCodexContext(connection.organizationId));
+      } catch {
+        // Keep the last known policy if Nexus is unavailable.
+      }
+    }
+  }
+
+  protected async setCodexProjectRepo(projectId: string, repo: string): Promise<void> {
+    const allowed = Boolean(repo) && this.isCodexProjectAllowed(projectId);
+    const connection = this.selected();
+    if (!connection) return;
+    this.selectedCodexProjectRepo.set(repo);
+    this.error.set(null);
+    try {
+      await this.tauri.linearSetCodexProjectAllowed(
+        connection.organizationId,
+        projectId,
+        allowed,
+        repo || null,
+      );
+      this.codexContext.set(await this.tauri.linearCodexContext(connection.organizationId));
+      await this.loadCodexWorkspaces(repo);
+    } catch (error) {
+      this.error.set(error instanceof Error ? error.message : String(error));
+    }
+  }
+
+  protected async runIssueInCodex(issue: LinearIssue, continueThread: boolean): Promise<void> {
+    const connection = this.selected();
+    const projectId = issue.project?.id;
+    const workspace = this.codexWorkspaces().find(
+      (entry) => entry.path === this.selectedCodexWorkspacePath(),
+    );
+    const existingLink = this.localCodexLink();
+    if (!connection || !projectId || !this.isCodexAllowed(issue)) {
+      this.error.set('Enable Codex for this issue’s Linear project first.');
+      return;
+    }
+    if (!workspace?.githubRepo) {
+      this.error.set('Choose a Relay-discovered workspace linked to a GitHub repository.');
+      return;
+    }
+    if (workspace.githubRepo !== this.codexProjectRepo(projectId)) {
+      this.error.set('Choose the repository linked to this Linear project.');
+      return;
+    }
+    if (continueThread && !existingLink) {
+      this.error.set('This device has no Codex thread linked to the issue.');
+      return;
+    }
+    if (continueThread && existingLink?.workspaceRepo !== workspace.githubRepo) {
+      this.error.set('Choose the workspace linked to this Codex thread.');
+      return;
+    }
+
+    this.codexPending.set(true);
+    this.error.set(null);
+    try {
+      const inProgress = this.statesFor(issue).find(
+        (state) => /in progress/i.test(state.name) || state.kind === 'started',
+      );
+      if (inProgress && inProgress.id !== issue.state?.id) {
+        await this.saveIssueUpdate(issue, { stateId: inProgress.id });
+      }
+      const prompt = [
+        `Work on Linear issue ${issue.identifier}: ${issue.title}`,
+        issue.description ? `\nIssue description:\n${issue.description}` : '',
+        `\nLinear issue: ${issue.url}`,
+        '\nUse the selected repository and follow its existing conventions. Implement the issue, run relevant validation, and report what changed, which checks passed or failed, and any commit or pull request links. Do not mark the Linear issue done; Relay will move it to review and post your final report.',
+      ].join('');
+      const run = await this.tauri.codexSend(
+        prompt,
+        workspace.path,
+        continueThread ? (existingLink?.threadId ?? null) : null,
+      );
+
+      let syncError: string | null = null;
+      try {
+        await this.tauri.linearSaveCodexLink(
+          connection.organizationId,
+          issue.id,
+          workspace.githubRepo,
+          workspace.name,
+          run.threadId,
+        );
+        this.codexContext.set(
+          await this.tauri.linearCodexContext(connection.organizationId, issue.id),
+        );
+      } catch (error) {
+        syncError = error instanceof Error ? error.message : String(error);
+        try {
+          this.codexContext.set(
+            await this.tauri.linearCodexContext(connection.organizationId, issue.id),
+          );
+        } catch {
+          // The local link may still be available even when Nexus is offline.
+        }
+      }
+
+      const review = this.statesFor(issue).find((state) => /review/i.test(state.name));
+      if (review) await this.saveIssueUpdate(issue, { stateId: review.id });
+      const comment = await this.tauri.linearCreateComment(
+        connection.organizationId,
+        issue.id,
+        `Codex result — ${workspace.name}\n\n${run.response}`,
+      );
+      this.issueDetail.update((detail) =>
+        detail?.issue.id === issue.id
+          ? { ...detail, comments: [...detail.comments, comment] }
+          : detail,
+      );
+      if (syncError) {
+        this.error.set(
+          `Codex finished, but the issue/thread link could not sync through Nexus: ${syncError}`,
+        );
+      }
+    } catch (error) {
+      this.error.set(error instanceof Error ? error.message : String(error));
+    } finally {
+      this.codexPending.set(false);
+    }
+  }
+
+  private async loadCodexWorkspaces(requiredRepo = ''): Promise<void> {
+    try {
+      const workspaces = await this.tauri.scanWorkspaces();
+      const eligible = workspaces.filter((workspace) => workspace.githubRepo);
+      this.codexWorkspaces.set(eligible);
+      const linkedRepo = this.localCodexLink()?.workspaceRepo ?? requiredRepo;
+      const selected = eligible.find((workspace) => workspace.githubRepo === linkedRepo);
+      if (selected) this.selectedCodexWorkspacePath.set(selected.path);
+      else if (
+        !eligible.some((workspace) => workspace.path === this.selectedCodexWorkspacePath())
+      ) {
+        this.selectedCodexWorkspacePath.set(eligible[0]?.path ?? '');
+      }
+    } catch (error) {
+      this.error.set(error instanceof Error ? error.message : String(error));
+    }
+  }
+
+  private async loadCodexPolicy(): Promise<void> {
+    const connection = this.selected();
+    if (!connection) return;
+    try {
+      this.codexContext.set(await this.tauri.linearCodexContext(connection.organizationId));
+      const projectId = this.selectedProject()?.id;
+      if (projectId) {
+        this.selectedCodexProjectRepo.set(this.codexProjectRepo(projectId));
+        await this.loadCodexWorkspaces(this.selectedCodexProjectRepo());
+      }
     } catch (error) {
       this.error.set(error instanceof Error ? error.message : String(error));
     }
@@ -1046,6 +1376,7 @@ export class Linear {
 
   protected closeIssueDetail(): void {
     this.issueDetail.set(null);
+    this.codexContext.set(null);
     this.newComment.set('');
     this.newSubIssueTitle.set('');
   }
@@ -1132,10 +1463,15 @@ export class Linear {
   }
 
   protected async openProject(project: LinearProject): Promise<void> {
+    this.closeIssueDetail();
     this.selectedProject.set(project);
     this.editProjectName.set(project.name);
     this.editProjectDescription.set(project.description ?? '');
-    await Promise.all([this.loadProjectIssues(project.id), this.loadMilestones(project.id)]);
+    await Promise.all([
+      this.loadProjectIssues(project.id),
+      this.loadMilestones(project.id),
+      this.canUseCodex ? this.loadCodexPolicy() : Promise.resolve(),
+    ]);
   }
 
   protected async createMilestone(event: Event): Promise<void> {

@@ -704,6 +704,45 @@ export class TauriBridge {
     return comment;
   }
 
+  async linearCodexContext(organizationId: string, issueId = ''): Promise<LinearCodexContext> {
+    const context = await this.invoke<LinearCodexContext>('linear_codex_context', {
+      organizationId,
+      issueId,
+    });
+    if (!context) throw new Error('Linear returned no Codex link context.');
+    return context;
+  }
+
+  async linearSetCodexProjectAllowed(
+    organizationId: string,
+    projectId: string,
+    allowed: boolean,
+    workspaceRepo: string | null,
+  ): Promise<void> {
+    await this.invoke('linear_set_codex_project_allowed', {
+      organizationId,
+      projectId,
+      allowed,
+      workspaceRepo,
+    });
+  }
+
+  async linearSaveCodexLink(
+    organizationId: string,
+    issueId: string,
+    workspaceRepo: string,
+    workspaceName: string,
+    threadId: string,
+  ): Promise<void> {
+    await this.invoke('linear_save_codex_link', {
+      organizationId,
+      issueId,
+      workspaceRepo,
+      workspaceName,
+      threadId,
+    });
+  }
+
   async linearUpdateIssue(
     organizationId: string,
     issueId: string,
@@ -1209,6 +1248,27 @@ export interface LinearComment {
   readonly body: string;
   readonly createdAt: string;
   readonly user: { readonly id: string; readonly name: string } | null;
+}
+
+export interface LinearCodexLink {
+  readonly issueId: string;
+  readonly deviceId: string;
+  readonly workspaceRepo: string;
+  readonly workspaceName: string;
+  readonly threadId: string;
+}
+
+export interface LinearCodexContext {
+  readonly deviceId: string;
+  readonly links: readonly LinearCodexLink[];
+  readonly allowedProjects: readonly LinearCodexProjectPolicy[];
+}
+
+export interface LinearCodexProjectPolicy {
+  readonly projectId: string;
+  readonly allowed: boolean;
+  readonly workspaceRepo: string | null;
+  readonly updatedAt: number;
 }
 
 export interface LinearIssueDetail {

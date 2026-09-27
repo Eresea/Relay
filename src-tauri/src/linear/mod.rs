@@ -13,8 +13,10 @@ pub use api::{
     LinearProject, Person, Team, Viewer, WorkflowState,
 };
 use oauth::TokenBundle;
+pub use oauth::{LinearCodexLink, LinearCodexProjectPolicy};
 
 const CONNECTIONS_KEY: &str = "linear.connections";
+const CODEX_DEVICE_ID_KEY: &str = "linear.codex.device-id";
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -33,6 +35,15 @@ pub struct LinearConnection {
 pub struct LinearState {
     pending: std::sync::Mutex<Option<oauth::PendingAuth>>,
     refresh: tokio::sync::Mutex<()>,
+    device_id: std::sync::Mutex<Option<String>>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LinearCodexContext {
+    pub device_id: String,
+    pub links: Vec<LinearCodexLink>,
+    pub allowed_projects: Vec<LinearCodexProjectPolicy>,
 }
 
 pub fn connections(app: &AppHandle) -> Result<Vec<LinearConnection>> {
@@ -315,6 +326,147 @@ pub async fn update_issue(
         priority,
     )
     .await
+}
+
+pub fn codex_context(
+    app: &AppHandle,
+    organization_id: &str,
+    issue_id: &str,
+) -> Result<LinearCodexContext> {
+    let device_id = local_codex_device_id(app)?;
+    let bundle = stored_bundle(organization_id)?;
+    Ok(LinearCodexContext {
+        device_id,
+        links: bundle
+            .codex_links
+            .into_iter()
+            .filter(|link| link.issue_id == issue_id)
+            .collect(),
+        allowed_projects: bundle.codex_project_policy,
+    })
+}
+
+pub async fn set_codex_project_allowed(
+    app: &AppHandle,
+    organization_id: &str,
+    project_id: &str,
+    allowed: bool,
+    workspace_repo: Option<&str>,
+) -> Result<()> {
+    if project_id.trim().is_empty()
+        || workspace_repo.is_some_and(|repo| repo.trim().is_empty())
+        || (allowed && workspace_repo.is_none())
+    {
+        return Err(Error::LinearApi(
+            "Linear project and linked repository are required".into(),
+        ));
+    }
+    update_bundle(app, organization_id, |bundle| {
+        bundle
+            .codex_project_policy
+            .retain(|policy| policy.project_id != project_id);
+        bundle
+            .codex_project_policy
+            .push(oauth::LinearCodexProjectPolicy {
+                project_id: project_id.to_owned(),
+                allowed,
+                workspace_repo: workspace_repo.map(str::to_owned),
+                updated_at: oauth::now_seconds(),
+            });
+    })
+    .await
+}
+
+pub async fn save_codex_link(
+    app: &AppHandle,
+    organization_id: &str,
+    issue_id: &str,
+    workspace_repo: &str,
+    workspace_name: &str,
+    thread_id: &str,
+) -> Result<()> {
+    if issue_id.trim().is_empty()
+        || workspace_repo.trim().is_empty()
+        || workspace_name.trim().is_empty()
+        || thread_id.trim().is_empty()
+    {
+        return Err(Error::LinearApi(
+            "Linear and Codex link details are required".into(),
+        ));
+    }
+    let device_id = local_codex_device_id(app)?;
+    update_bundle(app, organization_id, |bundle| {
+        bundle
+            .codex_links
+            .retain(|link| link.issue_id != issue_id || link.device_id != device_id);
+        bundle.codex_links.push(LinearCodexLink {
+            issue_id: issue_id.to_owned(),
+            device_id,
+            workspace_repo: workspace_repo.to_owned(),
+            workspace_name: workspace_name.to_owned(),
+            thread_id: thread_id.to_owned(),
+            updated_at: oauth::now_seconds(),
+        });
+    })
+    .await
+}
+
+async fn update_bundle(
+    app: &AppHandle,
+    organization_id: &str,
+    update: impl FnOnce(&mut TokenBundle),
+) -> Result<()> {
+    let _ = access_token(app, organization_id).await?;
+    let state = app.state::<LinearState>();
+    let _guard = state.refresh.lock().await;
+    let mut bundle = stored_bundle(organization_id)?;
+    update(&mut bundle);
+    let encoded =
+        serde_json::to_string(&bundle).map_err(|error| Error::LinearApi(error.to_string()))?;
+    token_entry(organization_id)?
+        .set_password(&encoded)
+        .map_err(|error| Error::SecretStoreUnavailable(error.to_string()))?;
+    if crate::nexus_auth::status().is_ok_and(|status| status.connected) {
+        if let Some(connection) = connections(app)?
+            .into_iter()
+            .find(|connection| connection.organization_id == organization_id)
+        {
+            nexus_sync::persist(app, &connection, &bundle).await?;
+        }
+    }
+    Ok(())
+}
+
+fn stored_bundle(organization_id: &str) -> Result<TokenBundle> {
+    let encoded = token_entry(organization_id)?
+        .get_password()
+        .map_err(|error| Error::SecretStoreUnavailable(error.to_string()))?;
+    serde_json::from_str(&encoded)
+        .map_err(|_| Error::LinearApi("stored Linear credentials are invalid".into()))
+}
+
+fn local_codex_device_id(app: &AppHandle) -> Result<String> {
+    let state = app.state::<LinearState>();
+    let mut cached = state
+        .device_id
+        .lock()
+        .map_err(|_| Error::LinearApi("Codex device identity is unavailable".into()))?;
+    if let Some(id) = cached.as_ref() {
+        return Ok(id.clone());
+    }
+    let store = app
+        .store("settings.json")
+        .map_err(|error| Error::LinearApi(error.to_string()))?;
+    let id = store
+        .get(CODEX_DEVICE_ID_KEY)
+        .and_then(|value| value.as_str().map(str::to_owned))
+        .unwrap_or_else(|| oauth::random_token(24));
+    store.set(CODEX_DEVICE_ID_KEY, serde_json::Value::String(id.clone()));
+    store
+        .save()
+        .map_err(|error| Error::LinearApi(error.to_string()))?;
+    *cached = Some(id.clone());
+    Ok(id)
 }
 
 pub async fn my_issues(

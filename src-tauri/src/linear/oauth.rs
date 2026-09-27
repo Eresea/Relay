@@ -38,6 +38,32 @@ pub(super) struct TokenBundle {
     pub access_token: String,
     pub refresh_token: String,
     pub expires_at: u64,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub codex_links: Vec<LinearCodexLink>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub codex_project_policy: Vec<LinearCodexProjectPolicy>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LinearCodexLink {
+    pub issue_id: String,
+    pub device_id: String,
+    pub workspace_repo: String,
+    pub workspace_name: String,
+    pub thread_id: String,
+    #[serde(default)]
+    pub updated_at: u64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LinearCodexProjectPolicy {
+    pub project_id: String,
+    pub allowed: bool,
+    #[serde(default)]
+    pub workspace_repo: Option<String>,
+    pub updated_at: u64,
 }
 
 #[derive(Deserialize)]
@@ -175,6 +201,8 @@ pub async fn handle_callback(app: AppHandle, callback: Url) {
             access_token: response.access_token,
             refresh_token: response.refresh_token,
             expires_at: now_seconds().saturating_add(response.expires_in),
+            codex_links: Vec::new(),
+            codex_project_policy: Vec::new(),
         };
         let viewer = api::viewer(&bundle.access_token).await?;
         let mut connection = LinearConnection {
@@ -254,6 +282,8 @@ pub(super) async fn refresh(bundle: TokenBundle) -> Result<TokenBundle> {
         access_token: response.access_token,
         refresh_token: response.refresh_token,
         expires_at: now_seconds().saturating_add(response.expires_in),
+        codex_links: bundle.codex_links,
+        codex_project_policy: bundle.codex_project_policy,
     })
 }
 
@@ -270,7 +300,7 @@ fn generate_pkce() -> (String, String) {
     (verifier, challenge)
 }
 
-fn random_token(size: usize) -> String {
+pub(super) fn random_token(size: usize) -> String {
     let mut random = vec![0; size];
     rand::thread_rng().fill_bytes(&mut random);
     URL_SAFE_NO_PAD.encode(random)

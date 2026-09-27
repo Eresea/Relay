@@ -1,4 +1,5 @@
 use reqwest::header::{ETAG, IF_MATCH};
+use reqwest::StatusCode;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use tauri::AppHandle;
@@ -95,39 +96,52 @@ pub async fn persist(
             && credential.credential_type == "oauth-token-bundle"
             && credential.metadata["organizationId"] == connection.organization_id
     }) {
-        let response = client
-            .get(format!("{NEXUS}/credentials/{}/secret", existing.id))
-            .bearer_auth(&bearer)
-            .send()
-            .await
-            .map_err(request_error)?
-            .error_for_status()
-            .map_err(request_error)?;
-        let revision = response
-            .headers()
-            .get(ETAG)
-            .and_then(|value| value.to_str().ok())
-            .ok_or_else(|| Error::LinearApi("Nexus returned no credential revision".into()))?
-            .to_owned();
-        let response: SecretResponse = response.json().await.map_err(request_error)?;
-        if serde_json::from_str::<TokenBundle>(&response.secret)
-            .ok()
-            .as_ref()
-            == Some(bundle)
-        {
-            return Ok(existing.id.clone());
+        for _ in 0..3 {
+            let response = client
+                .get(format!("{NEXUS}/credentials/{}/secret", existing.id))
+                .bearer_auth(&bearer)
+                .send()
+                .await
+                .map_err(request_error)?
+                .error_for_status()
+                .map_err(request_error)?;
+            let revision = response
+                .headers()
+                .get(ETAG)
+                .and_then(|value| value.to_str().ok())
+                .ok_or_else(|| Error::LinearApi("Nexus returned no credential revision".into()))?
+                .to_owned();
+            let response: SecretResponse = response.json().await.map_err(request_error)?;
+            let existing_bundle: TokenBundle = serde_json::from_str(&response.secret)
+                .map_err(|_| Error::LinearApi("Nexus Linear credentials are invalid".into()))?;
+            let merged = merge_bundle(&existing_bundle, bundle);
+            if merged == existing_bundle {
+                return Ok(existing.id.clone());
+            }
+            let encoded = serde_json::to_string(&merged)
+                .map_err(|error| Error::LinearApi(error.to_string()))?;
+            let update = client
+                .put(format!("{NEXUS}/credentials/{}/secret", existing.id))
+                .bearer_auth(&bearer)
+                .header(IF_MATCH, revision)
+                .json(&ReplaceSecret { secret: &encoded })
+                .send()
+                .await
+                .map_err(request_error)?;
+            if update.status().is_success() {
+                return Ok(existing.id.clone());
+            }
+            if update.status() != StatusCode::CONFLICT
+                && update.status() != StatusCode::PRECONDITION_FAILED
+            {
+                return Err(request_error(
+                    update.error_for_status().expect_err("non-success response"),
+                ));
+            }
         }
-        client
-            .put(format!("{NEXUS}/credentials/{}/secret", existing.id))
-            .bearer_auth(&bearer)
-            .header(IF_MATCH, revision)
-            .json(&ReplaceSecret { secret: &encoded })
-            .send()
-            .await
-            .map_err(request_error)?
-            .error_for_status()
-            .map_err(request_error)?;
-        return Ok(existing.id.clone());
+        return Err(Error::LinearApi(
+            "Nexus credential changed repeatedly; retry to sync Linear and Codex links".into(),
+        ));
     }
 
     let created: CredentialCreated = client
@@ -164,6 +178,54 @@ pub async fn persist(
         .error_for_status()
         .map_err(request_error)?;
     Ok(created.id)
+}
+
+fn merge_bundle(existing: &TokenBundle, incoming: &TokenBundle) -> TokenBundle {
+    let mut merged = if incoming.expires_at >= existing.expires_at {
+        incoming.clone()
+    } else {
+        existing.clone()
+    };
+
+    let mut links =
+        std::collections::HashMap::<(String, String), super::oauth::LinearCodexLink>::new();
+    for link in existing
+        .codex_links
+        .iter()
+        .chain(incoming.codex_links.iter())
+    {
+        let key = (link.issue_id.clone(), link.device_id.clone());
+        let replace = links
+            .get(&key)
+            .is_none_or(|current| link.updated_at >= current.updated_at);
+        if replace {
+            links.insert(key, link.clone());
+        }
+    }
+    merged.codex_links = links.into_values().collect();
+    merged.codex_links.sort_by(|left, right| {
+        (&left.issue_id, &left.device_id).cmp(&(&right.issue_id, &right.device_id))
+    });
+
+    let mut policies =
+        std::collections::HashMap::<String, super::oauth::LinearCodexProjectPolicy>::new();
+    for policy in existing
+        .codex_project_policy
+        .iter()
+        .chain(incoming.codex_project_policy.iter())
+    {
+        let replace = policies
+            .get(&policy.project_id)
+            .is_none_or(|current| policy.updated_at >= current.updated_at);
+        if replace {
+            policies.insert(policy.project_id.clone(), policy.clone());
+        }
+    }
+    merged.codex_project_policy = policies.into_values().collect();
+    merged
+        .codex_project_policy
+        .sort_by(|left, right| left.project_id.cmp(&right.project_id));
+    merged
 }
 
 pub async fn discover(app: &AppHandle) -> Result<Vec<(String, LinearConnection, TokenBundle)>> {
@@ -270,4 +332,57 @@ fn request_error(error: reqwest::Error) -> Error {
         "Nexus credential request failed{}",
         status.map_or(String::new(), |status| format!(" with HTTP {status}"))
     ))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::linear::oauth::{LinearCodexLink, LinearCodexProjectPolicy};
+
+    #[test]
+    fn merge_keeps_other_devices_and_applies_the_newest_project_policy() {
+        let existing = TokenBundle {
+            access_token: "old-access".into(),
+            refresh_token: "old-refresh".into(),
+            expires_at: 10,
+            codex_links: vec![LinearCodexLink {
+                issue_id: "issue-1".into(),
+                device_id: "device-a".into(),
+                workspace_repo: "org/repo".into(),
+                workspace_name: "repo".into(),
+                thread_id: "thread-a".into(),
+                updated_at: 4,
+            }],
+            codex_project_policy: vec![LinearCodexProjectPolicy {
+                project_id: "project-1".into(),
+                allowed: true,
+                workspace_repo: Some("org/repo".into()),
+                updated_at: 4,
+            }],
+        };
+        let incoming = TokenBundle {
+            access_token: "new-access".into(),
+            refresh_token: "new-refresh".into(),
+            expires_at: 20,
+            codex_links: vec![LinearCodexLink {
+                issue_id: "issue-1".into(),
+                device_id: "device-b".into(),
+                workspace_repo: "org/repo".into(),
+                workspace_name: "repo".into(),
+                thread_id: "thread-b".into(),
+                updated_at: 8,
+            }],
+            codex_project_policy: vec![LinearCodexProjectPolicy {
+                project_id: "project-1".into(),
+                allowed: false,
+                workspace_repo: Some("org/repo".into()),
+                updated_at: 8,
+            }],
+        };
+
+        let merged = merge_bundle(&existing, &incoming);
+        assert_eq!(merged.access_token, "new-access");
+        assert_eq!(merged.codex_links.len(), 2);
+        assert!(!merged.codex_project_policy[0].allowed);
+    }
 }
