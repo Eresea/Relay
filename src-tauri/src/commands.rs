@@ -494,11 +494,42 @@ pub async fn linear_project_updates(
     app: AppHandle,
     organization_id: String,
     project_id: String,
+    include_archived: Option<bool>,
 ) -> Result<Vec<LinearProjectUpdate>> {
     if project_id.trim().is_empty() {
         return Err(std::io::Error::other("Project is required").into());
     }
-    linear::project_updates(&app, &organization_id, &project_id).await
+    linear::project_updates(
+        &app,
+        &organization_id,
+        &project_id,
+        include_archived.unwrap_or(false),
+    )
+    .await
+}
+
+#[tauri::command]
+pub async fn linear_archive_project_update(
+    app: AppHandle,
+    organization_id: String,
+    update_id: String,
+) -> Result<()> {
+    if update_id.trim().is_empty() {
+        return Err(std::io::Error::other("Project update is required").into());
+    }
+    linear::archive_project_update(&app, &organization_id, &update_id).await
+}
+
+#[tauri::command]
+pub async fn linear_unarchive_project_update(
+    app: AppHandle,
+    organization_id: String,
+    update_id: String,
+) -> Result<()> {
+    if update_id.trim().is_empty() {
+        return Err(std::io::Error::other("Project update is required").into());
+    }
+    linear::unarchive_project_update(&app, &organization_id, &update_id).await
 }
 
 #[tauri::command]

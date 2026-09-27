@@ -273,8 +273,30 @@ pub async fn project_updates(
     app: &AppHandle,
     organization_id: &str,
     project_id: &str,
+    include_archived: bool,
 ) -> Result<Vec<LinearProjectUpdate>> {
-    api::project_updates(&access_token(app, organization_id).await?, project_id).await
+    api::project_updates(
+        &access_token(app, organization_id).await?,
+        project_id,
+        include_archived,
+    )
+    .await
+}
+
+pub async fn archive_project_update(
+    app: &AppHandle,
+    organization_id: &str,
+    update_id: &str,
+) -> Result<()> {
+    api::archive_project_update(&access_token(app, organization_id).await?, update_id).await
+}
+
+pub async fn unarchive_project_update(
+    app: &AppHandle,
+    organization_id: &str,
+    update_id: &str,
+) -> Result<()> {
+    api::unarchive_project_update(&access_token(app, organization_id).await?, update_id).await
 }
 
 pub async fn create_project_update(

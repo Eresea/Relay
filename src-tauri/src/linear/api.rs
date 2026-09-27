@@ -210,6 +210,8 @@ pub struct LinearProjectUpdate {
     pub health: String,
     pub created_at: String,
     pub user: Person,
+    #[serde(default)]
+    pub archived_at: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -527,7 +529,11 @@ pub async fn project_milestones(token: &str, project_id: &str) -> Result<Vec<Lin
         .unwrap_or_default())
 }
 
-pub async fn project_updates(token: &str, project_id: &str) -> Result<Vec<LinearProjectUpdate>> {
+pub async fn project_updates(
+    token: &str,
+    project_id: &str,
+    include_archived: bool,
+) -> Result<Vec<LinearProjectUpdate>> {
     #[derive(Deserialize)]
     struct ProjectNode {
         project_updates: Nodes<LinearProjectUpdate>,
@@ -538,8 +544,8 @@ pub async fn project_updates(token: &str, project_id: &str) -> Result<Vec<Linear
     }
     let data: Data = query(
         token,
-        "query RelayProjectUpdates($projectId: String!) { projects(filter: { id: { eq: $projectId } }, first: 1) { nodes { projectUpdates(first: 50, orderBy: createdAt) { nodes { id body health createdAt user { id name } } } } } }",
-        json!({ "projectId": project_id }),
+        "query RelayProjectUpdates($projectId: String!, $includeArchived: Boolean!) { projects(filter: { id: { eq: $projectId } }, first: 1) { nodes { projectUpdates(first: 50, includeArchived: $includeArchived, orderBy: createdAt) { nodes { id body health createdAt archivedAt user { id name } } } } } }",
+        json!({ "projectId": project_id, "includeArchived": include_archived }),
     )
     .await?;
     Ok(data
@@ -549,6 +555,48 @@ pub async fn project_updates(token: &str, project_id: &str) -> Result<Vec<Linear
         .next()
         .map(|project| project.project_updates.nodes)
         .unwrap_or_default())
+}
+
+pub async fn archive_project_update(token: &str, update_id: &str) -> Result<()> {
+    #[derive(Deserialize)]
+    struct Data {
+        #[serde(rename = "projectUpdateArchive")]
+        result: DeleteMutation,
+    }
+    let data: Data = query(
+        token,
+        "mutation RelayProjectUpdateArchive($id: String!) { projectUpdateArchive(id: $id) { success } }",
+        json!({ "id": update_id }),
+    )
+    .await?;
+    if data.result.success {
+        Ok(())
+    } else {
+        Err(Error::LinearApi(
+            "Linear did not archive the project update".into(),
+        ))
+    }
+}
+
+pub async fn unarchive_project_update(token: &str, update_id: &str) -> Result<()> {
+    #[derive(Deserialize)]
+    struct Data {
+        #[serde(rename = "projectUpdateUnarchive")]
+        result: DeleteMutation,
+    }
+    let data: Data = query(
+        token,
+        "mutation RelayProjectUpdateUnarchive($id: String!) { projectUpdateUnarchive(id: $id) { success } }",
+        json!({ "id": update_id }),
+    )
+    .await?;
+    if data.result.success {
+        Ok(())
+    } else {
+        Err(Error::LinearApi(
+            "Linear did not restore the project update".into(),
+        ))
+    }
 }
 
 pub async fn create_project_update(

@@ -910,7 +910,17 @@ interface LinearIssueDraft {
                   </form>
                 </section>
                 <section class="milestones" aria-label="Project status updates">
-                  <h3>Status updates</h3>
+                  <div class="issue-actions">
+                    <h3>Status updates</h3>
+                    <umbra-button
+                      size="sm"
+                      variant="link"
+                      type="button"
+                      (click)="toggleArchivedProjectUpdates()"
+                    >
+                      {{ includeArchivedProjectUpdates() ? 'Hide archived' : 'Include archived' }}
+                    </umbra-button>
+                  </div>
                   @for (update of projectUpdates(); track update.id) {
                     <article class="issue">
                       <strong>{{ projectHealthLabel(update.health) }}</strong>
@@ -918,15 +928,39 @@ interface LinearIssueDraft {
                         >{{ update.user.name }} · {{ projectUpdateDate(update.createdAt) }}</span
                       >
                       <p>{{ update.body }}</p>
+                      @if (update.archivedAt) {
+                        <span class="muted">Archived</span>
+                      }
                       @if (!selectedProject()!.archivedAt) {
-                        <umbra-button
-                          size="sm"
-                          variant="link"
-                          type="button"
-                          (click)="editProjectUpdate(update)"
-                        >
-                          Edit update
-                        </umbra-button>
+                        @if (update.archivedAt) {
+                          <umbra-button
+                            size="sm"
+                            variant="link"
+                            type="button"
+                            [disabled]="busyProjectUpdateId() === update.id"
+                            (click)="setProjectUpdateArchived(update, false)"
+                          >
+                            {{ busyProjectUpdateId() === update.id ? 'Restoring' : 'Restore' }}
+                          </umbra-button>
+                        } @else {
+                          <umbra-button
+                            size="sm"
+                            variant="link"
+                            type="button"
+                            (click)="editProjectUpdate(update)"
+                          >
+                            Edit update
+                          </umbra-button>
+                          <umbra-button
+                            size="sm"
+                            variant="link"
+                            type="button"
+                            [disabled]="busyProjectUpdateId() === update.id"
+                            (click)="setProjectUpdateArchived(update, true)"
+                          >
+                            {{ busyProjectUpdateId() === update.id ? 'Archiving' : 'Archive' }}
+                          </umbra-button>
+                        }
                       }
                     </article>
                     @if (editingProjectUpdateId() === update.id) {
@@ -1783,6 +1817,8 @@ export class Linear {
   protected readonly editProjectUpdateBody = signal('');
   protected readonly editProjectUpdateHealth = signal<LinearProjectHealth>('onTrack');
   protected readonly savingProjectUpdate = signal(false);
+  protected readonly includeArchivedProjectUpdates = signal(false);
+  protected readonly busyProjectUpdateId = signal<string | null>(null);
   protected readonly projects = signal<readonly LinearProject[]>([]);
   protected readonly projectStatuses = signal<readonly LinearProjectStatus[]>([]);
   protected readonly initiatives = signal<readonly LinearInitiative[]>([]);
@@ -2889,6 +2925,37 @@ export class Linear {
     this.editProjectUpdateHealth.set(update.health);
   }
 
+  protected toggleArchivedProjectUpdates(): void {
+    const project = this.selectedProject();
+    if (!project) return;
+    this.includeArchivedProjectUpdates.update((includeArchived) => !includeArchived);
+    void this.loadProjectUpdates(project.id);
+  }
+
+  protected async setProjectUpdateArchived(
+    update: LinearProjectUpdate,
+    archived: boolean,
+  ): Promise<void> {
+    const connection = this.selected();
+    const project = this.selectedProject();
+    if (!connection || !project || this.busyProjectUpdateId()) return;
+    this.busyProjectUpdateId.set(update.id);
+    this.error.set(null);
+    try {
+      if (archived) {
+        await this.tauri.linearArchiveProjectUpdate(connection.organizationId, update.id);
+      } else {
+        await this.tauri.linearUnarchiveProjectUpdate(connection.organizationId, update.id);
+      }
+      await this.loadProjectUpdates(project.id);
+      this.editingProjectUpdateId.set(null);
+    } catch (error) {
+      this.error.set(error instanceof Error ? error.message : String(error));
+    } finally {
+      this.busyProjectUpdateId.set(null);
+    }
+  }
+
   protected async saveProjectUpdate(event: Event, current: LinearProjectUpdate): Promise<void> {
     event.preventDefault();
     const connection = this.selected();
@@ -3146,7 +3213,11 @@ export class Linear {
     if (!connection) return;
     try {
       this.projectUpdates.set(
-        await this.tauri.linearProjectUpdates(connection.organizationId, projectId),
+        await this.tauri.linearProjectUpdates(
+          connection.organizationId,
+          projectId,
+          this.includeArchivedProjectUpdates(),
+        ),
       );
     } catch (error) {
       this.error.set(error instanceof Error ? error.message : String(error));

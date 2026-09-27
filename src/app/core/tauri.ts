@@ -659,13 +659,23 @@ export class TauriBridge {
   async linearProjectUpdates(
     organizationId: string,
     projectId: string,
+    includeArchived = false,
   ): Promise<readonly LinearProjectUpdate[]> {
     return (
       (await this.invoke<LinearProjectUpdate[]>('linear_project_updates', {
         organizationId,
         projectId,
+        includeArchived,
       })) ?? []
     );
+  }
+
+  async linearArchiveProjectUpdate(organizationId: string, updateId: string): Promise<void> {
+    await this.invoke('linear_archive_project_update', { organizationId, updateId });
+  }
+
+  async linearUnarchiveProjectUpdate(organizationId: string, updateId: string): Promise<void> {
+    await this.invoke('linear_unarchive_project_update', { organizationId, updateId });
   }
 
   async linearCreateProjectUpdate(
@@ -1439,6 +1449,7 @@ export interface LinearProjectUpdate {
   readonly health: LinearProjectHealth;
   readonly createdAt: string;
   readonly user: LinearPerson;
+  readonly archivedAt: string | null;
 }
 
 export interface LinearInitiative {
