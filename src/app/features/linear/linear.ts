@@ -1358,6 +1358,16 @@ interface LinearIssueDraft {
                 } @empty {
                   <p class="hint">No issues are linked to this project.</p>
                 }
+                @if (projectIssuesHasNextPage()) {
+                  <umbra-button
+                    size="sm"
+                    variant="outline"
+                    [disabled]="loadingProjectIssues()"
+                    (click)="loadMoreProjectIssues()"
+                  >
+                    {{ loadingProjectIssues() ? 'Loading' : 'Load more issues' }}
+                  </umbra-button>
+                }
               } @else {
                 @if (createProjectOpen()) {
                   <form class="create-form" (submit)="createProject($event)">
@@ -2245,6 +2255,7 @@ export class Linear {
   protected readonly projectIssues = signal<readonly LinearIssue[]>([]);
   protected readonly includeArchivedProjectIssues = signal(false);
   protected readonly loadingProjectIssues = signal(false);
+  protected readonly projectIssuesHasNextPage = signal(false);
   protected readonly milestones = signal<readonly LinearMilestone[]>([]);
   protected readonly projectUpdates = signal<readonly LinearProjectUpdate[]>([]);
   protected readonly newProjectUpdateBody = signal('');
@@ -2362,6 +2373,7 @@ export class Linear {
   protected readonly sendingComment = signal(false);
   protected readonly codexPending = signal(false);
   private nextCursor: string | null = null;
+  private nextProjectIssueCursor: string | null = null;
   private projectIssuesRequest = 0;
 
   protected pageTitle(): string {
@@ -2436,6 +2448,8 @@ export class Linear {
     this.selected.set(connection);
     this.selectedProject.set(null);
     this.projectIssues.set([]);
+    this.nextProjectIssueCursor = null;
+    this.projectIssuesHasNextPage.set(false);
     this.projectIssuesRequest++;
     this.loadingProjectIssues.set(false);
     this.issueTeamId.set('');
@@ -2490,8 +2504,12 @@ export class Linear {
       this.confirmArchiveIssueId.set(null);
       this.writeLocal(this.issueCacheKey(connection), null);
       const project = this.selectedProject();
-      if (project) await this.loadProjectIssues(project.id);
-      else await this.loadIssues();
+      if (project) {
+        this.projectIssues.set([]);
+        this.nextProjectIssueCursor = null;
+        this.projectIssuesHasNextPage.set(false);
+        await this.loadProjectIssues(project.id);
+      } else await this.loadIssues();
     } catch (error) {
       this.error.set(error instanceof Error ? error.message : String(error));
     } finally {
@@ -3604,6 +3622,8 @@ export class Linear {
     this.includeArchivedProjectIssues.set(false);
     this.selectedProject.set(project);
     this.projectIssues.set([]);
+    this.nextProjectIssueCursor = null;
+    this.projectIssuesHasNextPage.set(false);
     const connection = this.selected();
     if (connection) this.restoreProjectIssueDraft(connection, project.id);
     this.editProjectName.set(project.name);
@@ -3626,7 +3646,16 @@ export class Linear {
     const project = this.selectedProject();
     if (!project || this.loadingProjectIssues()) return;
     this.includeArchivedProjectIssues.update((value) => !value);
+    this.projectIssues.set([]);
+    this.nextProjectIssueCursor = null;
+    this.projectIssuesHasNextPage.set(false);
     void this.loadProjectIssues(project.id);
+  }
+
+  protected loadMoreProjectIssues(): void {
+    const project = this.selectedProject();
+    if (!project || !this.nextProjectIssueCursor || this.loadingProjectIssues()) return;
+    void this.loadProjectIssues(project.id, this.nextProjectIssueCursor, true);
   }
 
   protected closeSelectedProject(): void {
@@ -3929,7 +3958,11 @@ export class Linear {
     }
   }
 
-  private async loadProjectIssues(projectId: string): Promise<void> {
+  private async loadProjectIssues(
+    projectId: string,
+    after: string | null = null,
+    append = false,
+  ): Promise<void> {
     const connection = this.selected();
     if (!connection) return;
     const request = ++this.projectIssuesRequest;
@@ -3938,11 +3971,13 @@ export class Linear {
       const page = await this.tauri.linearProjectIssues(
         connection.organizationId,
         projectId,
-        null,
+        after,
         this.includeArchivedProjectIssues(),
       );
       if (request === this.projectIssuesRequest && this.selectedProject()?.id === projectId) {
-        this.projectIssues.set(page.issues);
+        this.projectIssues.update((items) => (append ? [...items, ...page.issues] : page.issues));
+        this.nextProjectIssueCursor = page.endCursor;
+        this.projectIssuesHasNextPage.set(page.hasNextPage);
       }
     } catch (error) {
       if (request === this.projectIssuesRequest) {
