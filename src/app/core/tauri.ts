@@ -547,6 +547,14 @@ export class TauriBridge {
     await this.invoke('linear_disconnect', { organizationId });
   }
 
+  async linearSyncConnection(organizationId: string): Promise<LinearConnection> {
+    const connection = await this.invoke<LinearConnection>('linear_sync_connection', {
+      organizationId,
+    });
+    if (!connection) throw new Error('Linear connection was not synced through Nexus.');
+    return connection;
+  }
+
   async linearTeams(organizationId: string): Promise<readonly LinearTeam[]> {
     return (await this.invoke<LinearTeam[]>('linear_teams', { organizationId })) ?? [];
   }

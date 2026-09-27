@@ -335,6 +335,17 @@ pub async fn linear_disconnect(app: AppHandle, organization_id: String) -> Resul
 }
 
 #[tauri::command]
+pub async fn linear_sync_connection(
+    app: AppHandle,
+    organization_id: String,
+) -> Result<LinearConnection> {
+    if organization_id.trim().is_empty() {
+        return Err(std::io::Error::other("Linear workspace is required").into());
+    }
+    linear::sync_connection(&app, &organization_id).await
+}
+
+#[tauri::command]
 pub async fn linear_teams(app: AppHandle, organization_id: String) -> Result<Vec<Team>> {
     linear::teams(&app, &organization_id).await
 }

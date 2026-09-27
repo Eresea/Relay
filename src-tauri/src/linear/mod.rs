@@ -151,6 +151,22 @@ pub async fn disconnect(app: &AppHandle, organization_id: &str) -> Result<()> {
     remote_revoke
 }
 
+pub async fn sync_connection(app: &AppHandle, organization_id: &str) -> Result<LinearConnection> {
+    let mut connection = connections(app)?
+        .into_iter()
+        .find(|connection| connection.organization_id == organization_id)
+        .ok_or_else(|| Error::LinearApi("Linear workspace is not connected".into()))?;
+    access_token(app, organization_id).await?;
+    let encoded = token_entry(organization_id)?
+        .get_password()
+        .map_err(|error| Error::SecretStoreUnavailable(error.to_string()))?;
+    let bundle: TokenBundle = serde_json::from_str(&encoded)
+        .map_err(|_| Error::LinearApi("stored Linear credentials are invalid".into()))?;
+    connection.nexus_credential_id = Some(nexus_sync::persist(app, &connection, &bundle).await?);
+    save_connection(app, connection.clone())?;
+    Ok(connection)
+}
+
 pub async fn teams(app: &AppHandle, organization_id: &str) -> Result<Vec<Team>> {
     api::teams(&access_token(app, organization_id).await?).await
 }

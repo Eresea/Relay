@@ -34,14 +34,26 @@ import { UmbraButtonComponent } from '@umbra/components/umbra-button/umbra-butto
           <p class="hint">{{ pageDescription() }}</p>
         </div>
         @if (connections().length) {
-          <umbra-button
-            size="sm"
-            variant="outline"
-            (click)="connect()"
-            [disabled]="pending() || !oauthConfigured()"
-          >
-            Connect workspace
-          </umbra-button>
+          <div class="header-actions">
+            @if (selected() && !selected()?.nexusCredentialId) {
+              <umbra-button
+                size="sm"
+                variant="outline"
+                (click)="syncSelected()"
+                [disabled]="syncing() || !nexus.status().connected"
+              >
+                {{ syncing() ? 'Syncing' : 'Sync through Nexus' }}
+              </umbra-button>
+            }
+            <umbra-button
+              size="sm"
+              variant="outline"
+              (click)="connect()"
+              [disabled]="pending() || !oauthConfigured()"
+            >
+              Connect workspace
+            </umbra-button>
+          </div>
         }
       </header>
 
@@ -965,6 +977,11 @@ import { UmbraButtonComponent } from '@umbra/components/umbra-button/umbra-butto
       justify-content: space-between;
       gap: var(--space-5);
     }
+    .header-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: var(--space-2);
+    }
     .issue-actions {
       display: flex;
       align-items: center;
@@ -1291,6 +1308,7 @@ export class Linear {
   protected readonly hasNextPage = signal(false);
   protected readonly error = signal<string | null>(null);
   protected readonly pending = signal(false);
+  protected readonly syncing = signal(false);
   protected readonly oauthConfigured = signal(false);
   protected readonly loading = signal(false);
   protected readonly creating = signal(false);
@@ -1348,6 +1366,24 @@ export class Linear {
     } catch (error) {
       this.pending.set(false);
       this.error.set(error instanceof Error ? error.message : String(error));
+    }
+  }
+
+  protected async syncSelected(): Promise<void> {
+    const connection = this.selected();
+    if (!connection || this.syncing()) return;
+    this.syncing.set(true);
+    this.error.set(null);
+    try {
+      const synced = await this.tauri.linearSyncConnection(connection.organizationId);
+      this.connections.update((items) =>
+        items.map((item) => (item.organizationId === synced.organizationId ? synced : item)),
+      );
+      this.selected.set(synced);
+    } catch (error) {
+      this.error.set(error instanceof Error ? error.message : String(error));
+    } finally {
+      this.syncing.set(false);
     }
   }
 
