@@ -577,6 +577,34 @@ pub async fn linear_cycles(
 }
 
 #[tauri::command]
+pub async fn linear_update_cycle(
+    app: AppHandle,
+    organization_id: String,
+    cycle_id: String,
+    starts_at: Option<String>,
+    ends_at: Option<String>,
+) -> Result<LinearCycle> {
+    if organization_id.trim().is_empty()
+        || cycle_id.trim().is_empty()
+        || (starts_at.is_none() && ends_at.is_none())
+        || starts_at
+            .as_ref()
+            .is_some_and(|date| date.trim().is_empty())
+        || ends_at.as_ref().is_some_and(|date| date.trim().is_empty())
+    {
+        return Err(std::io::Error::other("Cycle and schedule dates are required").into());
+    }
+    linear::update_cycle(
+        &app,
+        &organization_id,
+        &cycle_id,
+        starts_at.as_deref(),
+        ends_at.as_deref(),
+    )
+    .await
+}
+
+#[tauri::command]
 pub async fn linear_workflow_states(
     app: AppHandle,
     organization_id: String,

@@ -28,6 +28,7 @@ import {
   type LinearIssueUpdate,
   type PendingLinearIssueUpdate,
 } from './linear-state';
+import { cycleDateInTimezone, cycleDateToIso, todayInTimezone } from './cycle-dates';
 
 interface LinearIssueDraft {
   teamId: string;
@@ -220,7 +221,9 @@ interface LinearIssueDraft {
                   >
                     <option value="">No cycle</option>
                     @for (cycle of cyclesFor(detail.issue.team.id); track cycle.id) {
-                      <option [value]="cycle.id">{{ cycle.name }}</option>
+                      <option [value]="cycle.id">
+                        {{ cycle.name || 'Cycle ' + cycle.number }}
+                      </option>
                     }
                   </select>
                 </label>
@@ -241,7 +244,9 @@ interface LinearIssueDraft {
                   <span class="muted">Project {{ detail.issue.project.name }}</span>
                 }
                 @if (detail.issue.cycle) {
-                  <span class="muted">Cycle {{ detail.issue.cycle.name }}</span>
+                  <span class="muted">{{
+                    detail.issue.cycle.name || 'Cycle ' + detail.issue.cycle.number
+                  }}</span>
                 }
               </div>
               @if (canUseCodex) {
@@ -885,13 +890,56 @@ interface LinearIssueDraft {
                 @for (cycle of cyclesFor(team.id); track cycle.id) {
                   <article class="resource-row">
                     <div>
-                      <h3>{{ cycle.name }}</h3>
-                      <p>{{ cycle.startsAt || 'Open' }} – {{ cycle.endsAt || 'Open' }}</p>
+                      <h3>{{ cycle.name || 'Cycle ' + cycle.number }}</h3>
+                      <p>
+                        {{ cycleDateInTeam(cycle.startsAt, team) }} –
+                        {{ cycleDateInTeam(cycle.endsAt, team) }}
+                      </p>
                     </div>
-                    <span class="muted">{{
-                      cycle.isActive ? 'Current' : 'Cycle ' + cycle.number
-                    }}</span>
+                    @if (canEditCycle(cycle, team)) {
+                      <umbra-button size="sm" variant="outline" (click)="editCycle(cycle)"
+                        >Edit schedule</umbra-button
+                      >
+                    } @else {
+                      <span class="muted">{{ cycle.isActive ? 'Current' : 'Past' }}</span>
+                    }
                   </article>
+                  @if (editingCycleId() === cycle.id) {
+                    <form class="project-edit" (submit)="saveCycle($event, cycle)">
+                      @if (!cycle.isActive) {
+                        <label>
+                          <span>Start date · {{ team.timezone || 'America/Los_Angeles' }}</span>
+                          <input
+                            type="date"
+                            required
+                            [value]="editCycleStartDate()"
+                            [min]="todayForTeam(team)"
+                            (input)="editCycleStartDate.set($any($event.target).value)"
+                          />
+                        </label>
+                      }
+                      <label>
+                        <span>End date · {{ team.timezone || 'America/Los_Angeles' }}</span>
+                        <input
+                          type="date"
+                          required
+                          [value]="editCycleEndDate()"
+                          [min]="cycle.isActive ? todayForTeam(team) : editCycleStartDate()"
+                          (input)="editCycleEndDate.set($any($event.target).value)"
+                        />
+                      </label>
+                      <umbra-button size="sm" [disabled]="savingCycle()">
+                        {{ savingCycle() ? 'Saving' : 'Save schedule' }}
+                      </umbra-button>
+                      <umbra-button
+                        size="sm"
+                        variant="link"
+                        type="button"
+                        (click)="editingCycleId.set(null)"
+                        >Cancel</umbra-button
+                      >
+                    </form>
+                  }
                 } @empty {
                   <p class="hint">No cycles are available for this team.</p>
                 }
@@ -1309,6 +1357,10 @@ export class Linear {
   protected readonly editInitiativeTargetDate = signal('');
   protected readonly savingInitiative = signal(false);
   protected readonly cycles = signal<Readonly<Record<string, readonly LinearCycle[]>>>({});
+  protected readonly editingCycleId = signal<string | null>(null);
+  protected readonly editCycleStartDate = signal('');
+  protected readonly editCycleEndDate = signal('');
+  protected readonly savingCycle = signal(false);
   protected readonly selectedProject = signal<LinearProject | null>(null);
   protected readonly createProjectOpen = signal(false);
   protected readonly newProjectName = signal('');
@@ -1939,6 +1991,59 @@ export class Linear {
 
   protected cyclesFor(teamId: string): readonly LinearCycle[] {
     return this.cycles()[teamId] ?? [];
+  }
+
+  protected cycleDateInTeam(value: string | null, team: LinearTeam): string {
+    return value ? cycleDateInTimezone(value, team.timezone) : 'Open';
+  }
+
+  protected todayForTeam(team: LinearTeam): string {
+    return todayInTimezone(team.timezone);
+  }
+
+  protected canEditCycle(cycle: LinearCycle, team: LinearTeam): boolean {
+    if (!cycle.startsAt || !cycle.endsAt) return false;
+    return (
+      cycle.isActive || cycleDateInTimezone(cycle.endsAt, team.timezone) >= this.todayForTeam(team)
+    );
+  }
+
+  protected editCycle(cycle: LinearCycle): void {
+    this.error.set(null);
+    this.editingCycleId.set(cycle.id);
+    this.editCycleStartDate.set(
+      cycle.startsAt ? cycleDateInTimezone(cycle.startsAt, cycle.team.timezone) : '',
+    );
+    this.editCycleEndDate.set(
+      cycle.endsAt ? cycleDateInTimezone(cycle.endsAt, cycle.team.timezone) : '',
+    );
+  }
+
+  protected async saveCycle(event: Event, cycle: LinearCycle): Promise<void> {
+    event.preventDefault();
+    const connection = this.selected();
+    if (!connection || this.savingCycle()) return;
+    this.savingCycle.set(true);
+    this.error.set(null);
+    try {
+      const updated = await this.tauri.linearUpdateCycle(
+        connection.organizationId,
+        cycle.id,
+        cycle.isActive ? null : cycleDateToIso(this.editCycleStartDate(), cycle.team.timezone),
+        cycleDateToIso(this.editCycleEndDate(), cycle.team.timezone),
+      );
+      this.cycles.update((cycles) => ({
+        ...cycles,
+        [cycle.team.id]: (cycles[cycle.team.id] ?? []).map((item) =>
+          item.id === updated.id ? updated : item,
+        ),
+      }));
+      this.editingCycleId.set(null);
+    } catch (error) {
+      this.error.set(error instanceof Error ? error.message : String(error));
+    } finally {
+      this.savingCycle.set(false);
+    }
   }
 
   protected async loadProjects(): Promise<void> {

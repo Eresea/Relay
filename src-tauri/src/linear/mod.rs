@@ -330,6 +330,22 @@ pub async fn cycles(
     api::cycles(&access_token(app, organization_id).await?, team_id).await
 }
 
+pub async fn update_cycle(
+    app: &AppHandle,
+    organization_id: &str,
+    cycle_id: &str,
+    starts_at: Option<&str>,
+    ends_at: Option<&str>,
+) -> Result<LinearCycle> {
+    api::update_cycle(
+        &access_token(app, organization_id).await?,
+        cycle_id,
+        starts_at,
+        ends_at,
+    )
+    .await
+}
+
 pub async fn workflow_states(
     app: &AppHandle,
     organization_id: &str,

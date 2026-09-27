@@ -33,6 +33,8 @@ pub struct Team {
     pub id: String,
     pub name: String,
     pub key: String,
+    #[serde(default)]
+    pub timezone: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -110,7 +112,8 @@ pub struct ProjectRef {
 #[serde(rename_all = "camelCase")]
 pub struct CycleRef {
     pub id: String,
-    pub name: String,
+    #[serde(default)]
+    pub name: Option<String>,
     pub number: i64,
 }
 
@@ -192,7 +195,8 @@ pub struct LinearMilestone {
 #[serde(rename_all = "camelCase")]
 pub struct LinearCycle {
     pub id: String,
-    pub name: String,
+    #[serde(default)]
+    pub name: Option<String>,
     pub number: i64,
     #[serde(default)]
     pub starts_at: Option<String>,
@@ -251,7 +255,7 @@ pub async fn teams(token: &str) -> Result<Vec<Team>> {
 
     Ok(query::<Data>(
         token,
-        "query RelayTeams { teams { nodes { id name key } } }",
+        "query RelayTeams { teams { nodes { id name key timezone } } }",
         json!({}),
     )
     .await?
@@ -575,12 +579,39 @@ pub async fn cycles(token: &str, team_id: &str) -> Result<Vec<LinearCycle>> {
     }
     Ok(query::<Data>(
         token,
-        "query RelayCycles($teamId: String!) { cycles(filter: { team: { id: { eq: $teamId } } }, first: 100) { nodes { id name number startsAt endsAt isActive team { id name key } } } }",
+        "query RelayCycles($teamId: String!) { cycles(filter: { team: { id: { eq: $teamId } } }, first: 100) { nodes { id name number startsAt endsAt isActive team { id name key timezone } } } }",
         json!({ "teamId": team_id }),
     )
     .await?
     .cycles
     .nodes)
+}
+
+pub async fn update_cycle(
+    token: &str,
+    cycle_id: &str,
+    starts_at: Option<&str>,
+    ends_at: Option<&str>,
+) -> Result<LinearCycle> {
+    #[derive(Deserialize)]
+    struct Data {
+        #[serde(rename = "cycleUpdate")]
+        result: CycleMutation,
+    }
+    let mut input = serde_json::Map::new();
+    if let Some(starts_at) = starts_at {
+        input.insert("startsAt".into(), json!(starts_at));
+    }
+    if let Some(ends_at) = ends_at {
+        input.insert("endsAt".into(), json!(ends_at));
+    }
+    let data: Data = query(
+        token,
+        "mutation RelayCycleUpdate($id: String!, $input: CycleUpdateInput!) { cycleUpdate(id: $id, input: $input) { success cycle { id name number startsAt endsAt isActive team { id name key timezone } } } }",
+        json!({ "id": cycle_id, "input": input }),
+    )
+    .await?;
+    data.result.into_value("Linear did not update the cycle")
 }
 
 pub async fn project_issues(
@@ -768,6 +799,12 @@ struct ProjectMutation {
 }
 
 #[derive(Deserialize)]
+struct CycleMutation {
+    success: bool,
+    cycle: Option<LinearCycle>,
+}
+
+#[derive(Deserialize)]
 struct MilestoneMutation {
     success: bool,
     #[serde(rename = "projectMilestone")]
@@ -823,6 +860,17 @@ impl ProjectMutation {
         if self.success {
             self.project
                 .ok_or_else(|| Error::LinearApi("Linear returned no project".into()))
+        } else {
+            Err(Error::LinearApi(message.into()))
+        }
+    }
+}
+
+impl CycleMutation {
+    fn into_value(self, message: &str) -> Result<LinearCycle> {
+        if self.success {
+            self.cycle
+                .ok_or_else(|| Error::LinearApi("Linear returned no cycle".into()))
         } else {
             Err(Error::LinearApi(message.into()))
         }

@@ -718,6 +718,22 @@ export class TauriBridge {
     return (await this.invoke<LinearCycle[]>('linear_cycles', { organizationId, teamId })) ?? [];
   }
 
+  async linearUpdateCycle(
+    organizationId: string,
+    cycleId: string,
+    startsAt: string | null,
+    endsAt: string | null,
+  ): Promise<LinearCycle> {
+    const cycle = await this.invoke<LinearCycle>('linear_update_cycle', {
+      organizationId,
+      cycleId,
+      startsAt,
+      endsAt,
+    });
+    if (!cycle) throw new Error('Linear returned no cycle.');
+    return cycle;
+  }
+
   async linearWorkflowStates(
     organizationId: string,
     teamId: string,
@@ -1246,6 +1262,7 @@ export interface LinearTeam {
   readonly id: string;
   readonly name: string;
   readonly key: string;
+  readonly timezone?: string | null;
 }
 
 export interface LinearPerson {
@@ -1294,7 +1311,7 @@ export interface LinearInitiative {
 
 export interface LinearCycle {
   readonly id: string;
-  readonly name: string;
+  readonly name: string | null;
   readonly number: number;
   readonly startsAt: string | null;
   readonly endsAt: string | null;
@@ -1320,7 +1337,11 @@ export interface LinearIssue {
   readonly state: { readonly id: string; readonly name: string; readonly kind: string } | null;
   readonly assignee: { readonly id: string; readonly name: string } | null;
   readonly project: { readonly id: string; readonly name: string } | null;
-  readonly cycle: { readonly id: string; readonly name: string; readonly number: number } | null;
+  readonly cycle: {
+    readonly id: string;
+    readonly name: string | null;
+    readonly number: number;
+  } | null;
   readonly labels: readonly LinearLabel[];
   readonly team: LinearTeam;
 }
