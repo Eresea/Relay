@@ -813,6 +813,8 @@ pub async fn update_issue(
     clear_cycle: bool,
     priority: Option<u8>,
     label_ids: Option<&[String]>,
+    title: Option<&str>,
+    description: Option<&str>,
 ) -> Result<Issue> {
     #[derive(Deserialize)]
     struct Data {
@@ -841,6 +843,12 @@ pub async fn update_issue(
     }
     if let Some(label_ids) = label_ids {
         input.insert("labelIds".into(), json!(label_ids));
+    }
+    if let Some(title) = title {
+        input.insert("title".into(), json!(title));
+    }
+    if let Some(description) = description {
+        input.insert("description".into(), json!(description));
     }
     let data: Data = query(
         token,

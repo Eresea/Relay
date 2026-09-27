@@ -174,15 +174,61 @@ interface LinearIssueDraft {
               <div class="issue-heading">
                 <div>
                   <p class="muted">{{ detail.issue.identifier }} · {{ detail.issue.team.name }}</p>
-                  <h2>{{ detail.issue.title }}</h2>
+                  @if (editingIssueDetailsId() === detail.issue.id) {
+                    <form class="project-edit" (submit)="saveIssueDetails($event, detail.issue)">
+                      <label>
+                        <span>Issue title</span>
+                        <input
+                          required
+                          maxlength="255"
+                          [value]="editIssueTitle()"
+                          (input)="editIssueTitle.set($any($event.target).value)"
+                        />
+                      </label>
+                      <label>
+                        <span>Description</span>
+                        <textarea
+                          rows="4"
+                          [value]="editIssueDescription()"
+                          (input)="editIssueDescription.set($any($event.target).value)"
+                        ></textarea>
+                      </label>
+                      <div class="issue-actions">
+                        <umbra-button size="sm" [disabled]="savingIssueDetails()">
+                          {{ savingIssueDetails() ? 'Saving' : 'Save details' }}
+                        </umbra-button>
+                        <umbra-button
+                          size="sm"
+                          variant="link"
+                          type="button"
+                          (click)="editingIssueDetailsId.set(null)"
+                        >
+                          Cancel
+                        </umbra-button>
+                      </div>
+                    </form>
+                  } @else {
+                    <h2>{{ detail.issue.title }}</h2>
+                    @if (detail.issue.description) {
+                      <p class="issue-description">{{ detail.issue.description }}</p>
+                    }
+                  }
                 </div>
-                <umbra-button size="sm" variant="link" (click)="closeIssueDetail()">
-                  Close
-                </umbra-button>
+                <div class="issue-actions">
+                  @if (editingIssueDetailsId() !== detail.issue.id) {
+                    <umbra-button
+                      size="sm"
+                      variant="outline"
+                      (click)="editIssueDetails(detail.issue)"
+                    >
+                      Edit details
+                    </umbra-button>
+                  }
+                  <umbra-button size="sm" variant="link" (click)="closeIssueDetail()">
+                    Close
+                  </umbra-button>
+                </div>
               </div>
-              @if (detail.issue.description) {
-                <p class="issue-description">{{ detail.issue.description }}</p>
-              }
               <div class="issue-fields">
                 <label>
                   <span>Status</span>
@@ -1391,6 +1437,10 @@ export class Linear {
   protected readonly selected = signal<LinearConnection | null>(null);
   protected readonly issues = signal<readonly LinearIssue[]>([]);
   protected readonly issueDetail = signal<LinearIssueDetail | null>(null);
+  protected readonly editingIssueDetailsId = signal<string | null>(null);
+  protected readonly editIssueTitle = signal('');
+  protected readonly editIssueDescription = signal('');
+  protected readonly savingIssueDetails = signal(false);
   protected readonly codexContext = signal<LinearCodexContext | null>(null);
   protected readonly codexRequest = signal<{
     readonly issue: LinearIssue;
@@ -1567,6 +1617,7 @@ export class Linear {
     const connection = this.selected();
     if (!connection) return;
     this.issueDetail.set(null);
+    this.editingIssueDetailsId.set(null);
     this.codexRequest.set(null);
     this.error.set(null);
     try {
@@ -1586,6 +1637,26 @@ export class Linear {
     } catch (error) {
       this.error.set(error instanceof Error ? error.message : String(error));
     }
+  }
+
+  protected editIssueDetails(issue: LinearIssue): void {
+    this.error.set(null);
+    this.editingIssueDetailsId.set(issue.id);
+    this.editIssueTitle.set(issue.title);
+    this.editIssueDescription.set(issue.description ?? '');
+  }
+
+  protected async saveIssueDetails(event: Event, issue: LinearIssue): Promise<void> {
+    event.preventDefault();
+    const title = this.editIssueTitle().trim();
+    if (!title || this.savingIssueDetails()) return;
+    this.savingIssueDetails.set(true);
+    const saved = await this.saveIssueUpdate(issue, {
+      title,
+      description: this.editIssueDescription(),
+    });
+    if (saved) this.editingIssueDetailsId.set(null);
+    this.savingIssueDetails.set(false);
   }
 
   protected isCodexAllowed(issue: LinearIssue): boolean {
@@ -1813,6 +1884,7 @@ export class Linear {
 
   protected closeIssueDetail(): void {
     this.issueDetail.set(null);
+    this.editingIssueDetailsId.set(null);
     this.codexContext.set(null);
     this.newComment.set('');
     this.newSubIssueTitle.set('');
@@ -2578,9 +2650,9 @@ export class Linear {
     });
   }
 
-  private async saveIssueUpdate(issue: LinearIssue, update: LinearIssueUpdate): Promise<void> {
+  private async saveIssueUpdate(issue: LinearIssue, update: LinearIssueUpdate): Promise<boolean> {
     const connection = this.selected();
-    if (!connection) return;
+    if (!connection) return false;
     const combined = this.queueIssueUpdate(connection.organizationId, issue.id, update);
     try {
       const updated = await this.tauri.linearUpdateIssue(
@@ -2590,9 +2662,11 @@ export class Linear {
       );
       this.removePendingIssueUpdate(connection.organizationId, issue.id);
       this.applyUpdatedIssue(connection.organizationId, updated);
+      return true;
     } catch (error) {
       this.queueIssueUpdate(connection.organizationId, issue.id, update);
       this.error.set(error instanceof Error ? error.message : String(error));
+      return false;
     }
   }
 

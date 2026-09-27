@@ -1,4 +1,6 @@
 export interface LinearIssueUpdate {
+  title?: string;
+  description?: string;
   stateId?: string;
   assigneeId?: string;
   clearAssignee?: boolean;
