@@ -564,12 +564,16 @@ export class TauriBridge {
     teamId: string,
     name: string,
     description: string,
+    startDate: string,
+    targetDate: string,
   ): Promise<LinearProject> {
     const project = await this.invoke<LinearProject>('linear_create_project', {
       organizationId,
       teamId,
       name,
       description: description || null,
+      startDate: startDate || null,
+      targetDate: targetDate || null,
     });
     if (!project) throw new Error('Linear returned no project.');
     return project;
@@ -580,12 +584,16 @@ export class TauriBridge {
     projectId: string,
     name: string,
     description: string,
+    startDate: string,
+    targetDate: string,
   ): Promise<LinearProject> {
     const project = await this.invoke<LinearProject>('linear_update_project', {
       organizationId,
       projectId,
       name,
       description,
+      startDate: startDate || null,
+      targetDate: targetDate || null,
     });
     if (!project) throw new Error('Linear returned no project.');
     return project;

@@ -169,12 +169,16 @@ pub async fn create_project(
     team_id: &str,
     name: &str,
     description: Option<&str>,
+    start_date: Option<&str>,
+    target_date: Option<&str>,
 ) -> Result<LinearProject> {
     api::create_project(
         &access_token(app, organization_id).await?,
         team_id,
         name,
         description,
+        start_date,
+        target_date,
     )
     .await
 }
@@ -185,12 +189,16 @@ pub async fn update_project(
     project_id: &str,
     name: &str,
     description: &str,
+    start_date: Option<&str>,
+    target_date: Option<&str>,
 ) -> Result<LinearProject> {
     api::update_project(
         &access_token(app, organization_id).await?,
         project_id,
         name,
         description,
+        start_date,
+        target_date,
     )
     .await
 }

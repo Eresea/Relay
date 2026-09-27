@@ -244,6 +244,8 @@ pub async fn create_project(
     team_id: &str,
     name: &str,
     description: Option<&str>,
+    start_date: Option<&str>,
+    target_date: Option<&str>,
 ) -> Result<LinearProject> {
     #[derive(Deserialize)]
     struct Data {
@@ -256,6 +258,12 @@ pub async fn create_project(
     ]);
     if let Some(description) = description {
         input.insert("description".into(), json!(description));
+    }
+    if let Some(start_date) = start_date {
+        input.insert("startDate".into(), json!(start_date));
+    }
+    if let Some(target_date) = target_date {
+        input.insert("targetDate".into(), json!(target_date));
     }
     let data: Data = query(
         token,
@@ -271,6 +279,8 @@ pub async fn update_project(
     project_id: &str,
     name: &str,
     description: &str,
+    start_date: Option<&str>,
+    target_date: Option<&str>,
 ) -> Result<LinearProject> {
     #[derive(Deserialize)]
     struct Data {
@@ -282,7 +292,7 @@ pub async fn update_project(
         "mutation RelayProjectUpdate($id: String!, $input: ProjectUpdateInput!) { projectUpdate(id: $id, input: $input) { success project { id name description url startDate targetDate } } }",
         json!({
             "id": project_id,
-            "input": { "name": name, "description": description }
+            "input": { "name": name, "description": description, "startDate": start_date, "targetDate": target_date }
         }),
     )
     .await?;

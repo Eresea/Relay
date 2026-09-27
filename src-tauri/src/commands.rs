@@ -358,6 +358,8 @@ pub async fn linear_create_project(
     team_id: String,
     name: String,
     description: Option<String>,
+    start_date: Option<String>,
+    target_date: Option<String>,
 ) -> Result<LinearProject> {
     if name.trim().is_empty() || name.chars().count() > 255 || team_id.trim().is_empty() {
         return Err(std::io::Error::other("Project name and team are required").into());
@@ -368,6 +370,8 @@ pub async fn linear_create_project(
         &team_id,
         name.trim(),
         description.as_deref(),
+        start_date.as_deref(),
+        target_date.as_deref(),
     )
     .await
 }
@@ -379,6 +383,8 @@ pub async fn linear_update_project(
     project_id: String,
     name: String,
     description: String,
+    start_date: Option<String>,
+    target_date: Option<String>,
 ) -> Result<LinearProject> {
     if project_id.trim().is_empty() || name.trim().is_empty() || name.chars().count() > 255 {
         return Err(std::io::Error::other("Project name is required").into());
@@ -389,6 +395,8 @@ pub async fn linear_update_project(
         &project_id,
         name.trim(),
         &description,
+        start_date.as_deref(),
+        target_date.as_deref(),
     )
     .await
 }

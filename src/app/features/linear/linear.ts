@@ -444,6 +444,22 @@ import { UmbraButtonComponent } from '@umbra/components/umbra-button/umbra-butto
                       (input)="editProjectDescription.set($any($event.target).value)"
                     ></textarea>
                   </label>
+                  <label>
+                    <span>Start date</span>
+                    <input
+                      type="date"
+                      [value]="editProjectStartDate()"
+                      (input)="editProjectStartDate.set($any($event.target).value)"
+                    />
+                  </label>
+                  <label>
+                    <span>Target date</span>
+                    <input
+                      type="date"
+                      [value]="editProjectTargetDate()"
+                      (input)="editProjectTargetDate.set($any($event.target).value)"
+                    />
+                  </label>
                   <umbra-button size="sm" [disabled]="savingProject() || !editProjectName().trim()">
                     {{ savingProject() ? 'Saving' : 'Save project' }}
                   </umbra-button>
@@ -672,6 +688,22 @@ import { UmbraButtonComponent } from '@umbra/components/umbra-button/umbra-butto
                         [value]="newProjectDescription()"
                         (input)="newProjectDescription.set($any($event.target).value)"
                       ></textarea>
+                    </label>
+                    <label>
+                      <span>Start date</span>
+                      <input
+                        type="date"
+                        [value]="newProjectStartDate()"
+                        (input)="newProjectStartDate.set($any($event.target).value)"
+                      />
+                    </label>
+                    <label>
+                      <span>Target date</span>
+                      <input
+                        type="date"
+                        [value]="newProjectTargetDate()"
+                        (input)="newProjectTargetDate.set($any($event.target).value)"
+                      />
                     </label>
                     <umbra-button
                       size="sm"
@@ -1045,8 +1077,12 @@ export class Linear {
   protected readonly createProjectOpen = signal(false);
   protected readonly newProjectName = signal('');
   protected readonly newProjectDescription = signal('');
+  protected readonly newProjectStartDate = signal('');
+  protected readonly newProjectTargetDate = signal('');
   protected readonly editProjectName = signal('');
   protected readonly editProjectDescription = signal('');
+  protected readonly editProjectStartDate = signal('');
+  protected readonly editProjectTargetDate = signal('');
   protected readonly newMilestoneName = signal('');
   protected readonly newMilestoneDescription = signal('');
   protected readonly newMilestoneDate = signal('');
@@ -1467,6 +1503,8 @@ export class Linear {
     this.selectedProject.set(project);
     this.editProjectName.set(project.name);
     this.editProjectDescription.set(project.description ?? '');
+    this.editProjectStartDate.set(project.startDate ?? '');
+    this.editProjectTargetDate.set(project.targetDate ?? '');
     await Promise.all([
       this.loadProjectIssues(project.id),
       this.loadMilestones(project.id),
@@ -1547,9 +1585,13 @@ export class Linear {
         this.createTeamId(),
         name,
         this.newProjectDescription().trim(),
+        this.newProjectStartDate(),
+        this.newProjectTargetDate(),
       );
       this.newProjectName.set('');
       this.newProjectDescription.set('');
+      this.newProjectStartDate.set('');
+      this.newProjectTargetDate.set('');
       this.createProjectOpen.set(false);
       this.projects.update((projects) => [project, ...projects]);
       await this.openProject(project);
@@ -1574,6 +1616,8 @@ export class Linear {
         project.id,
         name,
         this.editProjectDescription(),
+        this.editProjectStartDate(),
+        this.editProjectTargetDate(),
       );
       this.selectedProject.set(updated);
       this.projects.update((projects) =>
