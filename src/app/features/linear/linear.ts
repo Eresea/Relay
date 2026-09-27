@@ -22,6 +22,12 @@ import {
   type WorkspaceSummary,
 } from '@core/tauri';
 import { UmbraButtonComponent } from '@umbra/components/umbra-button/umbra-button.component';
+import {
+  isPendingLinearIssueUpdate,
+  mergeLinearIssueUpdates,
+  type LinearIssueUpdate,
+  type PendingLinearIssueUpdate,
+} from './linear-state';
 
 interface LinearIssueDraft {
   teamId: string;
@@ -43,6 +49,16 @@ interface LinearIssueDraft {
         </div>
         @if (connections().length) {
           <div class="header-actions">
+            @if (selected() && pendingIssueUpdates().length) {
+              <umbra-button
+                size="sm"
+                variant="outline"
+                [disabled]="retryingIssueUpdates()"
+                (click)="retryPendingIssueUpdates()"
+              >
+                {{ retryingIssueUpdates() ? 'Retrying changes' : 'Retry issue changes' }}
+              </umbra-button>
+            }
             @if (selected() && !selected()?.nexusCredentialId) {
               <umbra-button
                 size="sm"
@@ -1333,6 +1349,8 @@ export class Linear {
   protected readonly error = signal<string | null>(null);
   protected readonly issueCacheStale = signal(false);
   protected readonly projectCacheStale = signal(false);
+  protected readonly pendingIssueUpdates = signal<readonly PendingLinearIssueUpdate[]>([]);
+  protected readonly retryingIssueUpdates = signal(false);
   protected readonly pending = signal(false);
   protected readonly syncing = signal(false);
   protected readonly oauthConfigured = signal(false);
@@ -1416,6 +1434,7 @@ export class Linear {
   protected select(connection: LinearConnection): void {
     this.selected.set(connection);
     this.restoreIssueDraft(connection);
+    this.restorePendingIssueUpdates(connection);
     this.issueCacheStale.set(false);
     this.projectCacheStale.set(false);
     this.issues.set([]);
@@ -1768,6 +1787,65 @@ export class Linear {
 
   private projectCacheKey(connection: LinearConnection): string {
     return `relay.linear.projects.${connection.organizationId}.${connection.viewerId}`;
+  }
+
+  private pendingUpdatesKey(organizationId: string): string {
+    return `relay.linear.pendingIssueUpdates.${organizationId}`;
+  }
+
+  private restorePendingIssueUpdates(connection: LinearConnection): void {
+    this.pendingIssueUpdates.set(this.readPendingIssueUpdates(connection.organizationId));
+  }
+
+  private readPendingIssueUpdates(organizationId: string): PendingLinearIssueUpdate[] {
+    const stored = this.readLocal<unknown>(this.pendingUpdatesKey(organizationId));
+    return Array.isArray(stored) ? stored.filter(isPendingLinearIssueUpdate) : [];
+  }
+
+  private storePendingIssueUpdates(
+    organizationId: string,
+    updates: readonly PendingLinearIssueUpdate[],
+  ): void {
+    this.writeLocal(this.pendingUpdatesKey(organizationId), updates.length ? updates : null);
+    if (this.selected()?.organizationId === organizationId) {
+      this.pendingIssueUpdates.set(updates);
+    }
+  }
+
+  private queueIssueUpdate(
+    organizationId: string,
+    issueId: string,
+    update: LinearIssueUpdate,
+  ): LinearIssueUpdate {
+    const updates = this.readPendingIssueUpdates(organizationId);
+    const index = updates.findIndex((item) => item.issueId === issueId);
+    const merged = mergeLinearIssueUpdates(updates[index]?.update ?? {}, update);
+    if (index < 0) updates.push({ issueId, update: merged });
+    else updates[index] = { issueId, update: merged };
+    this.storePendingIssueUpdates(organizationId, updates);
+    return merged;
+  }
+
+  private removePendingIssueUpdate(organizationId: string, issueId: string): void {
+    this.storePendingIssueUpdates(
+      organizationId,
+      this.readPendingIssueUpdates(organizationId).filter((item) => item.issueId !== issueId),
+    );
+  }
+
+  private applyUpdatedIssue(organizationId: string, updated: LinearIssue): void {
+    if (this.selected()?.organizationId !== organizationId) return;
+    this.issues.update((items) =>
+      items.map((entry) => (entry.id === updated.id ? updated : entry)),
+    );
+    this.projectIssues.update((items) =>
+      items.map((entry) => (entry.id === updated.id ? updated : entry)),
+    );
+    this.issueDetail.update((detail) =>
+      detail?.issue.id === updated.id ? { ...detail, issue: updated } : detail,
+    );
+    const connection = this.selected();
+    if (connection) this.saveIssueCache(connection);
   }
 
   private saveIssueCache(connection: LinearConnection): void {
@@ -2264,38 +2342,45 @@ export class Linear {
     });
   }
 
-  private async saveIssueUpdate(
-    issue: LinearIssue,
-    update: {
-      stateId?: string;
-      assigneeId?: string;
-      clearAssignee?: boolean;
-      cycleId?: string;
-      clearCycle?: boolean;
-      priority?: number;
-      labelIds?: readonly string[];
-    },
-  ): Promise<void> {
+  private async saveIssueUpdate(issue: LinearIssue, update: LinearIssueUpdate): Promise<void> {
     const connection = this.selected();
     if (!connection) return;
+    const combined = this.queueIssueUpdate(connection.organizationId, issue.id, update);
     try {
       const updated = await this.tauri.linearUpdateIssue(
         connection.organizationId,
         issue.id,
-        update,
+        combined,
       );
-      this.issues.update((items) =>
-        items.map((entry) => (entry.id === issue.id ? updated : entry)),
-      );
-      this.projectIssues.update((items) =>
-        items.map((entry) => (entry.id === issue.id ? updated : entry)),
-      );
-      this.issueDetail.update((detail) =>
-        detail?.issue.id === issue.id ? { ...detail, issue: updated } : detail,
-      );
-      this.saveIssueCache(connection);
+      this.removePendingIssueUpdate(connection.organizationId, issue.id);
+      this.applyUpdatedIssue(connection.organizationId, updated);
     } catch (error) {
+      this.queueIssueUpdate(connection.organizationId, issue.id, update);
       this.error.set(error instanceof Error ? error.message : String(error));
+    }
+  }
+
+  protected async retryPendingIssueUpdates(): Promise<void> {
+    const connection = this.selected();
+    if (!connection || this.retryingIssueUpdates()) return;
+    this.retryingIssueUpdates.set(true);
+    this.error.set(null);
+    try {
+      for (const pending of [...this.pendingIssueUpdates()]) {
+        try {
+          const updated = await this.tauri.linearUpdateIssue(
+            connection.organizationId,
+            pending.issueId,
+            pending.update,
+          );
+          this.removePendingIssueUpdate(connection.organizationId, pending.issueId);
+          this.applyUpdatedIssue(connection.organizationId, updated);
+        } catch (error) {
+          this.error.set(error instanceof Error ? error.message : String(error));
+        }
+      }
+    } finally {
+      this.retryingIssueUpdates.set(false);
     }
   }
 
