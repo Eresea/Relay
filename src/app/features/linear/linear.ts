@@ -640,13 +640,16 @@ interface LinearIssueDraft {
               <div class="issue-heading">
                 <h2>{{ selectedProject()?.name ?? 'Projects' }}</h2>
                 @if (selectedProject()) {
-                  <umbra-button size="sm" variant="link" (click)="selectedProject.set(null)">
+                  <umbra-button size="sm" variant="link" (click)="closeSelectedProject()">
                     All projects
                   </umbra-button>
                 } @else {
                   <div class="issue-actions">
                     <umbra-button size="sm" variant="link" (click)="loadProjects()">
                       Refresh
+                    </umbra-button>
+                    <umbra-button size="sm" variant="link" (click)="toggleArchivedProjects()">
+                      {{ showArchivedProjects() ? 'Hide archived' : 'Include archived' }}
                     </umbra-button>
                     <umbra-button
                       size="sm"
@@ -720,6 +723,46 @@ interface LinearIssueDraft {
                     {{ savingProject() ? 'Saving' : 'Save project' }}
                   </umbra-button>
                 </form>
+                <div class="issue-actions">
+                  @if (selectedProject()!.archivedAt) {
+                    <umbra-button
+                      size="sm"
+                      variant="outline"
+                      [disabled]="archivingProject()"
+                      (click)="unarchiveSelectedProject()"
+                    >
+                      {{ archivingProject() ? 'Restoring' : 'Restore project' }}
+                    </umbra-button>
+                  } @else if (confirmArchiveProjectId() === selectedProject()!.id) {
+                    <umbra-button
+                      size="sm"
+                      variant="outline"
+                      [disabled]="archivingProject()"
+                      (click)="archiveSelectedProject()"
+                    >
+                      {{ archivingProject() ? 'Archiving' : 'Confirm archive' }}
+                    </umbra-button>
+                    <umbra-button
+                      size="sm"
+                      variant="link"
+                      type="button"
+                      (click)="confirmArchiveProjectId.set(null)"
+                    >
+                      Cancel
+                    </umbra-button>
+                  } @else {
+                    <umbra-button
+                      size="sm"
+                      variant="outline"
+                      (click)="confirmArchiveProjectId.set(selectedProject()!.id)"
+                    >
+                      Archive project
+                    </umbra-button>
+                  }
+                </div>
+                @if (selectedProject()!.archivedAt) {
+                  <p class="hint">This project is archived.</p>
+                }
                 @if (canUseCodex) {
                   <div class="codex-policy">
                     <label>
@@ -1023,6 +1066,9 @@ interface LinearIssueDraft {
                         project.targetDate ? 'Target ' + project.targetDate : 'No target date'
                       }}</span>
                       <span class="muted">{{ project.status?.name || 'No status' }}</span>
+                      @if (project.archivedAt) {
+                        <span class="muted">Archived</span>
+                      }
                       @if (project.lead) {
                         <span class="muted">Lead {{ project.lead.name }}</span>
                       }
@@ -1657,6 +1703,9 @@ export class Linear {
   protected readonly editCycleEndDate = signal('');
   protected readonly savingCycle = signal(false);
   protected readonly selectedProject = signal<LinearProject | null>(null);
+  protected readonly showArchivedProjects = signal(false);
+  protected readonly confirmArchiveProjectId = signal<string | null>(null);
+  protected readonly archivingProject = signal(false);
   protected readonly createProjectOpen = signal(false);
   protected readonly newProjectName = signal('');
   protected readonly newProjectDescription = signal('');
@@ -2197,8 +2246,9 @@ export class Linear {
       : `relay.linear.issues.${connection.organizationId}.${connection.viewerId}`;
   }
 
-  private projectCacheKey(connection: LinearConnection): string {
-    return `relay.linear.projects.${connection.organizationId}.${connection.viewerId}`;
+  private projectCacheKey(connection: LinearConnection, includeArchived = false): string {
+    const key = `relay.linear.projects.${connection.organizationId}.${connection.viewerId}`;
+    return includeArchived ? `${key}.all` : key;
   }
 
   private pendingUpdatesKey(organizationId: string): string {
@@ -2354,6 +2404,7 @@ export class Linear {
   protected setSection(section: 'work' | 'projects' | 'cycles' | 'roadmap'): void {
     this.section.set(section);
     this.selectedProject.set(null);
+    this.confirmArchiveProjectId.set(null);
     const connection = this.selected();
     if (connection) void this.loadSection(connection);
   }
@@ -2478,8 +2529,10 @@ export class Linear {
   protected async loadProjects(): Promise<void> {
     const connection = this.selected();
     if (!connection) return;
+    const includeArchived = this.showArchivedProjects();
     this.projectCacheStale.set(false);
-    const cached = this.readLocal<readonly LinearProject[]>(this.projectCacheKey(connection));
+    const cacheKey = this.projectCacheKey(connection, includeArchived);
+    const cached = this.readLocal<readonly LinearProject[]>(cacheKey);
     const hasCache = Array.isArray(cached);
     if (hasCache) {
       this.projects.set(cached);
@@ -2488,9 +2541,9 @@ export class Linear {
       this.projects.set([]);
     }
     try {
-      const projects = await this.tauri.linearProjects(connection.organizationId);
+      const projects = await this.tauri.linearProjects(connection.organizationId, includeArchived);
       this.projects.set(projects);
-      this.writeLocal(this.projectCacheKey(connection), projects);
+      this.writeLocal(cacheKey, projects);
       this.projectCacheStale.set(false);
     } catch (error) {
       this.projectCacheStale.set(hasCache);
@@ -2501,6 +2554,62 @@ export class Linear {
             ? error.message
             : String(error),
       );
+    }
+  }
+
+  protected toggleArchivedProjects(): void {
+    this.showArchivedProjects.update((value) => !value);
+    this.selectedProject.set(null);
+    this.createProjectOpen.set(false);
+    void this.loadProjects();
+  }
+
+  protected async archiveSelectedProject(): Promise<void> {
+    const connection = this.selected();
+    const project = this.selectedProject();
+    if (
+      !connection ||
+      !project ||
+      project.archivedAt ||
+      this.confirmArchiveProjectId() !== project.id ||
+      this.archivingProject()
+    ) {
+      return;
+    }
+    this.archivingProject.set(true);
+    this.error.set(null);
+    try {
+      await this.tauri.linearArchiveProject(connection.organizationId, project.id);
+      this.writeLocal(this.projectCacheKey(connection), null);
+      this.writeLocal(this.projectCacheKey(connection, true), null);
+      this.projects.update((items) => items.filter((item) => item.id !== project.id));
+      this.confirmArchiveProjectId.set(null);
+      this.selectedProject.set(null);
+      await this.loadProjects();
+    } catch (error) {
+      this.error.set(error instanceof Error ? error.message : String(error));
+    } finally {
+      this.archivingProject.set(false);
+    }
+  }
+
+  protected async unarchiveSelectedProject(): Promise<void> {
+    const connection = this.selected();
+    const project = this.selectedProject();
+    if (!connection || !project?.archivedAt || this.archivingProject()) return;
+    this.archivingProject.set(true);
+    this.error.set(null);
+    try {
+      await this.tauri.linearUnarchiveProject(connection.organizationId, project.id);
+      this.writeLocal(this.projectCacheKey(connection), null);
+      this.writeLocal(this.projectCacheKey(connection, true), null);
+      this.showArchivedProjects.set(false);
+      this.selectedProject.set(null);
+      await this.loadProjects();
+    } catch (error) {
+      this.error.set(error instanceof Error ? error.message : String(error));
+    } finally {
+      this.archivingProject.set(false);
     }
   }
 
@@ -2517,8 +2626,9 @@ export class Linear {
     );
     return this.projects().filter(
       (project) =>
-        !assigned.has(project.id) ||
-        initiative.projects.some((link) => link.project.id === project.id),
+        !project.archivedAt &&
+        (!assigned.has(project.id) ||
+          initiative.projects.some((link) => link.project.id === project.id)),
     );
   }
 
@@ -2633,6 +2743,7 @@ export class Linear {
 
   protected async openProject(project: LinearProject): Promise<void> {
     this.closeIssueDetail();
+    this.confirmArchiveProjectId.set(null);
     this.selectedProject.set(project);
     const connection = this.selected();
     if (connection) this.restoreProjectIssueDraft(connection, project.id);
@@ -2647,6 +2758,11 @@ export class Linear {
       this.loadMilestones(project.id),
       this.canUseCodex ? this.loadCodexPolicy() : Promise.resolve(),
     ]);
+  }
+
+  protected closeSelectedProject(): void {
+    this.selectedProject.set(null);
+    this.confirmArchiveProjectId.set(null);
   }
 
   protected async createMilestone(event: Event): Promise<void> {
@@ -2735,7 +2851,10 @@ export class Linear {
       this.newProjectLeadId.set('');
       this.createProjectOpen.set(false);
       this.projects.update((projects) => [project, ...projects]);
-      this.writeLocal(this.projectCacheKey(connection), this.projects());
+      this.writeLocal(
+        this.projectCacheKey(connection, this.showArchivedProjects()),
+        this.projects(),
+      );
       await this.openProject(project);
     } catch (error) {
       this.error.set(error instanceof Error ? error.message : String(error));
@@ -2768,7 +2887,10 @@ export class Linear {
       this.projects.update((projects) =>
         projects.map((entry) => (entry.id === updated.id ? updated : entry)),
       );
-      this.writeLocal(this.projectCacheKey(connection), this.projects());
+      this.writeLocal(
+        this.projectCacheKey(connection, this.showArchivedProjects()),
+        this.projects(),
+      );
     } catch (error) {
       this.error.set(error instanceof Error ? error.message : String(error));
     } finally {
@@ -2779,8 +2901,16 @@ export class Linear {
   protected async openProjectById(projectId: string): Promise<void> {
     let project = this.projects().find((entry) => entry.id === projectId);
     if (!project) {
-      await this.loadProjects();
-      project = this.projects().find((entry) => entry.id === projectId);
+      const connection = this.selected();
+      if (connection) {
+        try {
+          project = (await this.tauri.linearProjects(connection.organizationId, true)).find(
+            (entry) => entry.id === projectId,
+          );
+        } catch (error) {
+          this.error.set(error instanceof Error ? error.message : String(error));
+        }
+      }
     }
     if (project) {
       this.section.set('projects');
@@ -2912,6 +3042,7 @@ export class Linear {
       await this.tauri.linearDisconnect(connection.organizationId);
       this.writeLocal(this.issueCacheKey(connection), null);
       this.writeLocal(this.projectCacheKey(connection), null);
+      this.writeLocal(this.projectCacheKey(connection, true), null);
       const connections = this.connections().filter(
         (entry) => entry.organizationId !== connection.organizationId,
       );

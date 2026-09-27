@@ -180,8 +180,28 @@ pub async fn issue_labels(app: &AppHandle, organization_id: &str) -> Result<Vec<
     api::issue_labels(&access_token(app, organization_id).await?).await
 }
 
-pub async fn projects(app: &AppHandle, organization_id: &str) -> Result<Vec<LinearProject>> {
-    api::projects(&access_token(app, organization_id).await?).await
+pub async fn projects(
+    app: &AppHandle,
+    organization_id: &str,
+    include_archived: bool,
+) -> Result<Vec<LinearProject>> {
+    api::projects(&access_token(app, organization_id).await?, include_archived).await
+}
+
+pub async fn archive_project(
+    app: &AppHandle,
+    organization_id: &str,
+    project_id: &str,
+) -> Result<()> {
+    api::archive_project(&access_token(app, organization_id).await?, project_id).await
+}
+
+pub async fn unarchive_project(
+    app: &AppHandle,
+    organization_id: &str,
+    project_id: &str,
+) -> Result<()> {
+    api::unarchive_project(&access_token(app, organization_id).await?, project_id).await
 }
 
 pub async fn create_project(

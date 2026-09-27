@@ -367,8 +367,33 @@ pub async fn linear_issue_labels(
 pub async fn linear_projects(
     app: AppHandle,
     organization_id: String,
+    include_archived: bool,
 ) -> Result<Vec<LinearProject>> {
-    linear::projects(&app, &organization_id).await
+    linear::projects(&app, &organization_id, include_archived).await
+}
+
+#[tauri::command]
+pub async fn linear_archive_project(
+    app: AppHandle,
+    organization_id: String,
+    project_id: String,
+) -> Result<()> {
+    if organization_id.trim().is_empty() || project_id.trim().is_empty() {
+        return Err(std::io::Error::other("Project is required").into());
+    }
+    linear::archive_project(&app, &organization_id, &project_id).await
+}
+
+#[tauri::command]
+pub async fn linear_unarchive_project(
+    app: AppHandle,
+    organization_id: String,
+    project_id: String,
+) -> Result<()> {
+    if organization_id.trim().is_empty() || project_id.trim().is_empty() {
+        return Err(std::io::Error::other("Project is required").into());
+    }
+    linear::unarchive_project(&app, &organization_id, &project_id).await
 }
 
 #[tauri::command]

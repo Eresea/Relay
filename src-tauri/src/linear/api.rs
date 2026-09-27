@@ -186,6 +186,8 @@ pub struct LinearProject {
     #[serde(default)]
     pub target_date: Option<String>,
     #[serde(default)]
+    pub archived_at: Option<String>,
+    #[serde(default)]
     pub status: Option<LinearProjectStatus>,
     #[serde(default)]
     pub lead: Option<Person>,
@@ -323,19 +325,73 @@ pub async fn issue_labels(token: &str) -> Result<Vec<LinearLabel>> {
     .nodes)
 }
 
-pub async fn projects(token: &str) -> Result<Vec<LinearProject>> {
+pub async fn projects(token: &str, include_archived: bool) -> Result<Vec<LinearProject>> {
     #[derive(Deserialize)]
     struct Data {
-        projects: Nodes<LinearProject>,
+        projects: ProjectConnection,
     }
-    Ok(query::<Data>(
+    let mut projects = Vec::new();
+    let mut after = None;
+    loop {
+        let data: Data = query(
+            token,
+            "query RelayProjects($includeArchived: Boolean!, $after: String) { projects(first: 100, after: $after, includeArchived: $includeArchived) { nodes { id name description url startDate targetDate archivedAt status { id name type } lead { id name } } pageInfo { endCursor hasNextPage } } }",
+            json!({ "includeArchived": include_archived, "after": after }),
+        )
+        .await?;
+        projects.extend(data.projects.nodes);
+        if !data.projects.page_info.has_next_page {
+            return Ok(projects);
+        }
+        after = data.projects.page_info.end_cursor;
+        if after.is_none() {
+            return Err(Error::LinearApi(
+                "Linear returned an incomplete project page".into(),
+            ));
+        }
+    }
+}
+
+pub async fn archive_project(token: &str, project_id: &str) -> Result<()> {
+    #[derive(Deserialize)]
+    struct Data {
+        #[serde(rename = "projectArchive")]
+        result: DeleteMutation,
+    }
+    let data: Data = query(
         token,
-        "query RelayProjects { projects(first: 100) { nodes { id name description url startDate targetDate status { id name type } lead { id name } } } }",
-        json!({}),
+        "mutation RelayProjectArchive($id: String!) { projectArchive(id: $id) { success } }",
+        json!({ "id": project_id }),
     )
-    .await?
-    .projects
-    .nodes)
+    .await?;
+    if data.result.success {
+        Ok(())
+    } else {
+        Err(Error::LinearApi(
+            "Linear did not archive the project".into(),
+        ))
+    }
+}
+
+pub async fn unarchive_project(token: &str, project_id: &str) -> Result<()> {
+    #[derive(Deserialize)]
+    struct Data {
+        #[serde(rename = "projectUnarchive")]
+        result: DeleteMutation,
+    }
+    let data: Data = query(
+        token,
+        "mutation RelayProjectUnarchive($id: String!) { projectUnarchive(id: $id) { success } }",
+        json!({ "id": project_id }),
+    )
+    .await?;
+    if data.result.success {
+        Ok(())
+    } else {
+        Err(Error::LinearApi(
+            "Linear did not restore the project".into(),
+        ))
+    }
 }
 
 pub async fn create_project(
@@ -374,7 +430,7 @@ pub async fn create_project(
     }
     let data: Data = query(
         token,
-        "mutation RelayProjectCreate($input: ProjectCreateInput!) { projectCreate(input: $input) { success project { id name description url startDate targetDate status { id name type } lead { id name } } } }",
+        "mutation RelayProjectCreate($input: ProjectCreateInput!) { projectCreate(input: $input) { success project { id name description url startDate targetDate archivedAt status { id name type } lead { id name } } } }",
         json!({ "input": input }),
     )
     .await?;
@@ -414,7 +470,7 @@ pub async fn update_project(
     }
     let data: Data = query(
         token,
-        "mutation RelayProjectUpdate($id: String!, $input: ProjectUpdateInput!) { projectUpdate(id: $id, input: $input) { success project { id name description url startDate targetDate status { id name type } lead { id name } } } }",
+        "mutation RelayProjectUpdate($id: String!, $input: ProjectUpdateInput!) { projectUpdate(id: $id, input: $input) { success project { id name description url startDate targetDate archivedAt status { id name type } lead { id name } } } }",
         json!({ "id": project_id, "input": input }),
     )
     .await?;
@@ -1146,6 +1202,13 @@ struct IssueConnection {
 }
 
 #[derive(Deserialize)]
+struct ProjectConnection {
+    nodes: Vec<LinearProject>,
+    #[serde(rename = "pageInfo")]
+    page_info: PageInfo,
+}
+
+#[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct PageInfo {
     end_cursor: Option<String>,
@@ -1205,12 +1268,29 @@ mod tests {
         let project: LinearProject = serde_json::from_value(json!({
             "id": "project-1",
             "name": "Launch",
+            "archivedAt": "2026-09-27T20:00:00.000Z",
             "status": { "id": "status-1", "name": "In Progress", "type": "started" },
             "lead": { "id": "user-1", "name": "Alex" }
         }))
         .unwrap();
+        assert_eq!(
+            project.archived_at.as_deref(),
+            Some("2026-09-27T20:00:00.000Z")
+        );
         assert_eq!(project.status.as_ref().unwrap().kind, "started");
         assert_eq!(project.lead.as_ref().unwrap().id, "user-1");
+    }
+
+    #[test]
+    fn project_connection_decodes_pagination_state() {
+        let connection: ProjectConnection = serde_json::from_value(json!({
+            "nodes": [],
+            "pageInfo": { "endCursor": "cursor-1", "hasNextPage": true }
+        }))
+        .unwrap();
+        assert!(connection.nodes.is_empty());
+        assert_eq!(connection.page_info.end_cursor.as_deref(), Some("cursor-1"));
+        assert!(connection.page_info.has_next_page);
     }
 
     #[test]
