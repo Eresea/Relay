@@ -22,6 +22,13 @@ import {
 } from '@core/tauri';
 import { UmbraButtonComponent } from '@umbra/components/umbra-button/umbra-button.component';
 
+interface LinearIssueDraft {
+  teamId: string;
+  title: string;
+  description: string;
+  milestoneId?: string;
+}
+
 @Component({
   selector: 'rl-linear',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -405,7 +412,7 @@ import { UmbraButtonComponent } from '@umbra/components/umbra-button/umbra-butto
                       required
                       maxlength="255"
                       [value]="newTitle()"
-                      (input)="newTitle.set($any($event.target).value)"
+                      (input)="updateIssueDraft('title', $any($event.target).value)"
                       placeholder="Issue title"
                     />
                   </label>
@@ -414,7 +421,7 @@ import { UmbraButtonComponent } from '@umbra/components/umbra-button/umbra-butto
                     <textarea
                       rows="2"
                       [value]="newDescription()"
-                      (input)="newDescription.set($any($event.target).value)"
+                      (input)="updateIssueDraft('description', $any($event.target).value)"
                       placeholder="Add context (optional)"
                     ></textarea>
                   </label>
@@ -422,6 +429,9 @@ import { UmbraButtonComponent } from '@umbra/components/umbra-button/umbra-butto
                     {{ creating() ? 'Creating' : 'Create issue' }}
                   </umbra-button>
                 </form>
+                @if (newTitle() || newDescription()) {
+                  <p class="hint">Draft saved on this device.</p>
+                }
               }
               @if (issues().length === 0 && !loading()) {
                 <p class="hint">No assigned issues found.</p>
@@ -706,7 +716,7 @@ import { UmbraButtonComponent } from '@umbra/components/umbra-button/umbra-butto
                         required
                         maxlength="255"
                         [value]="newProjectIssueTitle()"
-                        (input)="newProjectIssueTitle.set($any($event.target).value)"
+                        (input)="updateProjectIssueDraft('title', $any($event.target).value)"
                         placeholder="Issue title"
                       />
                     </label>
@@ -714,7 +724,7 @@ import { UmbraButtonComponent } from '@umbra/components/umbra-button/umbra-butto
                       <span>Milestone</span>
                       <select
                         [value]="newProjectIssueMilestoneId()"
-                        (change)="newProjectIssueMilestoneId.set($any($event.target).value)"
+                        (change)="updateProjectIssueMilestone($any($event.target).value)"
                       >
                         <option value="">No milestone</option>
                         @for (milestone of milestones(); track milestone.id) {
@@ -727,7 +737,7 @@ import { UmbraButtonComponent } from '@umbra/components/umbra-button/umbra-butto
                       <textarea
                         rows="2"
                         [value]="newProjectIssueDescription()"
-                        (input)="newProjectIssueDescription.set($any($event.target).value)"
+                        (input)="updateProjectIssueDraft('description', $any($event.target).value)"
                       ></textarea>
                     </label>
                     <umbra-button
@@ -737,6 +747,9 @@ import { UmbraButtonComponent } from '@umbra/components/umbra-button/umbra-butto
                       {{ creatingProjectIssue() ? 'Creating' : 'Add issue' }}
                     </umbra-button>
                   </form>
+                  @if (newProjectIssueTitle() || newProjectIssueDescription()) {
+                    <p class="hint">Draft saved on this device.</p>
+                  }
                 }
                 @for (issue of projectIssues(); track issue.id) {
                   <article class="issue">
@@ -1389,6 +1402,7 @@ export class Linear {
 
   protected select(connection: LinearConnection): void {
     this.selected.set(connection);
+    this.restoreIssueDraft(connection);
     this.issues.set([]);
     this.issueDetail.set(null);
     this.codexContext.set(null);
@@ -1715,6 +1729,94 @@ export class Linear {
 
   protected setCreateTeam(teamId: string): void {
     this.createTeamId.set(teamId);
+    this.saveIssueDraft();
+    this.saveProjectIssueDraft();
+  }
+
+  protected updateIssueDraft(field: 'title' | 'description', value: string): void {
+    if (field === 'title') this.newTitle.set(value);
+    else this.newDescription.set(value);
+    this.saveIssueDraft();
+  }
+
+  private issueDraftKey(organizationId: string): string {
+    return `relay.linear.issueDraft.${organizationId}`;
+  }
+
+  private projectIssueDraftKey(organizationId: string, projectId: string): string {
+    return `relay.linear.projectIssueDraft.${organizationId}.${projectId}`;
+  }
+
+  private readIssueDraft(key: string): Partial<LinearIssueDraft> | null {
+    try {
+      const saved = localStorage.getItem(key);
+      return saved ? (JSON.parse(saved) as Partial<LinearIssueDraft>) : null;
+    } catch {
+      return null;
+    }
+  }
+
+  private writeIssueDraft(key: string, draft: LinearIssueDraft | null): void {
+    try {
+      if (draft) localStorage.setItem(key, JSON.stringify(draft));
+      else localStorage.removeItem(key);
+    } catch {
+      // Keep the composer usable if local persistence is unavailable.
+    }
+  }
+
+  private saveIssueDraft(): void {
+    const connection = this.selected();
+    if (!connection) return;
+    this.writeIssueDraft(this.issueDraftKey(connection.organizationId), {
+      teamId: this.createTeamId(),
+      title: this.newTitle(),
+      description: this.newDescription(),
+    });
+  }
+
+  private restoreIssueDraft(connection: LinearConnection): void {
+    const draft = this.readIssueDraft(this.issueDraftKey(connection.organizationId));
+    this.newTitle.set(typeof draft?.title === 'string' ? draft.title : '');
+    this.newDescription.set(typeof draft?.description === 'string' ? draft.description : '');
+    if (typeof draft?.teamId === 'string') this.createTeamId.set(draft.teamId);
+  }
+
+  protected updateProjectIssueDraft(field: 'title' | 'description', value: string): void {
+    if (field === 'title') this.newProjectIssueTitle.set(value);
+    else this.newProjectIssueDescription.set(value);
+    this.saveProjectIssueDraft();
+  }
+
+  protected updateProjectIssueMilestone(milestoneId: string): void {
+    this.newProjectIssueMilestoneId.set(milestoneId);
+    this.saveProjectIssueDraft();
+  }
+
+  private saveProjectIssueDraft(): void {
+    const connection = this.selected();
+    const project = this.selectedProject();
+    if (!connection || !project) return;
+    this.writeIssueDraft(this.projectIssueDraftKey(connection.organizationId, project.id), {
+      teamId: this.createTeamId(),
+      title: this.newProjectIssueTitle(),
+      description: this.newProjectIssueDescription(),
+      milestoneId: this.newProjectIssueMilestoneId(),
+    });
+  }
+
+  private restoreProjectIssueDraft(connection: LinearConnection, projectId: string): void {
+    const draft = this.readIssueDraft(
+      this.projectIssueDraftKey(connection.organizationId, projectId),
+    );
+    this.newProjectIssueTitle.set(typeof draft?.title === 'string' ? draft.title : '');
+    this.newProjectIssueDescription.set(
+      typeof draft?.description === 'string' ? draft.description : '',
+    );
+    this.newProjectIssueMilestoneId.set(
+      typeof draft?.milestoneId === 'string' ? draft.milestoneId : '',
+    );
+    if (typeof draft?.teamId === 'string') this.createTeamId.set(draft.teamId);
   }
 
   protected setSection(section: 'work' | 'projects' | 'cycles' | 'roadmap'): void {
@@ -1801,6 +1903,8 @@ export class Linear {
   protected async openProject(project: LinearProject): Promise<void> {
     this.closeIssueDetail();
     this.selectedProject.set(project);
+    const connection = this.selected();
+    if (connection) this.restoreProjectIssueDraft(connection, project.id);
     this.editProjectName.set(project.name);
     this.editProjectDescription.set(project.description ?? '');
     this.editProjectStartDate.set(project.startDate ?? '');
@@ -2016,6 +2120,7 @@ export class Linear {
       );
       this.newTitle.set('');
       this.newDescription.set('');
+      this.writeIssueDraft(this.issueDraftKey(connection.organizationId), null);
       this.issues.update((issues) => [created, ...issues]);
     } catch (error) {
       this.error.set(error instanceof Error ? error.message : String(error));
@@ -2047,6 +2152,7 @@ export class Linear {
       this.newProjectIssueTitle.set('');
       this.newProjectIssueDescription.set('');
       this.newProjectIssueMilestoneId.set('');
+      this.writeIssueDraft(this.projectIssueDraftKey(connection.organizationId, project.id), null);
     } catch (error) {
       this.error.set(error instanceof Error ? error.message : String(error));
     } finally {
@@ -2214,7 +2320,9 @@ export class Linear {
       this.users.set(users);
       this.labels.set(labels);
       this.projectStatuses.set(statuses);
-      const teamId = teams[0]?.id ?? '';
+      const teamId = teams.some((team) => team.id === this.createTeamId())
+        ? this.createTeamId()
+        : (teams[0]?.id ?? '');
       this.createTeamId.set(teamId);
       const entries = await Promise.all(
         teams.map(
