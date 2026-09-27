@@ -71,6 +71,14 @@ export function registerDefaultCommands(): () => void {
       run: () => tauri.runCoreCommand({ id: 'open_github' }),
     },
     {
+      id: 'relay.linear.open',
+      title: 'Linear',
+      group: 'Relay',
+      icon: 'inbox',
+      keywords: ['linear', 'issues', 'projects', 'cycles', 'connector'],
+      run: () => tauri.runCoreCommand({ id: 'open_linear' }),
+    },
+    {
       id: 'relay.app.reload',
       title: 'Reload interface',
       group: 'Relay',

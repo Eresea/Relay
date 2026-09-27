@@ -6,6 +6,7 @@ mod events;
 mod github;
 mod gmail;
 mod jobs;
+mod linear;
 #[cfg(any(mobile, test))]
 #[allow(dead_code)]
 mod mobile_updates;
@@ -31,6 +32,7 @@ use tauri_plugin_deep_link::DeepLinkExt;
 use github::client::HttpGitHubClient;
 use gmail::GmailState;
 use jobs::JobRegistry;
+use linear::LinearState;
 use vault::VaultState;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -49,7 +51,11 @@ pub fn run() {
                 if let Ok(url) = url::Url::parse(&arg) {
                     let app = app.clone();
                     tauri::async_runtime::spawn(async move {
-                        nexus_auth::handle_callback(app, url).await;
+                        if url.host_str() == Some("linear") {
+                            linear::handle_callback(app, url).await;
+                        } else {
+                            nexus_auth::handle_callback(app, url).await;
+                        }
                     });
                 }
             }
@@ -68,6 +74,7 @@ pub fn run() {
         .manage(VaultState::default())
         .manage(HttpGitHubClient::default())
         .manage(GmailState::default())
+        .manage(LinearState::default())
         .manage(nexus_auth::NexusAuthState::default())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_deep_link::init())
@@ -122,6 +129,27 @@ pub fn run() {
                 commands::github_pull_requests,
                 commands::github_connect_start,
                 commands::github_disconnect,
+                commands::linear_status,
+                commands::linear_oauth_configured,
+                commands::linear_connect_start,
+                commands::linear_disconnect,
+                commands::linear_teams,
+                commands::linear_users,
+                commands::linear_projects,
+                commands::linear_create_project,
+                commands::linear_update_project,
+                commands::linear_project_milestones,
+                commands::linear_create_milestone,
+                commands::linear_update_milestone,
+                commands::linear_initiatives,
+                commands::linear_cycles,
+                commands::linear_workflow_states,
+                commands::linear_create_issue,
+                commands::linear_issue_detail,
+                commands::linear_create_comment,
+                commands::linear_update_issue,
+                commands::linear_my_issues,
+                commands::linear_project_issues,
                 commands::nexus_auth_status,
                 commands::nexus_auth_start,
                 commands::nexus_auth_login,
@@ -195,6 +223,27 @@ pub fn run() {
             commands::github_pull_requests,
             commands::github_connect_start,
             commands::github_disconnect,
+            commands::linear_status,
+            commands::linear_oauth_configured,
+            commands::linear_connect_start,
+            commands::linear_disconnect,
+            commands::linear_teams,
+            commands::linear_users,
+            commands::linear_projects,
+            commands::linear_create_project,
+            commands::linear_update_project,
+            commands::linear_project_milestones,
+            commands::linear_create_milestone,
+            commands::linear_update_milestone,
+            commands::linear_initiatives,
+            commands::linear_cycles,
+            commands::linear_workflow_states,
+            commands::linear_create_issue,
+            commands::linear_issue_detail,
+            commands::linear_create_comment,
+            commands::linear_update_issue,
+            commands::linear_my_issues,
+            commands::linear_project_issues,
             commands::nexus_auth_status,
             commands::nexus_auth_start,
             commands::nexus_auth_login,
@@ -259,7 +308,11 @@ pub fn run() {
                     let app = callback_app.clone();
                     let url = url.clone();
                     tauri::async_runtime::spawn(async move {
-                        nexus_auth::handle_callback(app, url).await;
+                        if url.host_str() == Some("linear") {
+                            linear::handle_callback(app, url).await;
+                        } else {
+                            nexus_auth::handle_callback(app, url).await;
+                        }
                     });
                 }
             });
@@ -267,7 +320,11 @@ pub fn run() {
                 for url in urls {
                     let app = app.handle().clone();
                     tauri::async_runtime::spawn(async move {
-                        nexus_auth::handle_callback(app, url).await;
+                        if url.host_str() == Some("linear") {
+                            linear::handle_callback(app, url).await;
+                        } else {
+                            nexus_auth::handle_callback(app, url).await;
+                        }
                     });
                 }
             }

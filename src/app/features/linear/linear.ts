@@ -1,0 +1,1525 @@
+import { ChangeDetectionStrategy, Component, DestroyRef, inject, signal } from '@angular/core';
+
+import { NexusAccount } from '@core/nexus-account';
+import {
+  TauriBridge,
+  type LinearConnection,
+  type LinearCycle,
+  type LinearInitiative,
+  type LinearIssue,
+  type LinearIssueDetail,
+  type LinearMilestone,
+  type LinearProject,
+  type LinearPerson,
+  type LinearTeam,
+  type LinearWorkflowState,
+} from '@core/tauri';
+import { UmbraButtonComponent } from '@umbra/components/umbra-button/umbra-button.component';
+
+@Component({
+  selector: 'rl-linear',
+  changeDetection: ChangeDetectionStrategy.OnPush,
+  imports: [UmbraButtonComponent],
+  template: `
+    <section class="wrap">
+      <header>
+        <div>
+          <p class="u-title">{{ pageTitle() }}</p>
+          <p class="hint">{{ pageDescription() }}</p>
+        </div>
+        @if (connections().length) {
+          <umbra-button
+            size="sm"
+            variant="outline"
+            (click)="connect()"
+            [disabled]="pending() || !oauthConfigured()"
+          >
+            Connect workspace
+          </umbra-button>
+        }
+      </header>
+
+      @if (error()) {
+        <p class="error" role="alert">{{ error() }}</p>
+      }
+      @if (!oauthConfigured()) {
+        <p class="hint">
+          Linear is ready to connect once Relay’s Linear OAuth app is registered and its client ID
+          is added to the release configuration.
+        </p>
+      }
+      @if (!nexus.status().connected) {
+        <p class="hint">
+          Connect Relay to Nexus first to keep Linear connections available across devices.
+        </p>
+      }
+      @if (!connections().length) {
+        <div class="empty">
+          <p class="label">No Linear workspaces connected</p>
+          <p class="hint">Nexus sign-in is required before Linear can be connected.</p>
+          <umbra-button
+            size="sm"
+            [disabled]="pending() || !nexus.status().connected || !oauthConfigured()"
+            (click)="connect()"
+          >
+            {{
+              pending()
+                ? 'Opening Linear'
+                : oauthConfigured()
+                  ? 'Connect Linear'
+                  : 'OAuth setup pending'
+            }}
+          </umbra-button>
+        </div>
+      } @else {
+        <nav class="workspaces" aria-label="Linear workspaces">
+          @for (connection of connections(); track connection.organizationId) {
+            <button
+              type="button"
+              class="workspace"
+              [class.active]="selected()?.organizationId === connection.organizationId"
+              (click)="select(connection)"
+            >
+              <span>{{ connection.organizationName }}</span>
+              <span class="muted">{{ connection.viewerName }}</span>
+              <span class="sync-state">
+                {{ connection.nexusCredentialId ? 'Synced through Nexus' : 'This device only' }}
+              </span>
+            </button>
+          }
+        </nav>
+        @if (selected()) {
+          <nav class="sections" aria-label="Linear views">
+            <button
+              type="button"
+              [class.active]="section() === 'work'"
+              (click)="setSection('work')"
+            >
+              My work
+            </button>
+            <button
+              type="button"
+              [class.active]="section() === 'projects'"
+              (click)="setSection('projects')"
+            >
+              Projects
+            </button>
+            <button
+              type="button"
+              [class.active]="section() === 'cycles'"
+              (click)="setSection('cycles')"
+            >
+              Cycles
+            </button>
+            <button
+              type="button"
+              [class.active]="section() === 'roadmap'"
+              (click)="setSection('roadmap')"
+            >
+              Roadmap
+            </button>
+          </nav>
+          @if (issueDetail(); as detail) {
+            <section class="issue-detail" aria-label="Linear issue details">
+              <div class="issue-heading">
+                <div>
+                  <p class="muted">{{ detail.issue.identifier }} · {{ detail.issue.team.name }}</p>
+                  <h2>{{ detail.issue.title }}</h2>
+                </div>
+                <umbra-button size="sm" variant="link" (click)="closeIssueDetail()">
+                  Close
+                </umbra-button>
+              </div>
+              @if (detail.issue.description) {
+                <p class="issue-description">{{ detail.issue.description }}</p>
+              }
+              <div class="issue-fields">
+                <label>
+                  <span>Status</span>
+                  <select
+                    [value]="detail.issue.state?.id ?? ''"
+                    (change)="updateStatus(detail.issue, $any($event.target).value)"
+                  >
+                    @for (state of statesFor(detail.issue); track state.id) {
+                      <option [value]="state.id">{{ state.name }}</option>
+                    }
+                  </select>
+                </label>
+                <label>
+                  <span>Priority</span>
+                  <select
+                    [value]="detail.issue.priority"
+                    (change)="updatePriority(detail.issue, +$any($event.target).value)"
+                  >
+                    <option [value]="0">No priority</option>
+                    <option [value]="1">Urgent</option>
+                    <option [value]="2">High</option>
+                    <option [value]="3">Normal</option>
+                    <option [value]="4">Low</option>
+                  </select>
+                </label>
+                <label>
+                  <span>Assignee</span>
+                  <select
+                    [value]="detail.issue.assignee?.id ?? ''"
+                    (change)="updateAssignee(detail.issue, $any($event.target).value)"
+                  >
+                    <option value="">Unassigned</option>
+                    @for (user of users(); track user.id) {
+                      <option [value]="user.id">{{ user.name }}</option>
+                    }
+                  </select>
+                </label>
+                <label>
+                  <span>Cycle</span>
+                  <select
+                    [value]="detail.issue.cycle?.id ?? ''"
+                    (change)="updateCycle(detail.issue, $any($event.target).value)"
+                  >
+                    <option value="">No cycle</option>
+                    @for (cycle of cyclesFor(detail.issue.team.id); track cycle.id) {
+                      <option [value]="cycle.id">{{ cycle.name }}</option>
+                    }
+                  </select>
+                </label>
+                @if (detail.issue.project) {
+                  <span class="muted">Project {{ detail.issue.project.name }}</span>
+                }
+                @if (detail.issue.cycle) {
+                  <span class="muted">Cycle {{ detail.issue.cycle.name }}</span>
+                }
+              </div>
+              @if (detail.children.length) {
+                <section class="detail-section" aria-label="Sub-issues">
+                  <h3>Sub-issues</h3>
+                  @for (child of detail.children; track child.id) {
+                    <button type="button" class="issue-link" (click)="openIssueDetail(child)">
+                      {{ child.identifier }} · {{ child.title }}
+                    </button>
+                  }
+                </section>
+              }
+              <form class="detail-form" (submit)="createSubIssue($event, detail.issue)">
+                <label>
+                  <span>Add sub-issue</span>
+                  <input
+                    required
+                    maxlength="255"
+                    [value]="newSubIssueTitle()"
+                    (input)="newSubIssueTitle.set($any($event.target).value)"
+                  />
+                </label>
+                <umbra-button
+                  size="sm"
+                  [disabled]="creatingSubIssue() || !newSubIssueTitle().trim()"
+                >
+                  {{ creatingSubIssue() ? 'Creating' : 'Add sub-issue' }}
+                </umbra-button>
+              </form>
+              <section class="detail-section" aria-label="Comments">
+                <h3>Comments</h3>
+                @for (comment of detail.comments; track comment.id) {
+                  <article class="comment">
+                    <p>{{ comment.body }}</p>
+                    <span class="muted">{{ comment.user?.name ?? 'Linear integration' }}</span>
+                  </article>
+                } @empty {
+                  <p class="hint">No comments yet.</p>
+                }
+                <form class="detail-form" (submit)="createComment($event, detail.issue)">
+                  <label>
+                    <span>Write a comment</span>
+                    <textarea
+                      required
+                      maxlength="10000"
+                      rows="3"
+                      [value]="newComment()"
+                      (input)="newComment.set($any($event.target).value)"
+                    ></textarea>
+                  </label>
+                  <umbra-button size="sm" [disabled]="sendingComment() || !newComment().trim()">
+                    {{ sendingComment() ? 'Sending' : 'Comment' }}
+                  </umbra-button>
+                </form>
+              </section>
+            </section>
+          }
+          @if (section() === 'work') {
+            <section class="issues" aria-label="My Linear issues">
+              <div class="issue-heading">
+                <h2>My work</h2>
+                <div class="issue-actions">
+                  <umbra-button
+                    size="sm"
+                    variant="link"
+                    [disabled]="loading()"
+                    (click)="loadIssues()"
+                  >
+                    {{ loading() ? 'Loading' : 'Refresh' }}
+                  </umbra-button>
+                  <umbra-button size="sm" variant="outline" (click)="disconnectSelected()">
+                    Disconnect
+                  </umbra-button>
+                </div>
+              </div>
+              @if (teams().length) {
+                <form class="create-form" (submit)="createIssue($event)">
+                  <label>
+                    <span>Team</span>
+                    <select
+                      [value]="createTeamId()"
+                      (change)="setCreateTeam($any($event.target).value)"
+                    >
+                      @for (team of teams(); track team.id) {
+                        <option [value]="team.id">{{ team.name }}</option>
+                      }
+                    </select>
+                  </label>
+                  <label>
+                    <span>New issue</span>
+                    <input
+                      required
+                      maxlength="255"
+                      [value]="newTitle()"
+                      (input)="newTitle.set($any($event.target).value)"
+                      placeholder="Issue title"
+                    />
+                  </label>
+                  <label class="description-field">
+                    <span>Description</span>
+                    <textarea
+                      rows="2"
+                      [value]="newDescription()"
+                      (input)="newDescription.set($any($event.target).value)"
+                      placeholder="Add context (optional)"
+                    ></textarea>
+                  </label>
+                  <umbra-button size="sm" [disabled]="creating() || !newTitle().trim()">
+                    {{ creating() ? 'Creating' : 'Create issue' }}
+                  </umbra-button>
+                </form>
+              }
+              @if (issues().length === 0 && !loading()) {
+                <p class="hint">No assigned issues found.</p>
+              }
+              @for (issue of issues(); track issue.id) {
+                <article class="issue">
+                  <button type="button" class="issue-link" (click)="openIssue(issue.url)">
+                    {{ issue.identifier }}
+                  </button>
+                  <button type="button" class="issue-title" (click)="openIssueDetail(issue)">
+                    {{ issue.title }}
+                  </button>
+                  <label class="status-control">
+                    <span class="sr-only">Status for {{ issue.identifier }}</span>
+                    <select
+                      [value]="issue.state?.id ?? ''"
+                      (change)="updateStatus(issue, $any($event.target).value)"
+                    >
+                      @for (state of statesFor(issue); track state.id) {
+                        <option [value]="state.id">{{ state.name }}</option>
+                      }
+                    </select>
+                  </label>
+                </article>
+              }
+              @if (hasNextPage()) {
+                <umbra-button
+                  size="sm"
+                  variant="outline"
+                  [disabled]="loading()"
+                  (click)="loadMore()"
+                >
+                  Load more
+                </umbra-button>
+              }
+            </section>
+          } @else if (section() === 'projects') {
+            <section class="issues" aria-label="Linear projects">
+              <div class="issue-heading">
+                <h2>{{ selectedProject()?.name ?? 'Projects' }}</h2>
+                @if (selectedProject()) {
+                  <umbra-button size="sm" variant="link" (click)="selectedProject.set(null)">
+                    All projects
+                  </umbra-button>
+                } @else {
+                  <div class="issue-actions">
+                    <umbra-button size="sm" variant="link" (click)="loadProjects()">
+                      Refresh
+                    </umbra-button>
+                    <umbra-button
+                      size="sm"
+                      variant="outline"
+                      (click)="createProjectOpen.set(!createProjectOpen())"
+                    >
+                      New project
+                    </umbra-button>
+                  </div>
+                }
+              </div>
+              @if (selectedProject()) {
+                <form class="project-edit" (submit)="saveProject($event)">
+                  <label>
+                    <span>Project name</span>
+                    <input
+                      required
+                      maxlength="255"
+                      [value]="editProjectName()"
+                      (input)="editProjectName.set($any($event.target).value)"
+                    />
+                  </label>
+                  <label>
+                    <span>Description</span>
+                    <textarea
+                      rows="3"
+                      [value]="editProjectDescription()"
+                      (input)="editProjectDescription.set($any($event.target).value)"
+                    ></textarea>
+                  </label>
+                  <umbra-button size="sm" [disabled]="savingProject() || !editProjectName().trim()">
+                    {{ savingProject() ? 'Saving' : 'Save project' }}
+                  </umbra-button>
+                </form>
+                <section class="milestones" aria-label="Project milestones">
+                  <h3>Milestones</h3>
+                  @for (milestone of milestones(); track milestone.id) {
+                    <article class="issue">
+                      <strong>{{ milestone.name }}</strong>
+                      @if (milestone.targetDate) {
+                        <span class="muted">Target {{ milestone.targetDate }}</span>
+                      }
+                      @if (milestone.description) {
+                        <span>{{ milestone.description }}</span>
+                      }
+                      <umbra-button size="sm" variant="link" (click)="editMilestone(milestone)">
+                        Edit
+                      </umbra-button>
+                    </article>
+                    @if (editingMilestoneId() === milestone.id) {
+                      <form class="project-edit" (submit)="saveMilestone($event, milestone)">
+                        <label>
+                          <span>Milestone name</span>
+                          <input
+                            required
+                            maxlength="255"
+                            [value]="editMilestoneName()"
+                            (input)="editMilestoneName.set($any($event.target).value)"
+                          />
+                        </label>
+                        <label>
+                          <span>Target date</span>
+                          <input
+                            type="date"
+                            [value]="editMilestoneDate()"
+                            (input)="editMilestoneDate.set($any($event.target).value)"
+                          />
+                        </label>
+                        <label>
+                          <span>Description</span>
+                          <textarea
+                            rows="2"
+                            [value]="editMilestoneDescription()"
+                            (input)="editMilestoneDescription.set($any($event.target).value)"
+                          ></textarea>
+                        </label>
+                        <umbra-button
+                          size="sm"
+                          [disabled]="savingMilestone() || !editMilestoneName().trim()"
+                        >
+                          {{ savingMilestone() ? 'Saving' : 'Save milestone' }}
+                        </umbra-button>
+                      </form>
+                    }
+                  } @empty {
+                    <p class="hint">No milestones yet.</p>
+                  }
+                  <form class="project-edit" (submit)="createMilestone($event)">
+                    <label>
+                      <span>Milestone name</span>
+                      <input
+                        required
+                        maxlength="255"
+                        [value]="newMilestoneName()"
+                        (input)="newMilestoneName.set($any($event.target).value)"
+                      />
+                    </label>
+                    <label>
+                      <span>Target date</span>
+                      <input
+                        type="date"
+                        [value]="newMilestoneDate()"
+                        (input)="newMilestoneDate.set($any($event.target).value)"
+                      />
+                    </label>
+                    <label>
+                      <span>Description</span>
+                      <textarea
+                        rows="2"
+                        [value]="newMilestoneDescription()"
+                        (input)="newMilestoneDescription.set($any($event.target).value)"
+                      ></textarea>
+                    </label>
+                    <umbra-button
+                      size="sm"
+                      [disabled]="creatingMilestone() || !newMilestoneName().trim()"
+                    >
+                      {{ creatingMilestone() ? 'Creating' : 'Add milestone' }}
+                    </umbra-button>
+                  </form>
+                </section>
+                @if (teams().length) {
+                  <form class="create-form" (submit)="createProjectIssue($event)">
+                    <label>
+                      <span>Team</span>
+                      <select
+                        [value]="createTeamId()"
+                        (change)="setCreateTeam($any($event.target).value)"
+                      >
+                        @for (team of teams(); track team.id) {
+                          <option [value]="team.id">{{ team.name }}</option>
+                        }
+                      </select>
+                    </label>
+                    <label>
+                      <span>New project issue</span>
+                      <input
+                        required
+                        maxlength="255"
+                        [value]="newProjectIssueTitle()"
+                        (input)="newProjectIssueTitle.set($any($event.target).value)"
+                        placeholder="Issue title"
+                      />
+                    </label>
+                    <label>
+                      <span>Milestone</span>
+                      <select
+                        [value]="newProjectIssueMilestoneId()"
+                        (change)="newProjectIssueMilestoneId.set($any($event.target).value)"
+                      >
+                        <option value="">No milestone</option>
+                        @for (milestone of milestones(); track milestone.id) {
+                          <option [value]="milestone.id">{{ milestone.name }}</option>
+                        }
+                      </select>
+                    </label>
+                    <label class="description-field">
+                      <span>Description</span>
+                      <textarea
+                        rows="2"
+                        [value]="newProjectIssueDescription()"
+                        (input)="newProjectIssueDescription.set($any($event.target).value)"
+                      ></textarea>
+                    </label>
+                    <umbra-button
+                      size="sm"
+                      [disabled]="creatingProjectIssue() || !newProjectIssueTitle().trim()"
+                    >
+                      {{ creatingProjectIssue() ? 'Creating' : 'Add issue' }}
+                    </umbra-button>
+                  </form>
+                }
+                @for (issue of projectIssues(); track issue.id) {
+                  <article class="issue">
+                    <button type="button" class="issue-link" (click)="openIssue(issue.url)">
+                      {{ issue.identifier }}
+                    </button>
+                    <button type="button" class="issue-title" (click)="openIssueDetail(issue)">
+                      {{ issue.title }}
+                    </button>
+                    <label class="status-control">
+                      <span class="sr-only">Status for {{ issue.identifier }}</span>
+                      <select
+                        [value]="issue.state?.id ?? ''"
+                        (change)="updateStatus(issue, $any($event.target).value)"
+                      >
+                        @for (state of statesFor(issue); track state.id) {
+                          <option [value]="state.id">{{ state.name }}</option>
+                        }
+                      </select>
+                    </label>
+                  </article>
+                } @empty {
+                  <p class="hint">No issues are linked to this project.</p>
+                }
+              } @else {
+                @if (createProjectOpen()) {
+                  <form class="create-form" (submit)="createProject($event)">
+                    <label>
+                      <span>Team</span>
+                      <select
+                        [value]="createTeamId()"
+                        (change)="setCreateTeam($any($event.target).value)"
+                      >
+                        @for (team of teams(); track team.id) {
+                          <option [value]="team.id">{{ team.name }}</option>
+                        }
+                      </select>
+                    </label>
+                    <label>
+                      <span>Project name</span>
+                      <input
+                        required
+                        maxlength="255"
+                        [value]="newProjectName()"
+                        (input)="newProjectName.set($any($event.target).value)"
+                      />
+                    </label>
+                    <label class="description-field">
+                      <span>Description</span>
+                      <textarea
+                        rows="2"
+                        [value]="newProjectDescription()"
+                        (input)="newProjectDescription.set($any($event.target).value)"
+                      ></textarea>
+                    </label>
+                    <umbra-button
+                      size="sm"
+                      [disabled]="creatingProject() || !newProjectName().trim()"
+                    >
+                      {{ creatingProject() ? 'Creating' : 'Create project' }}
+                    </umbra-button>
+                  </form>
+                }
+                @for (project of projects(); track project.id) {
+                  <article class="resource-row">
+                    <div>
+                      <h3>{{ project.name }}</h3>
+                      <p>{{ project.description || 'No description' }}</p>
+                      <span class="muted">{{
+                        project.targetDate ? 'Target ' + project.targetDate : 'No target date'
+                      }}</span>
+                    </div>
+                    <umbra-button size="sm" variant="outline" (click)="openProject(project)">
+                      View project
+                    </umbra-button>
+                  </article>
+                } @empty {
+                  <p class="hint">No projects found in this workspace.</p>
+                }
+              }
+            </section>
+          } @else if (section() === 'cycles') {
+            <section class="issues" aria-label="Linear cycles">
+              @for (team of teams(); track team.id) {
+                <h2 class="group-title">{{ team.name }}</h2>
+                @for (cycle of cyclesFor(team.id); track cycle.id) {
+                  <article class="resource-row">
+                    <div>
+                      <h3>{{ cycle.name }}</h3>
+                      <p>{{ cycle.startsAt || 'Open' }} – {{ cycle.endsAt || 'Open' }}</p>
+                    </div>
+                    <span class="muted">{{
+                      cycle.isActive ? 'Current' : 'Cycle ' + cycle.number
+                    }}</span>
+                  </article>
+                } @empty {
+                  <p class="hint">No cycles are available for this team.</p>
+                }
+              }
+            </section>
+          } @else {
+            <section class="issues" aria-label="Linear roadmap initiatives">
+              @for (initiative of initiatives(); track initiative.id) {
+                <article class="resource-row initiative-row">
+                  <div>
+                    <h3>{{ initiative.name }}</h3>
+                    <p>{{ initiative.description || 'No description' }}</p>
+                    <span class="muted">{{
+                      initiative.targetDate ? 'Target ' + initiative.targetDate : 'No target date'
+                    }}</span>
+                    @if (initiative.projects.length) {
+                      <div class="initiative-projects">
+                        @for (project of initiative.projects; track project.id) {
+                          <button
+                            type="button"
+                            class="issue-link"
+                            (click)="openProjectById(project.id)"
+                          >
+                            {{ project.name }}
+                          </button>
+                        }
+                      </div>
+                    }
+                  </div>
+                </article>
+              } @empty {
+                <p class="hint">No initiatives are available in this workspace.</p>
+              }
+            </section>
+          }
+        }
+      }
+    </section>
+  `,
+  styles: `
+    :host {
+      display: block;
+    }
+    .wrap {
+      max-width: 860px;
+      margin-inline: auto;
+    }
+    header,
+    .issue-heading {
+      display: flex;
+      align-items: start;
+      justify-content: space-between;
+      gap: var(--space-5);
+    }
+    .issue-actions {
+      display: flex;
+      align-items: center;
+      gap: var(--space-2);
+    }
+    .u-title,
+    .hint,
+    h2,
+    .label {
+      margin: 0;
+    }
+    .hint,
+    .muted {
+      color: var(--text-muted);
+      font-size: var(--text-12);
+    }
+    .hint {
+      margin-top: var(--space-2);
+    }
+    .error {
+      color: var(--danger);
+    }
+    .empty {
+      display: grid;
+      justify-items: center;
+      gap: var(--space-3);
+      padding: var(--space-9);
+      text-align: center;
+    }
+    .workspaces {
+      display: flex;
+      flex-wrap: wrap;
+      gap: var(--space-2);
+      margin-block: var(--space-5);
+    }
+    .sections {
+      display: flex;
+      flex-wrap: wrap;
+      gap: var(--space-2);
+      margin-block: var(--space-4);
+      border-bottom: 1px solid var(--border-subtle);
+    }
+    .sections button {
+      padding: var(--space-2) var(--space-3);
+      border-bottom: 2px solid transparent;
+      color: var(--text-muted);
+    }
+    .sections button.active {
+      border-color: var(--accent);
+      color: var(--text-primary);
+    }
+    .workspace {
+      display: grid;
+      gap: var(--space-1);
+      padding: var(--space-3);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-md);
+      text-align: start;
+    }
+    .workspace.active {
+      border-color: var(--accent);
+    }
+    .sync-state {
+      color: var(--text-muted);
+      font-size: var(--text-11);
+    }
+    .resource-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: var(--space-4);
+      padding: var(--space-4);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-md);
+    }
+    .resource-row h3,
+    .resource-row p {
+      margin: 0;
+    }
+    .resource-row h3 {
+      font-size: var(--text-14);
+    }
+    .resource-row p,
+    .resource-row .muted {
+      display: block;
+      margin-top: var(--space-1);
+      color: var(--text-muted);
+      font-size: var(--text-12);
+    }
+    .group-title {
+      margin: var(--space-3) 0 0;
+      font-size: var(--text-14);
+    }
+    .initiative-projects {
+      display: flex;
+      flex-wrap: wrap;
+      gap: var(--space-3);
+      margin-top: var(--space-3);
+    }
+    .issues {
+      display: grid;
+      gap: var(--space-3);
+    }
+    .create-form {
+      display: grid;
+      grid-template-columns: minmax(120px, 0.7fr) minmax(180px, 1.5fr) auto;
+      align-items: end;
+      gap: var(--space-3);
+      padding: var(--space-4);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-md);
+    }
+    .create-form label {
+      display: grid;
+      gap: var(--space-1);
+      color: var(--text-muted);
+      font-size: var(--text-12);
+    }
+    .project-edit {
+      display: grid;
+      gap: var(--space-3);
+      padding: var(--space-4);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-md);
+    }
+    .project-edit label {
+      display: grid;
+      gap: var(--space-1);
+      color: var(--text-muted);
+      font-size: var(--text-12);
+    }
+
+    .issue-title {
+      border: 0;
+      background: transparent;
+      color: inherit;
+      cursor: pointer;
+      font: inherit;
+      text-align: start;
+    }
+
+    .issue-title:hover {
+      color: var(--color-accent, #6f7cff);
+    }
+
+    .issue-detail,
+    .detail-section,
+    .detail-form {
+      display: grid;
+      gap: var(--space-3);
+    }
+
+    .issue-detail {
+      border: 1px solid var(--color-border, #30323a);
+      border-radius: var(--radius-md, 12px);
+      padding: var(--space-4);
+    }
+
+    .issue-detail h2,
+    .detail-section h3 {
+      margin: 0;
+    }
+
+    .issue-fields {
+      align-items: end;
+      display: flex;
+      flex-wrap: wrap;
+      gap: var(--space-3);
+    }
+
+    .issue-fields label,
+    .detail-form label {
+      display: grid;
+      gap: var(--space-1);
+    }
+
+    .comment {
+      border-top: 1px solid var(--color-border, #30323a);
+      padding-top: var(--space-2);
+    }
+
+    .comment p {
+      margin: 0 0 var(--space-1);
+      white-space: pre-wrap;
+    }
+    input,
+    select,
+    textarea {
+      min-height: 36px;
+      padding-inline: var(--space-2);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-sm);
+      background: var(--surface-raised);
+      color: var(--text-primary);
+      font: inherit;
+    }
+    .description-field {
+      grid-column: 1 / -1;
+    }
+    .status-control select {
+      max-width: 160px;
+      color: var(--text-muted);
+      font-size: var(--text-12);
+    }
+    .sr-only {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      padding: 0;
+      margin: -1px;
+      overflow: hidden;
+      clip: rect(0, 0, 0, 0);
+      white-space: nowrap;
+      border: 0;
+    }
+    h2 {
+      font-size: var(--text-15);
+    }
+    .issue {
+      display: grid;
+      grid-template-columns: 74px minmax(0, 1fr) auto;
+      gap: var(--space-3);
+      padding-block: var(--space-3);
+      border-bottom: 1px solid var(--border-subtle);
+    }
+    .issue-link {
+      justify-self: start;
+      color: var(--accent);
+      text-align: start;
+    }
+    @media (max-width: 600px) {
+      .issue {
+        grid-template-columns: 1fr auto;
+      }
+      .create-form {
+        grid-template-columns: 1fr;
+      }
+      .issue span:nth-child(2) {
+        grid-row: 2;
+        grid-column: 1 / -1;
+      }
+    }
+  `,
+})
+export class Linear {
+  private readonly tauri = inject(TauriBridge);
+  protected readonly nexus = inject(NexusAccount);
+  private readonly destroyRef = inject(DestroyRef);
+
+  protected readonly connections = signal<readonly LinearConnection[]>([]);
+  protected readonly selected = signal<LinearConnection | null>(null);
+  protected readonly issues = signal<readonly LinearIssue[]>([]);
+  protected readonly issueDetail = signal<LinearIssueDetail | null>(null);
+  protected readonly projectIssues = signal<readonly LinearIssue[]>([]);
+  protected readonly milestones = signal<readonly LinearMilestone[]>([]);
+  protected readonly projects = signal<readonly LinearProject[]>([]);
+  protected readonly initiatives = signal<readonly LinearInitiative[]>([]);
+  protected readonly cycles = signal<Readonly<Record<string, readonly LinearCycle[]>>>({});
+  protected readonly selectedProject = signal<LinearProject | null>(null);
+  protected readonly createProjectOpen = signal(false);
+  protected readonly newProjectName = signal('');
+  protected readonly newProjectDescription = signal('');
+  protected readonly editProjectName = signal('');
+  protected readonly editProjectDescription = signal('');
+  protected readonly newMilestoneName = signal('');
+  protected readonly newMilestoneDescription = signal('');
+  protected readonly newMilestoneDate = signal('');
+  protected readonly newProjectIssueTitle = signal('');
+  protected readonly newProjectIssueDescription = signal('');
+  protected readonly newProjectIssueMilestoneId = signal('');
+  protected readonly newSubIssueTitle = signal('');
+  protected readonly newComment = signal('');
+  protected readonly editingMilestoneId = signal<string | null>(null);
+  protected readonly editMilestoneName = signal('');
+  protected readonly editMilestoneDescription = signal('');
+  protected readonly editMilestoneDate = signal('');
+  protected readonly section = signal<'work' | 'projects' | 'cycles' | 'roadmap'>('work');
+  protected readonly teams = signal<readonly LinearTeam[]>([]);
+  protected readonly users = signal<readonly LinearPerson[]>([]);
+  protected readonly workflowStates = signal<
+    Readonly<Record<string, readonly LinearWorkflowState[]>>
+  >({});
+  protected readonly createTeamId = signal('');
+  protected readonly newTitle = signal('');
+  protected readonly newDescription = signal('');
+  protected readonly hasNextPage = signal(false);
+  protected readonly error = signal<string | null>(null);
+  protected readonly pending = signal(false);
+  protected readonly oauthConfigured = signal(false);
+  protected readonly loading = signal(false);
+  protected readonly creating = signal(false);
+  protected readonly creatingProject = signal(false);
+  protected readonly savingProject = signal(false);
+  protected readonly creatingMilestone = signal(false);
+  protected readonly savingMilestone = signal(false);
+  protected readonly creatingProjectIssue = signal(false);
+  protected readonly creatingSubIssue = signal(false);
+  protected readonly sendingComment = signal(false);
+  private nextCursor: string | null = null;
+
+  protected pageTitle(): string {
+    return {
+      work: 'My work',
+      projects: 'Projects',
+      cycles: 'Cycles',
+      roadmap: 'Roadmap',
+    }[this.section()];
+  }
+
+  protected pageDescription(): string {
+    return {
+      work: 'Assigned Linear issues across your connected workspaces.',
+      projects: 'Projects and their issues in your connected workspace.',
+      cycles: 'Team planning cycles and current work periods.',
+      roadmap: 'Initiatives and the projects connected to them.',
+    }[this.section()];
+  }
+
+  constructor() {
+    void this.tauri
+      .linearOauthConfigured()
+      .then((configured) => this.oauthConfigured.set(configured));
+    void this.refreshConnections();
+    void this.tauri
+      .onLinearAuth((event) => {
+        this.pending.set(false);
+        if (!event.connected || !event.connection) {
+          this.error.set(event.error ?? 'Linear could not connect.');
+          return;
+        }
+        this.error.set(event.error);
+        void this.refreshConnections(event.connection.organizationId);
+      })
+      .then((unlisten) => this.destroyRef.onDestroy(unlisten));
+  }
+
+  protected async connect(): Promise<void> {
+    this.error.set(null);
+    this.pending.set(true);
+    try {
+      await this.tauri.linearConnectStart();
+    } catch (error) {
+      this.pending.set(false);
+      this.error.set(error instanceof Error ? error.message : String(error));
+    }
+  }
+
+  protected select(connection: LinearConnection): void {
+    this.selected.set(connection);
+    this.issues.set([]);
+    this.nextCursor = null;
+    void this.loadTeams(connection);
+    void this.loadIssues();
+    void this.loadSection(connection);
+  }
+
+  protected statesFor(issue: LinearIssue): readonly LinearWorkflowState[] {
+    return this.workflowStates()[issue.team.id] ?? [];
+  }
+
+  protected async openIssueDetail(issue: LinearIssue): Promise<void> {
+    const connection = this.selected();
+    if (!connection) return;
+    this.issueDetail.set(null);
+    this.error.set(null);
+    try {
+      const detail = await this.tauri.linearIssueDetail(connection.organizationId, issue.id);
+      const teamCycles = await this.tauri.linearCycles(
+        connection.organizationId,
+        detail.issue.team.id,
+      );
+      this.cycles.update((items) => ({ ...items, [detail.issue.team.id]: teamCycles }));
+      this.issueDetail.set(detail);
+    } catch (error) {
+      this.error.set(error instanceof Error ? error.message : String(error));
+    }
+  }
+
+  protected closeIssueDetail(): void {
+    this.issueDetail.set(null);
+    this.newComment.set('');
+    this.newSubIssueTitle.set('');
+  }
+
+  protected async createComment(event: Event, issue: LinearIssue): Promise<void> {
+    event.preventDefault();
+    const connection = this.selected();
+    const body = this.newComment().trim();
+    if (!connection || !body || this.sendingComment()) return;
+    this.sendingComment.set(true);
+    this.error.set(null);
+    try {
+      const comment = await this.tauri.linearCreateComment(
+        connection.organizationId,
+        issue.id,
+        body,
+      );
+      this.issueDetail.update((detail) =>
+        detail?.issue.id === issue.id
+          ? { ...detail, comments: [...detail.comments, comment] }
+          : detail,
+      );
+      this.newComment.set('');
+    } catch (error) {
+      this.error.set(error instanceof Error ? error.message : String(error));
+    } finally {
+      this.sendingComment.set(false);
+    }
+  }
+
+  protected async createSubIssue(event: Event, parent: LinearIssue): Promise<void> {
+    event.preventDefault();
+    const connection = this.selected();
+    const title = this.newSubIssueTitle().trim();
+    if (!connection || !title || this.creatingSubIssue()) return;
+    this.creatingSubIssue.set(true);
+    this.error.set(null);
+    try {
+      const child = await this.tauri.linearCreateIssue(
+        connection.organizationId,
+        parent.team.id,
+        title,
+        '',
+        parent.project?.id ?? null,
+        null,
+        parent.id,
+      );
+      this.issueDetail.update((detail) =>
+        detail?.issue.id === parent.id
+          ? { ...detail, children: [...detail.children, child] }
+          : detail,
+      );
+      this.newSubIssueTitle.set('');
+    } catch (error) {
+      this.error.set(error instanceof Error ? error.message : String(error));
+    } finally {
+      this.creatingSubIssue.set(false);
+    }
+  }
+
+  protected setCreateTeam(teamId: string): void {
+    this.createTeamId.set(teamId);
+  }
+
+  protected setSection(section: 'work' | 'projects' | 'cycles' | 'roadmap'): void {
+    this.section.set(section);
+    this.selectedProject.set(null);
+    const connection = this.selected();
+    if (connection) void this.loadSection(connection);
+  }
+
+  protected cyclesFor(teamId: string): readonly LinearCycle[] {
+    return this.cycles()[teamId] ?? [];
+  }
+
+  protected async loadProjects(): Promise<void> {
+    const connection = this.selected();
+    if (!connection) return;
+    try {
+      this.projects.set(await this.tauri.linearProjects(connection.organizationId));
+    } catch (error) {
+      this.error.set(error instanceof Error ? error.message : String(error));
+    }
+  }
+
+  protected async openProject(project: LinearProject): Promise<void> {
+    this.selectedProject.set(project);
+    this.editProjectName.set(project.name);
+    this.editProjectDescription.set(project.description ?? '');
+    await Promise.all([this.loadProjectIssues(project.id), this.loadMilestones(project.id)]);
+  }
+
+  protected async createMilestone(event: Event): Promise<void> {
+    event.preventDefault();
+    const connection = this.selected();
+    const project = this.selectedProject();
+    const name = this.newMilestoneName().trim();
+    if (!connection || !project || !name || this.creatingMilestone()) return;
+    this.creatingMilestone.set(true);
+    this.error.set(null);
+    try {
+      const milestone = await this.tauri.linearCreateMilestone(
+        connection.organizationId,
+        project.id,
+        name,
+        this.newMilestoneDescription().trim(),
+        this.newMilestoneDate(),
+      );
+      this.milestones.update((items) => [...items, milestone]);
+      this.newMilestoneName.set('');
+      this.newMilestoneDescription.set('');
+      this.newMilestoneDate.set('');
+    } catch (error) {
+      this.error.set(error instanceof Error ? error.message : String(error));
+    } finally {
+      this.creatingMilestone.set(false);
+    }
+  }
+
+  protected editMilestone(milestone: LinearMilestone): void {
+    this.editingMilestoneId.set(milestone.id);
+    this.editMilestoneName.set(milestone.name);
+    this.editMilestoneDescription.set(milestone.description ?? '');
+    this.editMilestoneDate.set(milestone.targetDate ?? '');
+  }
+
+  protected async saveMilestone(event: Event, milestone: LinearMilestone): Promise<void> {
+    event.preventDefault();
+    const connection = this.selected();
+    const name = this.editMilestoneName().trim();
+    if (!connection || !name || this.savingMilestone()) return;
+    this.savingMilestone.set(true);
+    this.error.set(null);
+    try {
+      const updated = await this.tauri.linearUpdateMilestone(
+        connection.organizationId,
+        milestone.id,
+        name,
+        this.editMilestoneDescription().trim(),
+        this.editMilestoneDate(),
+      );
+      this.milestones.update((items) =>
+        items.map((item) => (item.id === updated.id ? updated : item)),
+      );
+      this.editingMilestoneId.set(null);
+    } catch (error) {
+      this.error.set(error instanceof Error ? error.message : String(error));
+    } finally {
+      this.savingMilestone.set(false);
+    }
+  }
+
+  protected async createProject(event: Event): Promise<void> {
+    event.preventDefault();
+    const connection = this.selected();
+    const name = this.newProjectName().trim();
+    if (!connection || !this.createTeamId() || !name || this.creatingProject()) return;
+    this.creatingProject.set(true);
+    this.error.set(null);
+    try {
+      const project = await this.tauri.linearCreateProject(
+        connection.organizationId,
+        this.createTeamId(),
+        name,
+        this.newProjectDescription().trim(),
+      );
+      this.newProjectName.set('');
+      this.newProjectDescription.set('');
+      this.createProjectOpen.set(false);
+      this.projects.update((projects) => [project, ...projects]);
+      await this.openProject(project);
+    } catch (error) {
+      this.error.set(error instanceof Error ? error.message : String(error));
+    } finally {
+      this.creatingProject.set(false);
+    }
+  }
+
+  protected async saveProject(event: Event): Promise<void> {
+    event.preventDefault();
+    const connection = this.selected();
+    const project = this.selectedProject();
+    const name = this.editProjectName().trim();
+    if (!connection || !project || !name || this.savingProject()) return;
+    this.savingProject.set(true);
+    this.error.set(null);
+    try {
+      const updated = await this.tauri.linearUpdateProject(
+        connection.organizationId,
+        project.id,
+        name,
+        this.editProjectDescription(),
+      );
+      this.selectedProject.set(updated);
+      this.projects.update((projects) =>
+        projects.map((entry) => (entry.id === updated.id ? updated : entry)),
+      );
+    } catch (error) {
+      this.error.set(error instanceof Error ? error.message : String(error));
+    } finally {
+      this.savingProject.set(false);
+    }
+  }
+
+  protected async openProjectById(projectId: string): Promise<void> {
+    let project = this.projects().find((entry) => entry.id === projectId);
+    if (!project) {
+      await this.loadProjects();
+      project = this.projects().find((entry) => entry.id === projectId);
+    }
+    if (project) {
+      this.section.set('projects');
+      await this.openProject(project);
+    }
+  }
+
+  private async loadSection(connection: LinearConnection): Promise<void> {
+    if (this.section() === 'projects') await this.loadProjects();
+    if (this.section() === 'roadmap') {
+      try {
+        this.initiatives.set(await this.tauri.linearInitiatives(connection.organizationId));
+      } catch (error) {
+        this.error.set(error instanceof Error ? error.message : String(error));
+      }
+    }
+    if (this.section() === 'cycles') {
+      try {
+        const teams = await this.tauri.linearTeams(connection.organizationId);
+        this.teams.set(teams);
+        const entries = await Promise.all(
+          teams.map(
+            async (team) =>
+              [team.id, await this.tauri.linearCycles(connection.organizationId, team.id)] as const,
+          ),
+        );
+        this.cycles.set(Object.fromEntries(entries));
+      } catch (error) {
+        this.error.set(error instanceof Error ? error.message : String(error));
+      }
+    }
+  }
+
+  private async loadProjectIssues(projectId: string): Promise<void> {
+    const connection = this.selected();
+    if (!connection) return;
+    try {
+      const page = await this.tauri.linearProjectIssues(connection.organizationId, projectId);
+      this.projectIssues.set(page.issues);
+    } catch (error) {
+      this.error.set(error instanceof Error ? error.message : String(error));
+    }
+  }
+
+  private async loadMilestones(projectId: string): Promise<void> {
+    const connection = this.selected();
+    if (!connection) return;
+    try {
+      this.milestones.set(
+        await this.tauri.linearProjectMilestones(connection.organizationId, projectId),
+      );
+    } catch (error) {
+      this.error.set(error instanceof Error ? error.message : String(error));
+    }
+  }
+
+  protected async createIssue(event: Event): Promise<void> {
+    event.preventDefault();
+    const connection = this.selected();
+    const title = this.newTitle().trim();
+    if (!connection || !this.createTeamId() || !title || this.creating()) return;
+    this.creating.set(true);
+    this.error.set(null);
+    try {
+      const created = await this.tauri.linearCreateIssue(
+        connection.organizationId,
+        this.createTeamId(),
+        title,
+        this.newDescription().trim(),
+      );
+      this.newTitle.set('');
+      this.newDescription.set('');
+      this.issues.update((issues) => [created, ...issues]);
+    } catch (error) {
+      this.error.set(error instanceof Error ? error.message : String(error));
+    } finally {
+      this.creating.set(false);
+    }
+  }
+
+  protected async createProjectIssue(event: Event): Promise<void> {
+    event.preventDefault();
+    const connection = this.selected();
+    const project = this.selectedProject();
+    const title = this.newProjectIssueTitle().trim();
+    if (!connection || !project || !this.createTeamId() || !title || this.creatingProjectIssue()) {
+      return;
+    }
+    this.creatingProjectIssue.set(true);
+    this.error.set(null);
+    try {
+      const issue = await this.tauri.linearCreateIssue(
+        connection.organizationId,
+        this.createTeamId(),
+        title,
+        this.newProjectIssueDescription().trim(),
+        project.id,
+        this.newProjectIssueMilestoneId() || null,
+      );
+      this.projectIssues.update((issues) => [issue, ...issues]);
+      this.newProjectIssueTitle.set('');
+      this.newProjectIssueDescription.set('');
+      this.newProjectIssueMilestoneId.set('');
+    } catch (error) {
+      this.error.set(error instanceof Error ? error.message : String(error));
+    } finally {
+      this.creatingProjectIssue.set(false);
+    }
+  }
+
+  protected async disconnectSelected(): Promise<void> {
+    const connection = this.selected();
+    if (!connection) return;
+    try {
+      await this.tauri.linearDisconnect(connection.organizationId);
+      const connections = this.connections().filter(
+        (entry) => entry.organizationId !== connection.organizationId,
+      );
+      this.connections.set(connections);
+      this.selected.set(connections[0] ?? null);
+      this.issues.set([]);
+      if (connections[0]) this.select(connections[0]);
+    } catch (error) {
+      this.error.set(error instanceof Error ? error.message : String(error));
+      await this.refreshConnections();
+    }
+  }
+
+  protected async updateStatus(issue: LinearIssue, stateId: string): Promise<void> {
+    if (!stateId || stateId === issue.state?.id) return;
+    await this.saveIssueUpdate(issue, { stateId });
+  }
+
+  protected async updatePriority(issue: LinearIssue, priority: number): Promise<void> {
+    if (priority === issue.priority) return;
+    await this.saveIssueUpdate(issue, { priority });
+  }
+
+  protected async updateAssignee(issue: LinearIssue, assigneeId: string): Promise<void> {
+    if (assigneeId === (issue.assignee?.id ?? '')) return;
+    await this.saveIssueUpdate(issue, assigneeId ? { assigneeId } : { clearAssignee: true });
+  }
+
+  protected async updateCycle(issue: LinearIssue, cycleId: string): Promise<void> {
+    if (cycleId === (issue.cycle?.id ?? '')) return;
+    await this.saveIssueUpdate(issue, cycleId ? { cycleId } : { clearCycle: true });
+  }
+
+  private async saveIssueUpdate(
+    issue: LinearIssue,
+    update: {
+      stateId?: string;
+      assigneeId?: string;
+      clearAssignee?: boolean;
+      cycleId?: string;
+      clearCycle?: boolean;
+      priority?: number;
+    },
+  ): Promise<void> {
+    const connection = this.selected();
+    if (!connection) return;
+    try {
+      const updated = await this.tauri.linearUpdateIssue(
+        connection.organizationId,
+        issue.id,
+        update,
+      );
+      this.issues.update((items) =>
+        items.map((entry) => (entry.id === issue.id ? updated : entry)),
+      );
+      this.projectIssues.update((items) =>
+        items.map((entry) => (entry.id === issue.id ? updated : entry)),
+      );
+      this.issueDetail.update((detail) =>
+        detail?.issue.id === issue.id ? { ...detail, issue: updated } : detail,
+      );
+    } catch (error) {
+      this.error.set(error instanceof Error ? error.message : String(error));
+    }
+  }
+
+  protected async loadIssues(): Promise<void> {
+    const connection = this.selected();
+    if (!connection || this.loading()) return;
+    this.loading.set(true);
+    this.error.set(null);
+    try {
+      const page = await this.tauri.linearMyIssues(connection.organizationId);
+      this.issues.set(page.issues);
+      this.nextCursor = page.endCursor;
+      this.hasNextPage.set(page.hasNextPage);
+    } catch (error) {
+      this.error.set(error instanceof Error ? error.message : String(error));
+    } finally {
+      this.loading.set(false);
+    }
+  }
+
+  protected async loadMore(): Promise<void> {
+    const connection = this.selected();
+    if (!connection || !this.nextCursor || this.loading()) return;
+    this.loading.set(true);
+    try {
+      const page = await this.tauri.linearMyIssues(connection.organizationId, this.nextCursor);
+      this.issues.update((issues) => [...issues, ...page.issues]);
+      this.nextCursor = page.endCursor;
+      this.hasNextPage.set(page.hasNextPage);
+    } catch (error) {
+      this.error.set(error instanceof Error ? error.message : String(error));
+    } finally {
+      this.loading.set(false);
+    }
+  }
+
+  protected async openIssue(url: string): Promise<void> {
+    try {
+      const parsed = new URL(url);
+      if (parsed.protocol !== 'https:' || parsed.hostname !== 'linear.app') {
+        throw new Error('Linear returned an invalid issue link.');
+      }
+      await this.tauri.openUrl(parsed.toString());
+    } catch (error) {
+      this.error.set(error instanceof Error ? error.message : String(error));
+    }
+  }
+
+  private async refreshConnections(selectOrganizationId?: string): Promise<void> {
+    try {
+      const connections = await this.tauri.linearStatus();
+      this.connections.set(connections);
+      const selected =
+        connections.find((connection) => connection.organizationId === selectOrganizationId) ??
+        connections.find(
+          (connection) => connection.organizationId === this.selected()?.organizationId,
+        ) ??
+        connections[0] ??
+        null;
+      this.selected.set(selected);
+      if (selected) {
+        this.select(selected);
+      }
+    } catch (error) {
+      this.error.set(error instanceof Error ? error.message : String(error));
+    }
+  }
+
+  private async loadTeams(connection: LinearConnection): Promise<void> {
+    try {
+      const teams = await this.tauri.linearTeams(connection.organizationId);
+      this.teams.set(teams);
+      this.users.set(await this.tauri.linearUsers(connection.organizationId));
+      const teamId = teams[0]?.id ?? '';
+      this.createTeamId.set(teamId);
+      const entries = await Promise.all(
+        teams.map(
+          async (team) =>
+            [
+              team.id,
+              await this.tauri.linearWorkflowStates(connection.organizationId, team.id),
+            ] as const,
+        ),
+      );
+      this.workflowStates.set(Object.fromEntries(entries));
+    } catch (error) {
+      this.error.set(error instanceof Error ? error.message : String(error));
+    }
+  }
+}

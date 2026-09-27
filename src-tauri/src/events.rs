@@ -94,6 +94,7 @@ pub enum AppEvent {
     /// same reason: the palette that dispatched the command and the main
     /// window that must switch views are separate webviews.
     OpenGithubRequested,
+    OpenLinearRequested,
 
     /// The "Runtime" command was run from another surface.
     OpenRuntimeRequested,

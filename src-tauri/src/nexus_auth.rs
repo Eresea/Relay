@@ -15,7 +15,7 @@ use crate::error::{Error, Result};
 const NEXUS: &str = "https://nexus.eresea.net";
 const CLIENT_ID: &str = "relay";
 const REDIRECT_URI: &str = "relay://auth/callback";
-const SCOPE: &str = "openid profile email credentials:create";
+const SCOPE: &str = "openid profile email credentials:create credentials:grant:self";
 const KEYRING_SERVICE: &str = "relay-nexus-auth";
 const KEYRING_ACCOUNT: &str = "oauth-session";
 

@@ -27,6 +27,10 @@ use crate::github::{
 };
 use crate::gmail::{self, GmailSettings, GmailState, GmailStatus, HttpGoogleApi, OsKeyStore};
 use crate::jobs::{JobId, JobRegistry};
+use crate::linear::{
+    self, Initiative, Issue, IssueDetail, IssuePage, LinearComment, LinearConnection, LinearCycle,
+    LinearMilestone, LinearProject, Person, Team, WorkflowState,
+};
 #[cfg(mobile)]
 use crate::mobile_updates;
 use crate::nexus_auth;
@@ -79,6 +83,7 @@ pub enum CoreCommand {
     HideHud,
     OpenVault,
     OpenGithub,
+    OpenLinear,
     OpenRuntime,
     OpenAgents,
     OpenAgentThread(OpenAgentThreadArgs),
@@ -109,6 +114,11 @@ pub fn run_core_command(app: AppHandle, command: CoreCommand) -> Result<()> {
         CoreCommand::OpenGithub => {
             overlay::show_main(&app)?;
             app.emit(AppEvent::OpenGithubRequested);
+            Ok(())
+        }
+        CoreCommand::OpenLinear => {
+            overlay::show_main(&app)?;
+            app.emit(AppEvent::OpenLinearRequested);
             Ok(())
         }
         CoreCommand::OpenRuntime => {
@@ -301,6 +311,283 @@ pub fn github_connect_start(
 #[tauri::command]
 pub async fn github_disconnect(app: AppHandle) -> Result<()> {
     github::disconnect(&app).await
+}
+
+#[tauri::command]
+pub async fn linear_status(app: AppHandle) -> Result<Vec<LinearConnection>> {
+    linear::status(&app).await
+}
+
+#[tauri::command]
+pub fn linear_oauth_configured() -> bool {
+    linear::oauth_configured()
+}
+
+#[tauri::command]
+pub async fn linear_connect_start(app: AppHandle) -> Result<()> {
+    linear::connect_start(app).await
+}
+
+#[tauri::command]
+pub async fn linear_disconnect(app: AppHandle, organization_id: String) -> Result<()> {
+    linear::disconnect(&app, &organization_id).await
+}
+
+#[tauri::command]
+pub async fn linear_teams(app: AppHandle, organization_id: String) -> Result<Vec<Team>> {
+    linear::teams(&app, &organization_id).await
+}
+
+#[tauri::command]
+pub async fn linear_users(app: AppHandle, organization_id: String) -> Result<Vec<Person>> {
+    linear::users(&app, &organization_id).await
+}
+
+#[tauri::command]
+pub async fn linear_projects(
+    app: AppHandle,
+    organization_id: String,
+) -> Result<Vec<LinearProject>> {
+    linear::projects(&app, &organization_id).await
+}
+
+#[tauri::command]
+pub async fn linear_create_project(
+    app: AppHandle,
+    organization_id: String,
+    team_id: String,
+    name: String,
+    description: Option<String>,
+) -> Result<LinearProject> {
+    if name.trim().is_empty() || name.chars().count() > 255 || team_id.trim().is_empty() {
+        return Err(std::io::Error::other("Project name and team are required").into());
+    }
+    linear::create_project(
+        &app,
+        &organization_id,
+        &team_id,
+        name.trim(),
+        description.as_deref(),
+    )
+    .await
+}
+
+#[tauri::command]
+pub async fn linear_update_project(
+    app: AppHandle,
+    organization_id: String,
+    project_id: String,
+    name: String,
+    description: String,
+) -> Result<LinearProject> {
+    if project_id.trim().is_empty() || name.trim().is_empty() || name.chars().count() > 255 {
+        return Err(std::io::Error::other("Project name is required").into());
+    }
+    linear::update_project(
+        &app,
+        &organization_id,
+        &project_id,
+        name.trim(),
+        &description,
+    )
+    .await
+}
+
+#[tauri::command]
+pub async fn linear_project_milestones(
+    app: AppHandle,
+    organization_id: String,
+    project_id: String,
+) -> Result<Vec<LinearMilestone>> {
+    if project_id.trim().is_empty() {
+        return Err(std::io::Error::other("Project is required").into());
+    }
+    linear::project_milestones(&app, &organization_id, &project_id).await
+}
+
+#[tauri::command]
+pub async fn linear_create_milestone(
+    app: AppHandle,
+    organization_id: String,
+    project_id: String,
+    name: String,
+    description: Option<String>,
+    target_date: Option<String>,
+) -> Result<LinearMilestone> {
+    if project_id.trim().is_empty() || name.trim().is_empty() || name.chars().count() > 255 {
+        return Err(std::io::Error::other("Milestone name is required").into());
+    }
+    linear::create_milestone(
+        &app,
+        &organization_id,
+        &project_id,
+        name.trim(),
+        description.as_deref(),
+        target_date.as_deref(),
+    )
+    .await
+}
+
+#[tauri::command]
+pub async fn linear_update_milestone(
+    app: AppHandle,
+    organization_id: String,
+    milestone_id: String,
+    name: String,
+    description: String,
+    target_date: Option<String>,
+) -> Result<LinearMilestone> {
+    if milestone_id.trim().is_empty() || name.trim().is_empty() || name.chars().count() > 255 {
+        return Err(std::io::Error::other("Milestone name is required").into());
+    }
+    linear::update_milestone(
+        &app,
+        &organization_id,
+        &milestone_id,
+        name.trim(),
+        &description,
+        target_date.as_deref(),
+    )
+    .await
+}
+
+#[tauri::command]
+pub async fn linear_initiatives(
+    app: AppHandle,
+    organization_id: String,
+) -> Result<Vec<Initiative>> {
+    linear::initiatives(&app, &organization_id).await
+}
+
+#[tauri::command]
+pub async fn linear_cycles(
+    app: AppHandle,
+    organization_id: String,
+    team_id: String,
+) -> Result<Vec<LinearCycle>> {
+    linear::cycles(&app, &organization_id, &team_id).await
+}
+
+#[tauri::command]
+pub async fn linear_workflow_states(
+    app: AppHandle,
+    organization_id: String,
+    team_id: String,
+) -> Result<Vec<WorkflowState>> {
+    linear::workflow_states(&app, &organization_id, &team_id).await
+}
+
+#[tauri::command]
+pub async fn linear_create_issue(
+    app: AppHandle,
+    organization_id: String,
+    team_id: String,
+    title: String,
+    description: Option<String>,
+    project_id: Option<String>,
+    project_milestone_id: Option<String>,
+    parent_id: Option<String>,
+) -> Result<Issue> {
+    if title.trim().is_empty()
+        || title.chars().count() > 255
+        || project_id.as_ref().is_some_and(|value| value.trim().is_empty())
+        || project_milestone_id
+            .as_ref()
+            .is_some_and(|value| value.trim().is_empty())
+        || parent_id.as_ref().is_some_and(|value| value.trim().is_empty())
+    {
+        return Err(std::io::Error::other("Issue title must be 1–255 characters").into());
+    }
+    linear::create_issue(
+        &app,
+        &organization_id,
+        &team_id,
+        title.trim(),
+        description.as_deref(),
+        project_id.as_deref(),
+        project_milestone_id.as_deref(),
+        parent_id.as_deref(),
+    )
+    .await
+}
+
+#[tauri::command]
+pub async fn linear_issue_detail(
+    app: AppHandle,
+    organization_id: String,
+    issue_id: String,
+) -> Result<IssueDetail> {
+    if issue_id.trim().is_empty() {
+        return Err(std::io::Error::other("Issue is required").into());
+    }
+    linear::issue_detail(&app, &organization_id, &issue_id).await
+}
+
+#[tauri::command]
+pub async fn linear_create_comment(
+    app: AppHandle,
+    organization_id: String,
+    issue_id: String,
+    body: String,
+) -> Result<LinearComment> {
+    if issue_id.trim().is_empty() || body.trim().is_empty() || body.chars().count() > 10_000 {
+        return Err(std::io::Error::other("Comment must be 1–10,000 characters").into());
+    }
+    linear::create_comment(&app, &organization_id, &issue_id, body.trim()).await
+}
+
+#[tauri::command]
+pub async fn linear_update_issue(
+    app: AppHandle,
+    organization_id: String,
+    issue_id: String,
+    state_id: Option<String>,
+    assignee_id: Option<String>,
+    clear_assignee: Option<bool>,
+    cycle_id: Option<String>,
+    clear_cycle: Option<bool>,
+    priority: Option<u8>,
+) -> Result<Issue> {
+    if issue_id.trim().is_empty()
+        || priority.is_some_and(|value| value > 4)
+        || assignee_id.as_ref().is_some_and(|value| value.trim().is_empty())
+        || cycle_id.as_ref().is_some_and(|value| value.trim().is_empty())
+        || (clear_assignee.unwrap_or(false) && assignee_id.is_some())
+        || (clear_cycle.unwrap_or(false) && cycle_id.is_some())
+    {
+        return Err(std::io::Error::other("Invalid Linear issue update").into());
+    }
+    linear::update_issue(
+        &app,
+        &organization_id,
+        &issue_id,
+        state_id.as_deref(),
+        assignee_id.as_deref(),
+        clear_assignee.unwrap_or(false),
+        cycle_id.as_deref(),
+        clear_cycle.unwrap_or(false),
+        priority,
+    )
+    .await
+}
+
+#[tauri::command]
+pub async fn linear_my_issues(
+    app: AppHandle,
+    organization_id: String,
+    after: Option<String>,
+) -> Result<IssuePage> {
+    linear::my_issues(&app, &organization_id, after.as_deref()).await
+}
+
+#[tauri::command]
+pub async fn linear_project_issues(
+    app: AppHandle,
+    organization_id: String,
+    project_id: String,
+    after: Option<String>,
+) -> Result<IssuePage> {
+    linear::project_issues(&app, &organization_id, &project_id, after.as_deref()).await
 }
 
 #[tauri::command]

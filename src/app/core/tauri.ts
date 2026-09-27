@@ -531,6 +531,232 @@ export class TauriBridge {
     await this.invoke('github_disconnect');
   }
 
+  async linearStatus(): Promise<readonly LinearConnection[]> {
+    return (await this.invoke<LinearConnection[]>('linear_status')) ?? [];
+  }
+
+  async linearOauthConfigured(): Promise<boolean> {
+    return (await this.invoke<boolean>('linear_oauth_configured')) ?? false;
+  }
+
+  async linearConnectStart(): Promise<void> {
+    await this.invoke('linear_connect_start');
+  }
+
+  async linearDisconnect(organizationId: string): Promise<void> {
+    await this.invoke('linear_disconnect', { organizationId });
+  }
+
+  async linearTeams(organizationId: string): Promise<readonly LinearTeam[]> {
+    return (await this.invoke<LinearTeam[]>('linear_teams', { organizationId })) ?? [];
+  }
+
+  async linearUsers(organizationId: string): Promise<readonly LinearPerson[]> {
+    return (await this.invoke<LinearPerson[]>('linear_users', { organizationId })) ?? [];
+  }
+
+  async linearProjects(organizationId: string): Promise<readonly LinearProject[]> {
+    return (await this.invoke<LinearProject[]>('linear_projects', { organizationId })) ?? [];
+  }
+
+  async linearCreateProject(
+    organizationId: string,
+    teamId: string,
+    name: string,
+    description: string,
+  ): Promise<LinearProject> {
+    const project = await this.invoke<LinearProject>('linear_create_project', {
+      organizationId,
+      teamId,
+      name,
+      description: description || null,
+    });
+    if (!project) throw new Error('Linear returned no project.');
+    return project;
+  }
+
+  async linearUpdateProject(
+    organizationId: string,
+    projectId: string,
+    name: string,
+    description: string,
+  ): Promise<LinearProject> {
+    const project = await this.invoke<LinearProject>('linear_update_project', {
+      organizationId,
+      projectId,
+      name,
+      description,
+    });
+    if (!project) throw new Error('Linear returned no project.');
+    return project;
+  }
+
+  async linearProjectMilestones(
+    organizationId: string,
+    projectId: string,
+  ): Promise<readonly LinearMilestone[]> {
+    return (
+      (await this.invoke<LinearMilestone[]>('linear_project_milestones', {
+        organizationId,
+        projectId,
+      })) ?? []
+    );
+  }
+
+  async linearCreateMilestone(
+    organizationId: string,
+    projectId: string,
+    name: string,
+    description: string,
+    targetDate: string,
+  ): Promise<LinearMilestone> {
+    const milestone = await this.invoke<LinearMilestone>('linear_create_milestone', {
+      organizationId,
+      projectId,
+      name,
+      description: description || null,
+      targetDate: targetDate || null,
+    });
+    if (!milestone) throw new Error('Linear returned no milestone.');
+    return milestone;
+  }
+
+  async linearUpdateMilestone(
+    organizationId: string,
+    milestoneId: string,
+    name: string,
+    description: string,
+    targetDate: string,
+  ): Promise<LinearMilestone> {
+    const milestone = await this.invoke<LinearMilestone>('linear_update_milestone', {
+      organizationId,
+      milestoneId,
+      name,
+      description,
+      targetDate: targetDate || null,
+    });
+    if (!milestone) throw new Error('Linear returned no milestone.');
+    return milestone;
+  }
+
+  async linearInitiatives(organizationId: string): Promise<readonly LinearInitiative[]> {
+    return (await this.invoke<LinearInitiative[]>('linear_initiatives', { organizationId })) ?? [];
+  }
+
+  async linearCycles(organizationId: string, teamId: string): Promise<readonly LinearCycle[]> {
+    return (await this.invoke<LinearCycle[]>('linear_cycles', { organizationId, teamId })) ?? [];
+  }
+
+  async linearWorkflowStates(
+    organizationId: string,
+    teamId: string,
+  ): Promise<readonly LinearWorkflowState[]> {
+    return (
+      (await this.invoke<LinearWorkflowState[]>('linear_workflow_states', {
+        organizationId,
+        teamId,
+      })) ?? []
+    );
+  }
+
+  async linearCreateIssue(
+    organizationId: string,
+    teamId: string,
+    title: string,
+    description: string,
+    projectId: string | null = null,
+    projectMilestoneId: string | null = null,
+    parentId: string | null = null,
+  ): Promise<LinearIssue> {
+    const issue = await this.invoke<LinearIssue>('linear_create_issue', {
+      organizationId,
+      teamId,
+      title,
+      description: description || null,
+      projectId,
+      projectMilestoneId,
+      parentId,
+    });
+    if (!issue) throw new Error('Linear returned no issue.');
+    return issue;
+  }
+
+  async linearIssueDetail(organizationId: string, issueId: string): Promise<LinearIssueDetail> {
+    const detail = await this.invoke<LinearIssueDetail>('linear_issue_detail', {
+      organizationId,
+      issueId,
+    });
+    if (!detail) throw new Error('Linear returned no issue detail.');
+    return detail;
+  }
+
+  async linearCreateComment(
+    organizationId: string,
+    issueId: string,
+    body: string,
+  ): Promise<LinearComment> {
+    const comment = await this.invoke<LinearComment>('linear_create_comment', {
+      organizationId,
+      issueId,
+      body,
+    });
+    if (!comment) throw new Error('Linear returned no comment.');
+    return comment;
+  }
+
+  async linearUpdateIssue(
+    organizationId: string,
+    issueId: string,
+    update: {
+      stateId?: string;
+      assigneeId?: string;
+      clearAssignee?: boolean;
+      cycleId?: string;
+      clearCycle?: boolean;
+      priority?: number;
+    },
+  ): Promise<LinearIssue> {
+    const issue = await this.invoke<LinearIssue>('linear_update_issue', {
+      organizationId,
+      issueId,
+      ...update,
+    });
+    if (!issue) throw new Error('Linear returned no issue.');
+    return issue;
+  }
+
+  async linearMyIssues(
+    organizationId: string,
+    after: string | null = null,
+  ): Promise<LinearIssuePage> {
+    const result = await this.invoke<LinearIssuePage>('linear_my_issues', {
+      organizationId,
+      after,
+    });
+    if (!result) throw new Error('Linear returned no issues.');
+    return result;
+  }
+
+  async linearProjectIssues(
+    organizationId: string,
+    projectId: string,
+    after: string | null = null,
+  ): Promise<LinearIssuePage> {
+    const result = await this.invoke<LinearIssuePage>('linear_project_issues', {
+      organizationId,
+      projectId,
+      after,
+    });
+    if (!result) throw new Error('Linear returned no project issues.');
+    return result;
+  }
+
+  async onLinearAuth(handler: (event: LinearAuthEvent) => void): Promise<() => void> {
+    if (!this.available) return () => undefined;
+    const { listen } = await import('@tauri-apps/api/event');
+    return listen<LinearAuthEvent>('linear://auth', (message) => handler(message.payload));
+  }
+
   async nexusAuthStatus(): Promise<NexusAuthStatus> {
     return (
       (await this.invoke<NexusAuthStatus>('nexus_auth_status')) ?? {
@@ -617,6 +843,7 @@ export type CoreCommand =
   | { readonly id: 'hide_hud' }
   | { readonly id: 'open_vault' }
   | { readonly id: 'open_github' }
+  | { readonly id: 'open_linear' }
   | { readonly id: 'open_runtime' }
   | { readonly id: 'open_agents' }
   | { readonly id: 'open_agent_thread'; readonly args: { readonly threadId: string } }
@@ -892,6 +1119,108 @@ export interface NexusAuthStatus {
 
 export interface NexusAuthLoginResult {
   readonly mfaRequired: boolean;
+}
+
+export interface LinearConnection {
+  readonly organizationId: string;
+  readonly organizationName: string;
+  readonly urlKey: string;
+  readonly viewerId: string;
+  readonly viewerName: string;
+  readonly viewerEmail: string;
+  readonly nexusCredentialId?: string;
+}
+
+export interface LinearTeam {
+  readonly id: string;
+  readonly name: string;
+  readonly key: string;
+}
+
+export interface LinearPerson {
+  readonly id: string;
+  readonly name: string;
+}
+
+export interface LinearProject {
+  readonly id: string;
+  readonly name: string;
+  readonly description: string | null;
+  readonly url: string;
+  readonly startDate: string | null;
+  readonly targetDate: string | null;
+}
+
+export interface LinearMilestone {
+  readonly id: string;
+  readonly name: string;
+  readonly description: string | null;
+  readonly targetDate: string | null;
+}
+
+export interface LinearInitiative {
+  readonly id: string;
+  readonly name: string;
+  readonly description: string | null;
+  readonly targetDate: string | null;
+  readonly projects: readonly { readonly id: string; readonly name: string }[];
+}
+
+export interface LinearCycle {
+  readonly id: string;
+  readonly name: string;
+  readonly number: number;
+  readonly startsAt: string | null;
+  readonly endsAt: string | null;
+  readonly isActive: boolean;
+  readonly team: LinearTeam;
+}
+
+export interface LinearWorkflowState {
+  readonly id: string;
+  readonly name: string;
+  readonly kind: string;
+  readonly team?: { readonly id: string } | null;
+}
+
+export interface LinearIssue {
+  readonly id: string;
+  readonly identifier: string;
+  readonly title: string;
+  readonly description: string | null;
+  readonly url: string;
+  readonly priority: number;
+  readonly updatedAt: string;
+  readonly state: { readonly id: string; readonly name: string; readonly kind: string } | null;
+  readonly assignee: { readonly id: string; readonly name: string } | null;
+  readonly project: { readonly id: string; readonly name: string } | null;
+  readonly cycle: { readonly id: string; readonly name: string; readonly number: number } | null;
+  readonly team: LinearTeam;
+}
+
+export interface LinearIssuePage {
+  readonly issues: readonly LinearIssue[];
+  readonly endCursor: string | null;
+  readonly hasNextPage: boolean;
+}
+
+export interface LinearComment {
+  readonly id: string;
+  readonly body: string;
+  readonly createdAt: string;
+  readonly user: { readonly id: string; readonly name: string } | null;
+}
+
+export interface LinearIssueDetail {
+  readonly issue: LinearIssue;
+  readonly children: readonly LinearIssue[];
+  readonly comments: readonly LinearComment[];
+}
+
+export interface LinearAuthEvent {
+  readonly connected: boolean;
+  readonly connection: LinearConnection | null;
+  readonly error: string | null;
 }
 
 /** Mirrors `github::oauth::DeviceAuthorization`. */
