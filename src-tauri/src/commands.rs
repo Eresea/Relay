@@ -972,6 +972,8 @@ pub async fn linear_create_issue(
     project_id: Option<String>,
     project_milestone_id: Option<String>,
     parent_id: Option<String>,
+    state_id: Option<String>,
+    cycle_id: Option<String>,
 ) -> Result<Issue> {
     if title.trim().is_empty()
         || title.chars().count() > 255
@@ -993,6 +995,12 @@ pub async fn linear_create_issue(
         || parent_id
             .as_ref()
             .is_some_and(|value| value.trim().is_empty())
+        || state_id
+            .as_ref()
+            .is_some_and(|value| value.trim().is_empty())
+        || cycle_id
+            .as_ref()
+            .is_some_and(|value| value.trim().is_empty())
     {
         return Err(std::io::Error::other("Issue title must be 1–255 characters").into());
     }
@@ -1010,6 +1018,8 @@ pub async fn linear_create_issue(
         project_id.as_deref(),
         project_milestone_id.as_deref(),
         parent_id.as_deref(),
+        state_id.as_deref(),
+        cycle_id.as_deref(),
     )
     .await
 }

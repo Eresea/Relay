@@ -1242,6 +1242,8 @@ pub async fn create_issue(
     project_id: Option<&str>,
     project_milestone_id: Option<&str>,
     parent_id: Option<&str>,
+    state_id: Option<&str>,
+    cycle_id: Option<&str>,
 ) -> Result<Issue> {
     #[derive(Deserialize)]
     struct Data {
@@ -1279,6 +1281,12 @@ pub async fn create_issue(
     }
     if let Some(parent_id) = parent_id {
         input.insert("parentId".into(), json!(parent_id));
+    }
+    if let Some(state_id) = state_id {
+        input.insert("stateId".into(), json!(state_id));
+    }
+    if let Some(cycle_id) = cycle_id {
+        input.insert("cycleId".into(), json!(cycle_id));
     }
     let data: Data = query(
         token,

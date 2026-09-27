@@ -617,6 +617,8 @@ pub async fn create_issue(
     project_id: Option<&str>,
     project_milestone_id: Option<&str>,
     parent_id: Option<&str>,
+    state_id: Option<&str>,
+    cycle_id: Option<&str>,
 ) -> Result<Issue> {
     let viewer_id = connections(app)?
         .into_iter()
@@ -636,6 +638,8 @@ pub async fn create_issue(
         project_id,
         project_milestone_id,
         parent_id,
+        state_id,
+        cycle_id,
     )
     .await
 }

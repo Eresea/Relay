@@ -54,6 +54,8 @@ interface LinearIssueDraft {
   priority?: string;
   dueDate?: string;
   labelIds?: readonly string[];
+  stateId?: string;
+  cycleId?: string;
 }
 
 @Component({
@@ -817,6 +819,32 @@ interface LinearIssueDraft {
                   <details class="issue-create-options">
                     <summary>More fields</summary>
                     <label>
+                      <span>Status</span>
+                      <select
+                        [value]="newStateId()"
+                        (change)="updateIssueDraftState($any($event.target).value)"
+                      >
+                        <option value="">Team default</option>
+                        @for (state of statesForTeam(createTeamId()); track state.id) {
+                          <option [value]="state.id">{{ state.name }}</option>
+                        }
+                      </select>
+                    </label>
+                    <label>
+                      <span>Cycle</span>
+                      <select
+                        [value]="newCycleId()"
+                        (change)="updateIssueDraftCycle($any($event.target).value)"
+                      >
+                        <option value="">No cycle</option>
+                        @for (cycle of cyclesFor(createTeamId()); track cycle.id) {
+                          <option [value]="cycle.id">
+                            {{ cycle.name || 'Cycle ' + cycle.number }}
+                          </option>
+                        }
+                      </select>
+                    </label>
+                    <label>
                       <span>Priority</span>
                       <select
                         [value]="newPriority()"
@@ -895,7 +923,9 @@ interface LinearIssueDraft {
                   newAssigneeId() ||
                   newPriority() ||
                   newDueDate() ||
-                  newLabelIds().length
+                  newLabelIds().length ||
+                  newStateId() ||
+                  newCycleId()
                 ) {
                   <p class="hint">Draft saved on this device.</p>
                 }
@@ -1469,6 +1499,32 @@ interface LinearIssueDraft {
                     <details class="issue-create-options">
                       <summary>More fields</summary>
                       <label>
+                        <span>Status</span>
+                        <select
+                          [value]="newProjectIssueStateId()"
+                          (change)="updateProjectIssueState($any($event.target).value)"
+                        >
+                          <option value="">Team default</option>
+                          @for (state of statesForTeam(createTeamId()); track state.id) {
+                            <option [value]="state.id">{{ state.name }}</option>
+                          }
+                        </select>
+                      </label>
+                      <label>
+                        <span>Cycle</span>
+                        <select
+                          [value]="newProjectIssueCycleId()"
+                          (change)="updateProjectIssueCycle($any($event.target).value)"
+                        >
+                          <option value="">No cycle</option>
+                          @for (cycle of cyclesFor(createTeamId()); track cycle.id) {
+                            <option [value]="cycle.id">
+                              {{ cycle.name || 'Cycle ' + cycle.number }}
+                            </option>
+                          }
+                        </select>
+                      </label>
+                      <label>
                         <span>Priority</span>
                         <select
                           [value]="newProjectIssuePriority()"
@@ -1561,7 +1617,9 @@ interface LinearIssueDraft {
                     newProjectIssueAssigneeId() ||
                     newProjectIssuePriority() ||
                     newProjectIssueDueDate() ||
-                    newProjectIssueLabelIds().length
+                    newProjectIssueLabelIds().length ||
+                    newProjectIssueStateId() ||
+                    newProjectIssueCycleId()
                   ) {
                     <p class="hint">Draft saved on this device.</p>
                   }
@@ -2743,11 +2801,15 @@ export class Linear {
   protected readonly newProjectIssuePriority = signal('');
   protected readonly newProjectIssueDueDate = signal('');
   protected readonly newProjectIssueLabelIds = signal<readonly string[]>([]);
+  protected readonly newProjectIssueStateId = signal('');
+  protected readonly newProjectIssueCycleId = signal('');
   protected readonly newEstimate = signal('');
   protected readonly newAssigneeId = signal('');
   protected readonly newPriority = signal('');
   protected readonly newDueDate = signal('');
   protected readonly newLabelIds = signal<readonly string[]>([]);
+  protected readonly newStateId = signal('');
+  protected readonly newCycleId = signal('');
   protected readonly newSubIssueTitle = signal('');
   protected readonly newComment = signal('');
   protected readonly editingCommentId = signal<string | null>(null);
@@ -3000,6 +3062,10 @@ export class Linear {
 
   protected statesFor(issue: LinearIssue): readonly LinearWorkflowState[] {
     return this.workflowStates()[issue.team.id] ?? [];
+  }
+
+  protected statesForTeam(teamId: string): readonly LinearWorkflowState[] {
+    return this.workflowStates()[teamId] ?? [];
   }
 
   protected estimateOptions(teamId: string) {
@@ -3496,10 +3562,16 @@ export class Linear {
       this.newProjectIssueEstimate.set('');
       this.newLabelIds.set([]);
       this.newProjectIssueLabelIds.set([]);
+      this.newStateId.set('');
+      this.newProjectIssueStateId.set('');
+      this.newCycleId.set('');
+      this.newProjectIssueCycleId.set('');
     }
     this.createTeamId.set(teamId);
     this.saveIssueDraft();
     this.saveProjectIssueDraft();
+    const connection = this.selected();
+    if (connection) void this.loadCreateTeamCycles(connection, teamId);
   }
 
   protected updateIssueDraft(field: 'title' | 'description', value: string): void {
@@ -3532,6 +3604,16 @@ export class Linear {
     this.newLabelIds.set(
       Array.from((event.target as HTMLSelectElement).selectedOptions, (option) => option.value),
     );
+    this.saveIssueDraft();
+  }
+
+  protected updateIssueDraftState(value: string): void {
+    this.newStateId.set(value);
+    this.saveIssueDraft();
+  }
+
+  protected updateIssueDraftCycle(value: string): void {
+    this.newCycleId.set(value);
     this.saveIssueDraft();
   }
 
@@ -3655,6 +3737,8 @@ export class Linear {
       priority: this.newPriority(),
       dueDate: this.newDueDate(),
       labelIds: this.newLabelIds(),
+      stateId: this.newStateId(),
+      cycleId: this.newCycleId(),
     });
   }
 
@@ -3668,6 +3752,8 @@ export class Linear {
     this.newAssigneeId.set(typeof draft?.assigneeId === 'string' ? draft.assigneeId : '');
     this.newPriority.set(typeof draft?.priority === 'string' ? draft.priority : '');
     this.newDueDate.set(typeof draft?.dueDate === 'string' ? draft.dueDate : '');
+    this.newStateId.set(typeof draft?.stateId === 'string' ? draft.stateId : '');
+    this.newCycleId.set(typeof draft?.cycleId === 'string' ? draft.cycleId : '');
     this.newLabelIds.set(
       Array.isArray(draft?.labelIds)
         ? draft.labelIds.filter((labelId): labelId is string => typeof labelId === 'string')
@@ -3714,6 +3800,16 @@ export class Linear {
     this.saveProjectIssueDraft();
   }
 
+  protected updateProjectIssueState(value: string): void {
+    this.newProjectIssueStateId.set(value);
+    this.saveProjectIssueDraft();
+  }
+
+  protected updateProjectIssueCycle(value: string): void {
+    this.newProjectIssueCycleId.set(value);
+    this.saveProjectIssueDraft();
+  }
+
   private saveProjectIssueDraft(): void {
     const connection = this.selected();
     const project = this.selectedProject();
@@ -3728,6 +3824,8 @@ export class Linear {
       priority: this.newProjectIssuePriority(),
       dueDate: this.newProjectIssueDueDate(),
       labelIds: this.newProjectIssueLabelIds(),
+      stateId: this.newProjectIssueStateId(),
+      cycleId: this.newProjectIssueCycleId(),
     });
   }
 
@@ -3748,6 +3846,8 @@ export class Linear {
     );
     this.newProjectIssuePriority.set(typeof draft?.priority === 'string' ? draft.priority : '');
     this.newProjectIssueDueDate.set(typeof draft?.dueDate === 'string' ? draft.dueDate : '');
+    this.newProjectIssueStateId.set(typeof draft?.stateId === 'string' ? draft.stateId : '');
+    this.newProjectIssueCycleId.set(typeof draft?.cycleId === 'string' ? draft.cycleId : '');
     this.newProjectIssueLabelIds.set(
       Array.isArray(draft?.labelIds)
         ? draft.labelIds.filter((labelId): labelId is string => typeof labelId === 'string')
@@ -3766,6 +3866,23 @@ export class Linear {
 
   protected cyclesFor(teamId: string): readonly LinearCycle[] {
     return this.cycles()[teamId] ?? [];
+  }
+
+  private async loadCreateTeamCycles(connection: LinearConnection, teamId: string): Promise<void> {
+    if (!teamId || this.cycles()[teamId]) return;
+    try {
+      const cycles = await this.tauri.linearCycles(connection.organizationId, teamId);
+      if (
+        this.selected()?.organizationId === connection.organizationId &&
+        this.createTeamId() === teamId
+      ) {
+        this.cycles.update((items) => ({ ...items, [teamId]: cycles }));
+      }
+    } catch (error) {
+      if (this.selected()?.organizationId === connection.organizationId) {
+        this.error.set(error instanceof Error ? error.message : String(error));
+      }
+    }
   }
 
   protected cycleDateInTeam(value: string | null, team: LinearTeam): string {
@@ -4682,6 +4799,8 @@ export class Linear {
         this.newPriority() === '' ? undefined : Number(this.newPriority()),
         this.newDueDate() || undefined,
         this.newLabelIds(),
+        this.newStateId() || undefined,
+        this.newCycleId() || undefined,
       );
       this.newTitle.set('');
       this.newDescription.set('');
@@ -4690,6 +4809,8 @@ export class Linear {
       this.newPriority.set('');
       this.newDueDate.set('');
       this.newLabelIds.set([]);
+      this.newStateId.set('');
+      this.newCycleId.set('');
       this.writeLocal(this.issueDraftKey(connection.organizationId), null);
       if (!this.issueTeamId() || this.issueTeamId() === created.team.id) {
         this.issues.update((issues) => [created, ...issues]);
@@ -4726,6 +4847,8 @@ export class Linear {
         this.newProjectIssuePriority() === '' ? undefined : Number(this.newProjectIssuePriority()),
         this.newProjectIssueDueDate() || undefined,
         this.newProjectIssueLabelIds(),
+        this.newProjectIssueStateId() || undefined,
+        this.newProjectIssueCycleId() || undefined,
       );
       this.projectIssues.update((issues) => [issue, ...issues]);
       this.newProjectIssueTitle.set('');
@@ -4736,6 +4859,8 @@ export class Linear {
       this.newProjectIssuePriority.set('');
       this.newProjectIssueDueDate.set('');
       this.newProjectIssueLabelIds.set([]);
+      this.newProjectIssueStateId.set('');
+      this.newProjectIssueCycleId.set('');
       this.writeLocal(this.projectIssueDraftKey(connection.organizationId, project.id), null);
     } catch (error) {
       this.error.set(error instanceof Error ? error.message : String(error));
@@ -5102,6 +5227,7 @@ export class Linear {
         ),
       );
       this.workflowStates.set(Object.fromEntries(entries));
+      await this.loadCreateTeamCycles(connection, teamId);
     } catch (error) {
       this.error.set(error instanceof Error ? error.message : String(error));
     }
