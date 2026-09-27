@@ -18,7 +18,7 @@ const AUTHORIZE_URL: &str = "https://linear.app/oauth/authorize";
 const TOKEN_URL: &str = "https://api.linear.app/oauth/token";
 const REDIRECT_URI: &str = "relay://linear/callback";
 const CLIENT_ID: Option<&str> = option_env!("RELAY_LINEAR_CLIENT_ID");
-const SCOPE: &str = "read,write,initiative:read";
+const SCOPE: &str = "read,write";
 const AUTH_TIMEOUT_SECS: u64 = 600;
 
 pub fn configured() -> bool {

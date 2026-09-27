@@ -752,6 +752,39 @@ import { UmbraButtonComponent } from '@umbra/components/umbra-button/umbra-butto
             </section>
           } @else {
             <section class="issues" aria-label="Linear roadmap initiatives">
+              <form class="create-form" (submit)="createInitiative($event)">
+                <label>
+                  <span>Initiative name</span>
+                  <input
+                    required
+                    maxlength="255"
+                    [value]="newInitiativeName()"
+                    (input)="newInitiativeName.set($any($event.target).value)"
+                  />
+                </label>
+                <label>
+                  <span>Target date</span>
+                  <input
+                    type="date"
+                    [value]="newInitiativeTargetDate()"
+                    (input)="newInitiativeTargetDate.set($any($event.target).value)"
+                  />
+                </label>
+                <label class="description-field">
+                  <span>Description</span>
+                  <textarea
+                    rows="2"
+                    [value]="newInitiativeDescription()"
+                    (input)="newInitiativeDescription.set($any($event.target).value)"
+                  ></textarea>
+                </label>
+                <umbra-button
+                  size="sm"
+                  [disabled]="savingInitiative() || !newInitiativeName().trim()"
+                >
+                  {{ savingInitiative() ? 'Creating' : 'Create initiative' }}
+                </umbra-button>
+              </form>
               @for (initiative of initiatives(); track initiative.id) {
                 <article class="resource-row initiative-row">
                   <div>
@@ -774,7 +807,45 @@ import { UmbraButtonComponent } from '@umbra/components/umbra-button/umbra-butto
                       </div>
                     }
                   </div>
+                  <umbra-button size="sm" variant="outline" (click)="editInitiative(initiative)">
+                    Edit
+                  </umbra-button>
                 </article>
+                @if (editingInitiativeId() === initiative.id) {
+                  <form class="project-edit" (submit)="saveInitiative($event, initiative)">
+                    <label>
+                      <span>Initiative name</span>
+                      <input
+                        required
+                        maxlength="255"
+                        [value]="editInitiativeName()"
+                        (input)="editInitiativeName.set($any($event.target).value)"
+                      />
+                    </label>
+                    <label>
+                      <span>Target date</span>
+                      <input
+                        type="date"
+                        [value]="editInitiativeTargetDate()"
+                        (input)="editInitiativeTargetDate.set($any($event.target).value)"
+                      />
+                    </label>
+                    <label>
+                      <span>Description</span>
+                      <textarea
+                        rows="2"
+                        [value]="editInitiativeDescription()"
+                        (input)="editInitiativeDescription.set($any($event.target).value)"
+                      ></textarea>
+                    </label>
+                    <umbra-button
+                      size="sm"
+                      [disabled]="savingInitiative() || !editInitiativeName().trim()"
+                    >
+                      {{ savingInitiative() ? 'Saving' : 'Save initiative' }}
+                    </umbra-button>
+                  </form>
+                }
               } @empty {
                 <p class="hint">No initiatives are available in this workspace.</p>
               }
@@ -1072,6 +1143,14 @@ export class Linear {
   protected readonly milestones = signal<readonly LinearMilestone[]>([]);
   protected readonly projects = signal<readonly LinearProject[]>([]);
   protected readonly initiatives = signal<readonly LinearInitiative[]>([]);
+  protected readonly newInitiativeName = signal('');
+  protected readonly newInitiativeDescription = signal('');
+  protected readonly newInitiativeTargetDate = signal('');
+  protected readonly editingInitiativeId = signal<string | null>(null);
+  protected readonly editInitiativeName = signal('');
+  protected readonly editInitiativeDescription = signal('');
+  protected readonly editInitiativeTargetDate = signal('');
+  protected readonly savingInitiative = signal(false);
   protected readonly cycles = signal<Readonly<Record<string, readonly LinearCycle[]>>>({});
   protected readonly selectedProject = signal<LinearProject | null>(null);
   protected readonly createProjectOpen = signal(false);
@@ -1495,6 +1574,66 @@ export class Linear {
       this.projects.set(await this.tauri.linearProjects(connection.organizationId));
     } catch (error) {
       this.error.set(error instanceof Error ? error.message : String(error));
+    }
+  }
+
+  protected async createInitiative(event: Event): Promise<void> {
+    event.preventDefault();
+    const connection = this.selected();
+    const name = this.newInitiativeName().trim();
+    if (!connection || !name || this.savingInitiative()) return;
+    this.savingInitiative.set(true);
+    this.error.set(null);
+    try {
+      const initiative = await this.tauri.linearCreateInitiative(
+        connection.organizationId,
+        name,
+        this.newInitiativeDescription().trim(),
+        this.newInitiativeTargetDate(),
+      );
+      this.initiatives.update((items) => [...items, initiative]);
+      this.newInitiativeName.set('');
+      this.newInitiativeDescription.set('');
+      this.newInitiativeTargetDate.set('');
+    } catch (error) {
+      this.error.set(error instanceof Error ? error.message : String(error));
+    } finally {
+      this.savingInitiative.set(false);
+    }
+  }
+
+  protected editInitiative(initiative: LinearInitiative): void {
+    this.editingInitiativeId.set(initiative.id);
+    this.editInitiativeName.set(initiative.name);
+    this.editInitiativeDescription.set(initiative.description ?? '');
+    this.editInitiativeTargetDate.set(initiative.targetDate ?? '');
+  }
+
+  protected async saveInitiative(event: Event, initiative: LinearInitiative): Promise<void> {
+    event.preventDefault();
+    const connection = this.selected();
+    const name = this.editInitiativeName().trim();
+    if (!connection || !name || this.savingInitiative()) return;
+    this.savingInitiative.set(true);
+    this.error.set(null);
+    try {
+      const updated = await this.tauri.linearUpdateInitiative(
+        connection.organizationId,
+        initiative.id,
+        name,
+        this.editInitiativeDescription(),
+        this.editInitiativeTargetDate(),
+      );
+      this.initiatives.update((items) =>
+        items.map((item) =>
+          item.id === updated.id ? { ...updated, projects: item.projects } : item,
+        ),
+      );
+      this.editingInitiativeId.set(null);
+    } catch (error) {
+      this.error.set(error instanceof Error ? error.message : String(error));
+    } finally {
+      this.savingInitiative.set(false);
     }
   }
 

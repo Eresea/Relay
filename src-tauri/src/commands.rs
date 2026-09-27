@@ -468,6 +468,54 @@ pub async fn linear_initiatives(
 }
 
 #[tauri::command]
+pub async fn linear_create_initiative(
+    app: AppHandle,
+    organization_id: String,
+    name: String,
+    description: Option<String>,
+    target_date: Option<String>,
+) -> Result<Initiative> {
+    if organization_id.trim().is_empty() || name.trim().is_empty() || name.chars().count() > 255 {
+        return Err(std::io::Error::other("Initiative name is required").into());
+    }
+    linear::create_initiative(
+        &app,
+        &organization_id,
+        name.trim(),
+        description.as_deref(),
+        target_date.as_deref(),
+    )
+    .await
+}
+
+#[tauri::command]
+pub async fn linear_update_initiative(
+    app: AppHandle,
+    organization_id: String,
+    initiative_id: String,
+    name: String,
+    description: String,
+    target_date: Option<String>,
+) -> Result<Initiative> {
+    if organization_id.trim().is_empty()
+        || initiative_id.trim().is_empty()
+        || name.trim().is_empty()
+        || name.chars().count() > 255
+    {
+        return Err(std::io::Error::other("Initiative name is required").into());
+    }
+    linear::update_initiative(
+        &app,
+        &organization_id,
+        &initiative_id,
+        name.trim(),
+        &description,
+        target_date.as_deref(),
+    )
+    .await
+}
+
+#[tauri::command]
 pub async fn linear_cycles(
     app: AppHandle,
     organization_id: String,

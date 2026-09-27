@@ -251,6 +251,40 @@ pub async fn initiatives(app: &AppHandle, organization_id: &str) -> Result<Vec<I
     api::initiatives(&access_token(app, organization_id).await?).await
 }
 
+pub async fn create_initiative(
+    app: &AppHandle,
+    organization_id: &str,
+    name: &str,
+    description: Option<&str>,
+    target_date: Option<&str>,
+) -> Result<Initiative> {
+    api::create_initiative(
+        &access_token(app, organization_id).await?,
+        name,
+        description,
+        target_date,
+    )
+    .await
+}
+
+pub async fn update_initiative(
+    app: &AppHandle,
+    organization_id: &str,
+    initiative_id: &str,
+    name: &str,
+    description: &str,
+    target_date: Option<&str>,
+) -> Result<Initiative> {
+    api::update_initiative(
+        &access_token(app, organization_id).await?,
+        initiative_id,
+        name,
+        description,
+        target_date,
+    )
+    .await
+}
+
 pub async fn cycles(
     app: &AppHandle,
     organization_id: &str,

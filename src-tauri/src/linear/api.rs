@@ -410,6 +410,59 @@ pub async fn initiatives(token: &str) -> Result<Vec<Initiative>> {
     .collect())
 }
 
+pub async fn create_initiative(
+    token: &str,
+    name: &str,
+    description: Option<&str>,
+    target_date: Option<&str>,
+) -> Result<Initiative> {
+    #[derive(Deserialize)]
+    struct Data {
+        #[serde(rename = "initiativeCreate")]
+        result: InitiativeMutation,
+    }
+    let mut input = serde_json::Map::from_iter([("name".into(), json!(name))]);
+    if let Some(description) = description {
+        input.insert("description".into(), json!(description));
+    }
+    if let Some(target_date) = target_date {
+        input.insert("targetDate".into(), json!(target_date));
+    }
+    let data: Data = query(
+        token,
+        "mutation RelayInitiativeCreate($input: InitiativeCreateInput!) { initiativeCreate(input: $input) { success initiative { id name description targetDate } } }",
+        json!({ "input": input }),
+    )
+    .await?;
+    data.result
+        .into_value("Linear did not create the initiative")
+}
+
+pub async fn update_initiative(
+    token: &str,
+    initiative_id: &str,
+    name: &str,
+    description: &str,
+    target_date: Option<&str>,
+) -> Result<Initiative> {
+    #[derive(Deserialize)]
+    struct Data {
+        #[serde(rename = "initiativeUpdate")]
+        result: InitiativeMutation,
+    }
+    let data: Data = query(
+        token,
+        "mutation RelayInitiativeUpdate($id: String!, $input: InitiativeUpdateInput!) { initiativeUpdate(id: $id, input: $input) { success initiative { id name description targetDate } } }",
+        json!({
+            "id": initiative_id,
+            "input": { "name": name, "description": description, "targetDate": target_date }
+        }),
+    )
+    .await?;
+    data.result
+        .into_value("Linear did not update the initiative")
+}
+
 pub async fn cycles(token: &str, team_id: &str) -> Result<Vec<LinearCycle>> {
     #[derive(Deserialize)]
     struct Data {
@@ -613,6 +666,22 @@ struct MilestoneMutation {
 }
 
 #[derive(Deserialize)]
+struct InitiativeMutation {
+    success: bool,
+    initiative: Option<Initiative>,
+}
+
+impl InitiativeMutation {
+    fn into_value(self, message: &str) -> Result<Initiative> {
+        if !self.success {
+            return Err(Error::LinearApi(message.into()));
+        }
+        self.initiative
+            .ok_or_else(|| Error::LinearApi("Linear returned no initiative".into()))
+    }
+}
+
+#[derive(Deserialize)]
 struct CommentMutation {
     success: bool,
     comment: Option<LinearComment>,
@@ -745,4 +814,26 @@ async fn query<T: DeserializeOwned>(token: &str, query: &str, variables: Value) 
     response
         .data
         .ok_or_else(|| Error::LinearApi("Linear returned no data".into()))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn initiative_mutation_accepts_sparse_payload_and_defaults_projects() {
+        let mutation: InitiativeMutation = serde_json::from_value(json!({
+            "success": true,
+            "initiative": {
+                "id": "initiative-1",
+                "name": "Roadmap",
+                "description": null,
+                "targetDate": "2026-12-31"
+            }
+        }))
+        .unwrap();
+        let initiative = mutation.into_value("failed").unwrap();
+        assert_eq!(initiative.target_date.as_deref(), Some("2026-12-31"));
+        assert!(initiative.projects.is_empty());
+    }
 }
