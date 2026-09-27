@@ -18,18 +18,22 @@
   </span>
 
   <span class="labels">
-    <span class="label" [attr.aria-hidden]="isLoading() && loadingLabel() ? 'true' : null"
+    <span
+      class="label"
+      [attr.aria-hidden]="isLoading() && loadingLabel() ? 'true' : null"
       ><ng-content
     /></span>
     @if (loadingLabel()) {
-      <span class="loading-label" [attr.aria-hidden]="isLoading() ? null : 'true'">{{
-        loadingLabel()
-      }}</span>
+      <span
+        class="loading-label"
+        [attr.aria-hidden]="isLoading() ? null : 'true'"
+        >{{ loadingLabel() }}</span
+      >
     }
   </span>
 </button>
 
-@if (size() === 'icon' && isLoading()) {
+@if (size() === "icon" && isLoading()) {
   <svg
     class="progress-ring"
     viewBox="0 0 36 36"

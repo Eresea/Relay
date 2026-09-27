@@ -1,6 +1,10 @@
 import { ChangeDetectionStrategy, Component, input } from '@angular/core';
 
-export type UmbraBadgeVariant = 'default' | 'secondary' | 'outline' | 'destructive';
+export type UmbraBadgeVariant =
+  | 'default'
+  | 'secondary'
+  | 'outline'
+  | 'destructive';
 
 @Component({
   selector: 'umbra-badge',

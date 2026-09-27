@@ -23,10 +23,7 @@ button {
   color: var(--text-muted);
   font: var(--type-ui);
   text-align: left;
-  transition:
-    background-color var(--dur-hover),
-    color var(--dur-hover),
-    box-shadow var(--dur-hover);
+  transition: background-color var(--dur-hover), color var(--dur-hover), box-shadow var(--dur-hover);
 }
 
 button:hover:not(:disabled) {

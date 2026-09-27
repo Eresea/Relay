@@ -10,9 +10,7 @@
       (click)="select(item)"
     >
       <span>{{ item.label }}</span>
-      @if (item.shortcut) {
-        <kbd>{{ item.shortcut }}</kbd>
-      }
+      @if (item.shortcut) { <kbd>{{ item.shortcut }}</kbd> }
     </button>
   }
 </div>

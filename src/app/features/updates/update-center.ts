@@ -66,6 +66,7 @@ export class UpdateCenter {
         <span class="version">v{{ snapshot().currentVersion }}</span>
         <span class="u-sr-only">{{ label() }}</span>
       </button>
+
     </div>
   `,
   styles: `
@@ -223,4 +224,5 @@ export class UpdateStatusBar {
         break;
     }
   }
+
 }

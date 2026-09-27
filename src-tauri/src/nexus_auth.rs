@@ -534,10 +534,10 @@ pub async fn handle_callback(app: AppHandle, callback: Url) {
                 NexusAuthStatus {
                     connected: true,
                     mfa_required: false,
-                    user_id: Some(session.user_id),
-                    email: Some(session.email),
-                    display_name: Some(session.display_name),
-                    error: None,
+                user_id: Some(session.user_id),
+                email: Some(session.email),
+                display_name: Some(session.display_name),
+                error: None,
                 },
             );
         }

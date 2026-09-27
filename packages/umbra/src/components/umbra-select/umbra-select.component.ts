@@ -19,7 +19,15 @@ import { TemplatePortal } from '@angular/cdk/portal';
 import { takeUntilDestroyed, toObservable } from '@angular/core/rxjs-interop';
 import { FormValueControl } from '@angular/forms/signals';
 import { Subject, merge, of } from 'rxjs';
-import { catchError, debounceTime, exhaustMap, filter, map, switchMap, tap } from 'rxjs/operators';
+import {
+  catchError,
+  debounceTime,
+  exhaustMap,
+  filter,
+  map,
+  switchMap,
+  tap,
+} from 'rxjs/operators';
 import {
   UmbraSelectDataSource,
   UmbraSelectLabels,
@@ -32,7 +40,8 @@ import {
 let nextId = 0;
 
 type SearchOutcome<T> =
-  { query: string; items: T[]; nextCursor?: string } | { query: string; error: unknown };
+  | { query: string; items: T[]; nextCursor?: string }
+  | { query: string; error: unknown };
 
 type PageOutcome<T> =
   | { request: UmbraSelectRequest; items: T[]; nextCursor?: string }
@@ -48,8 +57,10 @@ const DEFAULT_LABELS: UmbraSelectLabels = {
   noResults: (query) => `No results for "${query}"`,
   unableToLoad: 'Unable to load options.',
   unableToLoadMore: 'Unable to load more options.',
-  resultCount: (count) => `${count} ${count === 1 ? 'option' : 'options'} available`,
-  additionalResults: (count) => `${count} additional ${count === 1 ? 'option' : 'options'} loaded`,
+  resultCount: (count) =>
+    `${count} ${count === 1 ? 'option' : 'options'} available`,
+  additionalResults: (count) =>
+    `${count} additional ${count === 1 ? 'option' : 'options'} loaded`,
 };
 
 @Component({
@@ -63,7 +74,9 @@ const DEFAULT_LABELS: UmbraSelectLabels = {
     '[class.w-full]': "widthStrategy() === 'full'",
   },
 })
-export class UmbraSelectComponent<T, V> implements FormValueControl<V | null>, OnInit {
+export class UmbraSelectComponent<T, V>
+  implements FormValueControl<V | null>, OnInit
+{
   readonly dataSource = input.required<UmbraSelectDataSource<T, V>>();
   readonly displayWith = input.required<(item: T) => string>();
   readonly valueWith = input.required<(item: T) => V>();
@@ -116,11 +129,15 @@ export class UmbraSelectComponent<T, V> implements FormValueControl<V | null>, O
     const items =
       selected &&
       (!query || this.displayWith()(selected).toLowerCase().includes(query)) &&
-      !state.items.some((item) => Object.is(this.valueWith()(item), this.valueWith()(selected)))
+      !state.items.some((item) =>
+        Object.is(this.valueWith()(item), this.valueWith()(selected)),
+      )
         ? [selected, ...state.items]
         : state.items;
     if (!query || state.query === this.itemsQuery()) return items;
-    return items.filter((item) => this.displayWith()(item).toLowerCase().includes(query));
+    return items.filter((item) =>
+      this.displayWith()(item).toLowerCase().includes(query),
+    );
   });
 
   readonly id = `umbra-select-${nextId++}`;
@@ -133,7 +150,9 @@ export class UmbraSelectComponent<T, V> implements FormValueControl<V | null>, O
     const item = this.selectedItem();
     return item === null ? null : this.displayWith()(item);
   });
-  readonly hasValue = computed(() => this.value() !== null && this.value() !== undefined);
+  readonly hasValue = computed(
+    () => this.value() !== null && this.value() !== undefined,
+  );
   readonly triggerAriaLabel = computed(() => {
     const value = this.displayLabel() ?? this.placeholder();
     return this.label() ? `${this.label()}: ${value}` : value;
@@ -187,7 +206,9 @@ export class UmbraSelectComponent<T, V> implements FormValueControl<V | null>, O
     const positionStrategy = this.overlay
       .position()
       .flexibleConnectedTo(trigger)
-      .withPositions(this.dropdownPosition() === 'up' ? [above, below] : [below, above])
+      .withPositions(
+        this.dropdownPosition() === 'up' ? [above, below] : [below, above],
+      )
       .withPush(true)
       .withViewportMargin(margin);
     const overlayRef = this.overlay.create({
@@ -297,7 +318,12 @@ export class UmbraSelectComponent<T, V> implements FormValueControl<V | null>, O
       if (event.key === 'ArrowUp') this.moveActive(-1);
       return;
     }
-    if (!event.altKey && !event.ctrlKey && !event.metaKey && event.key.length === 1) {
+    if (
+      !event.altKey &&
+      !event.ctrlKey &&
+      !event.metaKey &&
+      event.key.length === 1
+    ) {
       event.preventDefault();
       this.open();
       this.setQuery(event.key);
@@ -458,7 +484,10 @@ export class UmbraSelectComponent<T, V> implements FormValueControl<V | null>, O
       )
       .subscribe((outcome) => {
         const state = this.state();
-        if (outcome.request.query !== state.query || outcome.request.cursor !== state.cursor)
+        if (
+          outcome.request.query !== state.query ||
+          outcome.request.cursor !== state.cursor
+        )
           return;
         if ('error' in outcome) {
           this.state.update((current) => ({
@@ -484,7 +513,9 @@ export class UmbraSelectComponent<T, V> implements FormValueControl<V | null>, O
             nextCursor: outcome.nextCursor,
           };
         }
-        this.announcement.set(this.resolvedLabels().additionalResults(outcome.items.length));
+        this.announcement.set(
+          this.resolvedLabels().additionalResults(outcome.items.length),
+        );
       });
   }
 
@@ -492,13 +523,15 @@ export class UmbraSelectComponent<T, V> implements FormValueControl<V | null>, O
     toObservable(this.value)
       .pipe(
         switchMap((value) => {
-          if (value === null || value === undefined) return of({ value, item: null as T | null });
+          if (value === null || value === undefined)
+            return of({ value, item: null as T | null });
           const loaded = this.state().items.find((item) =>
             Object.is(this.valueWith()(item), value),
           );
           if (loaded) return of({ value, item: loaded });
           const source = this.dataSource();
-          if (!source.resolveByValue) return of({ value, item: null as T | null });
+          if (!source.resolveByValue)
+            return of({ value, item: null as T | null });
           return source.resolveByValue(value).pipe(
             map((item) => ({ value, item })),
             catchError(() => of({ value, item: null as T | null })),
@@ -546,13 +579,17 @@ export class UmbraSelectComponent<T, V> implements FormValueControl<V | null>, O
   }
 
   private dedupe(items: T[]): T[] {
-    return [...new Map(items.map((item) => [this.valueWith()(item), item])).values()];
+    return [
+      ...new Map(items.map((item) => [this.valueWith()(item), item])).values(),
+    ];
   }
 
   private syncSelectedFrom(items: T[]): void {
     const value = this.value();
     if (value === null || value === undefined) return;
-    const item = items.find((candidate) => Object.is(this.valueWith()(candidate), value));
+    const item = items.find((candidate) =>
+      Object.is(this.valueWith()(candidate), value),
+    );
     if (item) this.selectedItem.set(item);
   }
 
@@ -574,7 +611,11 @@ export class UmbraSelectComponent<T, V> implements FormValueControl<V | null>, O
     const items = this.visibleItems();
     let index = this.activeIndex();
     if (index < 0) index = direction === 1 ? -1 : items.length;
-    for (index += direction; index >= 0 && index < items.length; index += direction) {
+    for (
+      index += direction;
+      index >= 0 && index < items.length;
+      index += direction
+    ) {
       if (!this.isOptionDisabled()(items[index])) {
         this.activeIndex.set(index);
         this.scrollActiveIntoView();

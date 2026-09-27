@@ -279,7 +279,7 @@
   height: var(--space-1);
   border-radius: var(--radius-pill);
   background: var(--accent);
-  content: '';
+  content: "";
 }
 
 .calendar-day[data-selected] {
