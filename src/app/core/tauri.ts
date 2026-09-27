@@ -1054,13 +1054,23 @@ export class TauriBridge {
     return issue;
   }
 
+  async linearArchiveIssue(organizationId: string, issueId: string): Promise<void> {
+    await this.invoke('linear_archive_issue', { organizationId, issueId });
+  }
+
+  async linearUnarchiveIssue(organizationId: string, issueId: string): Promise<void> {
+    await this.invoke('linear_unarchive_issue', { organizationId, issueId });
+  }
+
   async linearMyIssues(
     organizationId: string,
     after: string | null = null,
+    includeArchived = false,
   ): Promise<LinearIssuePage> {
     const result = await this.invoke<LinearIssuePage>('linear_my_issues', {
       organizationId,
       after,
+      includeArchived,
     });
     if (!result) throw new Error('Linear returned no issues.');
     return result;
@@ -1070,11 +1080,13 @@ export class TauriBridge {
     organizationId: string,
     teamId: string,
     after: string | null = null,
+    includeArchived = false,
   ): Promise<LinearIssuePage> {
     const result = await this.invoke<LinearIssuePage>('linear_team_issues', {
       organizationId,
       teamId,
       after,
+      includeArchived,
     });
     if (!result) throw new Error('Linear returned no team issues.');
     return result;
@@ -1577,6 +1589,7 @@ export interface LinearIssue {
   readonly estimate?: number | null;
   readonly dueDate?: string | null;
   readonly updatedAt: string;
+  readonly archivedAt?: string | null;
   readonly state: { readonly id: string; readonly name: string; readonly kind: string } | null;
   readonly assignee: { readonly id: string; readonly name: string } | null;
   readonly project: { readonly id: string; readonly name: string } | null;

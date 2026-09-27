@@ -1152,8 +1152,15 @@ pub async fn linear_my_issues(
     app: AppHandle,
     organization_id: String,
     after: Option<String>,
+    include_archived: Option<bool>,
 ) -> Result<IssuePage> {
-    linear::my_issues(&app, &organization_id, after.as_deref()).await
+    linear::my_issues(
+        &app,
+        &organization_id,
+        after.as_deref(),
+        include_archived.unwrap_or(false),
+    )
+    .await
 }
 
 #[tauri::command]
@@ -1162,11 +1169,43 @@ pub async fn linear_team_issues(
     organization_id: String,
     team_id: String,
     after: Option<String>,
+    include_archived: Option<bool>,
 ) -> Result<IssuePage> {
     if team_id.trim().is_empty() {
         return Err(std::io::Error::other("A Linear team is required").into());
     }
-    linear::team_issues(&app, &organization_id, &team_id, after.as_deref()).await
+    linear::team_issues(
+        &app,
+        &organization_id,
+        &team_id,
+        after.as_deref(),
+        include_archived.unwrap_or(false),
+    )
+    .await
+}
+
+#[tauri::command]
+pub async fn linear_archive_issue(
+    app: AppHandle,
+    organization_id: String,
+    issue_id: String,
+) -> Result<()> {
+    if issue_id.trim().is_empty() {
+        return Err(std::io::Error::other("Issue is required").into());
+    }
+    linear::archive_issue(&app, &organization_id, &issue_id).await
+}
+
+#[tauri::command]
+pub async fn linear_unarchive_issue(
+    app: AppHandle,
+    organization_id: String,
+    issue_id: String,
+) -> Result<()> {
+    if issue_id.trim().is_empty() {
+        return Err(std::io::Error::other("Issue is required").into());
+    }
+    linear::unarchive_issue(&app, &organization_id, &issue_id).await
 }
 
 #[tauri::command]

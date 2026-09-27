@@ -617,6 +617,14 @@ interface LinearIssueDraft {
                   >
                     {{ loading() ? 'Loading' : 'Refresh' }}
                   </umbra-button>
+                  <umbra-button
+                    size="sm"
+                    variant="link"
+                    [disabled]="loading()"
+                    (click)="toggleArchivedIssues()"
+                  >
+                    {{ includeArchivedIssues() ? 'Hide archived' : 'Include archived' }}
+                  </umbra-button>
                   <umbra-button size="sm" variant="outline" (click)="disconnectSelected()">
                     Disconnect
                   </umbra-button>
@@ -696,17 +704,57 @@ interface LinearIssueDraft {
                   <button type="button" class="issue-title" (click)="openIssueDetail(issue)">
                     {{ issue.title }}
                   </button>
-                  <label class="status-control">
-                    <span class="sr-only">Status for {{ issue.identifier }}</span>
-                    <select
-                      [value]="issue.state?.id ?? ''"
-                      (change)="updateStatus(issue, $any($event.target).value)"
-                    >
-                      @for (state of statesFor(issue); track state.id) {
-                        <option [value]="state.id">{{ state.name }}</option>
+                  <div class="issue-actions">
+                    @if (issue.archivedAt) {
+                      <span class="hint">Archived</span>
+                      <umbra-button
+                        size="sm"
+                        variant="outline"
+                        [disabled]="!!archivingIssueId()"
+                        (click)="setIssueArchived(issue, false)"
+                      >
+                        {{ archivingIssueId() === issue.id ? 'Restoring' : 'Restore' }}
+                      </umbra-button>
+                    } @else {
+                      <label class="status-control">
+                        <span class="sr-only">Status for {{ issue.identifier }}</span>
+                        <select
+                          [value]="issue.state?.id ?? ''"
+                          (change)="updateStatus(issue, $any($event.target).value)"
+                        >
+                          @for (state of statesFor(issue); track state.id) {
+                            <option [value]="state.id">{{ state.name }}</option>
+                          }
+                        </select>
+                      </label>
+                      @if (confirmArchiveIssueId() === issue.id) {
+                        <umbra-button
+                          size="sm"
+                          variant="outline"
+                          [disabled]="!!archivingIssueId()"
+                          (click)="setIssueArchived(issue, true)"
+                        >
+                          {{ archivingIssueId() === issue.id ? 'Archiving' : 'Confirm archive' }}
+                        </umbra-button>
+                        <umbra-button
+                          size="sm"
+                          variant="link"
+                          type="button"
+                          (click)="confirmArchiveIssueId.set(null)"
+                        >
+                          Cancel
+                        </umbra-button>
+                      } @else {
+                        <umbra-button
+                          size="sm"
+                          variant="link"
+                          (click)="confirmArchiveIssueId.set(issue.id)"
+                        >
+                          Archive
+                        </umbra-button>
                       }
-                    </select>
-                  </label>
+                    }
+                  </div>
                 </article>
               }
               @if (hasNextPage()) {
@@ -1865,6 +1913,7 @@ interface LinearIssueDraft {
     .issue-actions {
       display: flex;
       align-items: center;
+      flex-wrap: wrap;
       gap: var(--space-2);
     }
     .u-title,
@@ -2126,6 +2175,9 @@ export class Linear {
   protected readonly connections = signal<readonly LinearConnection[]>([]);
   protected readonly selected = signal<LinearConnection | null>(null);
   protected readonly issues = signal<readonly LinearIssue[]>([]);
+  protected readonly includeArchivedIssues = signal(false);
+  protected readonly confirmArchiveIssueId = signal<string | null>(null);
+  protected readonly archivingIssueId = signal<string | null>(null);
   protected readonly issueDetail = signal<LinearIssueDetail | null>(null);
   protected readonly editingIssueDetailsId = signal<string | null>(null);
   protected readonly editIssueTitle = signal('');
@@ -2349,10 +2401,42 @@ export class Linear {
   protected setIssueTeam(teamId: string): void {
     if (this.loading() || teamId === this.issueTeamId()) return;
     this.issueTeamId.set(teamId);
+    this.confirmArchiveIssueId.set(null);
     this.nextCursor = null;
     this.hasNextPage.set(false);
     this.issues.set([]);
     void this.loadIssues();
+  }
+
+  protected toggleArchivedIssues(): void {
+    if (this.loading()) return;
+    this.includeArchivedIssues.update((value) => !value);
+    this.issues.set([]);
+    this.nextCursor = null;
+    this.hasNextPage.set(false);
+    void this.loadIssues();
+  }
+
+  protected async setIssueArchived(issue: LinearIssue, archived: boolean): Promise<void> {
+    const connection = this.selected();
+    if (!connection || this.archivingIssueId()) return;
+    if (archived && this.confirmArchiveIssueId() !== issue.id) return;
+    this.archivingIssueId.set(issue.id);
+    this.error.set(null);
+    try {
+      if (archived) {
+        await this.tauri.linearArchiveIssue(connection.organizationId, issue.id);
+      } else {
+        await this.tauri.linearUnarchiveIssue(connection.organizationId, issue.id);
+      }
+      this.confirmArchiveIssueId.set(null);
+      this.writeLocal(this.issueCacheKey(connection), null);
+      await this.loadIssues();
+    } catch (error) {
+      this.error.set(error instanceof Error ? error.message : String(error));
+    } finally {
+      this.archivingIssueId.set(null);
+    }
   }
 
   protected statesFor(issue: LinearIssue): readonly LinearWorkflowState[] {
@@ -2800,9 +2884,10 @@ export class Linear {
 
   private issueCacheKey(connection: LinearConnection): string {
     const teamId = this.issueTeamId();
-    return teamId
+    const scope = teamId
       ? `relay.linear.issues.${connection.organizationId}.${connection.viewerId}.team.${teamId}`
       : `relay.linear.issues.${connection.organizationId}.${connection.viewerId}`;
+    return this.includeArchivedIssues() ? `${scope}.all` : scope;
   }
 
   private projectCacheKey(connection: LinearConnection, includeArchived = false): string {
@@ -4068,8 +4153,8 @@ export class Linear {
   private fetchIssues(organizationId: string, after: string | null = null) {
     const teamId = this.issueTeamId();
     return teamId
-      ? this.tauri.linearTeamIssues(organizationId, teamId, after)
-      : this.tauri.linearMyIssues(organizationId, after);
+      ? this.tauri.linearTeamIssues(organizationId, teamId, after, this.includeArchivedIssues())
+      : this.tauri.linearMyIssues(organizationId, after, this.includeArchivedIssues());
   }
 
   protected async openIssue(url: string): Promise<void> {

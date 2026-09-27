@@ -818,6 +818,7 @@ pub async fn my_issues(
     app: &AppHandle,
     organization_id: &str,
     after: Option<&str>,
+    include_archived: bool,
 ) -> Result<IssuePage> {
     let connection = connections(app)?
         .into_iter()
@@ -827,6 +828,7 @@ pub async fn my_issues(
         &access_token(app, organization_id).await?,
         &connection.viewer_id,
         after,
+        include_archived,
     )
     .await
 }
@@ -836,8 +838,23 @@ pub async fn team_issues(
     organization_id: &str,
     team_id: &str,
     after: Option<&str>,
+    include_archived: bool,
 ) -> Result<IssuePage> {
-    api::team_issues(&access_token(app, organization_id).await?, team_id, after).await
+    api::team_issues(
+        &access_token(app, organization_id).await?,
+        team_id,
+        after,
+        include_archived,
+    )
+    .await
+}
+
+pub async fn archive_issue(app: &AppHandle, organization_id: &str, issue_id: &str) -> Result<()> {
+    api::archive_issue(&access_token(app, organization_id).await?, issue_id).await
+}
+
+pub async fn unarchive_issue(app: &AppHandle, organization_id: &str, issue_id: &str) -> Result<()> {
+    api::unarchive_issue(&access_token(app, organization_id).await?, issue_id).await
 }
 
 pub async fn project_issues(

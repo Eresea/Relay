@@ -79,6 +79,8 @@ pub struct Issue {
     pub estimate: Option<f64>,
     #[serde(default)]
     pub updated_at: String,
+    #[serde(default)]
+    pub archived_at: Option<String>,
     pub state: Option<WorkflowState>,
     pub assignee: Option<Person>,
     pub project: Option<ProjectRef>,
@@ -1111,6 +1113,7 @@ pub async fn project_issues(
         token,
         json!({ "project": { "id": { "eq": project_id } } }),
         after,
+        false,
     )
     .await
 }
@@ -1200,7 +1203,7 @@ pub async fn issue_detail(token: &str, issue_id: &str) -> Result<IssueDetail> {
     }
     let data: Data = query(
         token,
-        "query RelayIssueDetail($id: String!) { issue(id: $id) { id identifier title description url priority estimate dueDate updatedAt state { id name type } assignee { id name } project { id name } projectMilestone { id name } cycle { id name number } labels { nodes { id name color } } team { id name key } children(first: 50) { nodes { id identifier title description url priority updatedAt state { id name type } assignee { id name } project { id name } cycle { id name number } labels { nodes { id name color } } team { id name key } } } comments(first: 50) { nodes { id body createdAt editedAt user { id name } } } } }",
+        "query RelayIssueDetail($id: String!) { issue(id: $id) { id identifier title description url priority estimate dueDate updatedAt archivedAt state { id name type } assignee { id name } project { id name } projectMilestone { id name } cycle { id name number } labels { nodes { id name color } } team { id name key } children(first: 50) { nodes { id identifier title description url priority updatedAt archivedAt state { id name type } assignee { id name } project { id name } cycle { id name number } labels { nodes { id name color } } team { id name key } } } comments(first: 50) { nodes { id body createdAt editedAt user { id name } } } } }",
         json!({ "id": issue_id }),
     )
     .await?;
@@ -1515,20 +1518,42 @@ impl<T> MutationResult<T> {
     }
 }
 
-pub async fn my_issues(token: &str, assignee_id: &str, after: Option<&str>) -> Result<IssuePage> {
+pub async fn my_issues(
+    token: &str,
+    assignee_id: &str,
+    after: Option<&str>,
+    include_archived: bool,
+) -> Result<IssuePage> {
     issues(
         token,
         json!({ "assignee": { "id": { "eq": assignee_id } } }),
         after,
+        include_archived,
     )
     .await
 }
 
-pub async fn team_issues(token: &str, team_id: &str, after: Option<&str>) -> Result<IssuePage> {
-    issues(token, json!({ "team": { "id": { "eq": team_id } } }), after).await
+pub async fn team_issues(
+    token: &str,
+    team_id: &str,
+    after: Option<&str>,
+    include_archived: bool,
+) -> Result<IssuePage> {
+    issues(
+        token,
+        json!({ "team": { "id": { "eq": team_id } } }),
+        after,
+        include_archived,
+    )
+    .await
 }
 
-async fn issues(token: &str, filter: Value, after: Option<&str>) -> Result<IssuePage> {
+async fn issues(
+    token: &str,
+    filter: Value,
+    after: Option<&str>,
+    include_archived: bool,
+) -> Result<IssuePage> {
     #[derive(Deserialize)]
     struct Data {
         issues: IssueConnection,
@@ -1536,10 +1561,11 @@ async fn issues(token: &str, filter: Value, after: Option<&str>) -> Result<Issue
 
     let data: Data = query(
         token,
-        "query RelayIssues($filter: IssueFilter, $after: String) { issues(filter: $filter, first: 50, after: $after) { nodes { id identifier title description url priority updatedAt state { id name type } assignee { id name } project { id name } cycle { id name number } labels { nodes { id name color } } team { id name key } } pageInfo { endCursor hasNextPage } } }",
+        "query RelayIssues($filter: IssueFilter, $after: String, $includeArchived: Boolean!) { issues(filter: $filter, includeArchived: $includeArchived, first: 50, after: $after) { nodes { id identifier title description url priority updatedAt archivedAt state { id name type } assignee { id name } project { id name } cycle { id name number } labels { nodes { id name color } } team { id name key } } pageInfo { endCursor hasNextPage } } }",
         json!({
             "filter": filter,
-            "after": after
+            "after": after,
+            "includeArchived": include_archived
         }),
     )
     .await?;
@@ -1548,6 +1574,44 @@ async fn issues(token: &str, filter: Value, after: Option<&str>) -> Result<Issue
         end_cursor: data.issues.page_info.end_cursor,
         has_next_page: data.issues.page_info.has_next_page,
     })
+}
+
+pub async fn archive_issue(token: &str, issue_id: &str) -> Result<()> {
+    #[derive(Deserialize)]
+    struct Data {
+        #[serde(rename = "issueArchive")]
+        result: DeleteMutation,
+    }
+    let data: Data = query(
+        token,
+        "mutation RelayIssueArchive($id: String!) { issueArchive(id: $id) { success } }",
+        json!({ "id": issue_id }),
+    )
+    .await?;
+    if data.result.success {
+        Ok(())
+    } else {
+        Err(Error::LinearApi("Linear did not archive the issue".into()))
+    }
+}
+
+pub async fn unarchive_issue(token: &str, issue_id: &str) -> Result<()> {
+    #[derive(Deserialize)]
+    struct Data {
+        #[serde(rename = "issueUnarchive")]
+        result: DeleteMutation,
+    }
+    let data: Data = query(
+        token,
+        "mutation RelayIssueUnarchive($id: String!) { issueUnarchive(id: $id) { success } }",
+        json!({ "id": issue_id }),
+    )
+    .await?;
+    if data.result.success {
+        Ok(())
+    } else {
+        Err(Error::LinearApi("Linear did not restore the issue".into()))
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -1630,6 +1694,33 @@ mod tests {
         assert_eq!(labels.labels[0].id, "label-1");
         let encoded = serde_json::to_value(labels).unwrap();
         assert_eq!(encoded["labels"][0]["id"], "label-1");
+    }
+
+    #[test]
+    fn issue_archived_at_decodes_and_defaults_for_active_issues() {
+        let archived: Issue = serde_json::from_value(json!({
+            "id": "issue-1",
+            "identifier": "ENG-1",
+            "title": "Archived",
+            "archivedAt": "2026-09-27T20:00:00.000Z",
+            "labels": { "nodes": [] },
+            "team": { "id": "team-1", "name": "Engineering", "key": "ENG" }
+        }))
+        .unwrap();
+        assert_eq!(
+            archived.archived_at.as_deref(),
+            Some("2026-09-27T20:00:00.000Z")
+        );
+
+        let active: Issue = serde_json::from_value(json!({
+            "id": "issue-2",
+            "identifier": "ENG-2",
+            "title": "Active",
+            "labels": { "nodes": [] },
+            "team": { "id": "team-1", "name": "Engineering", "key": "ENG" }
+        }))
+        .unwrap();
+        assert_eq!(active.archived_at, None);
     }
 
     #[test]
