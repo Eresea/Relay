@@ -28,9 +28,9 @@ use crate::github::{
 use crate::gmail::{self, GmailSettings, GmailState, GmailStatus, HttpGoogleApi, OsKeyStore};
 use crate::jobs::{JobId, JobRegistry};
 use crate::linear::{
-    self, Initiative, InitiativeProject, Issue, IssueDetail, IssuePage, LinearCodexContext,
-    LinearComment, LinearConnection, LinearCycle, LinearLabel, LinearMilestone, LinearProject,
-    LinearProjectStatus, LinearProjectUpdate, Person, Team, WorkflowState,
+    self, Initiative, InitiativeProject, InitiativeUpdate, Issue, IssueDetail, IssuePage,
+    LinearCodexContext, LinearComment, LinearConnection, LinearCycle, LinearLabel, LinearMilestone,
+    LinearProject, LinearProjectStatus, LinearProjectUpdate, Person, Team, WorkflowState,
 };
 #[cfg(mobile)]
 use crate::mobile_updates;
@@ -629,6 +629,26 @@ pub async fn linear_initiatives(
     include_archived: Option<bool>,
 ) -> Result<Vec<Initiative>> {
     linear::initiatives(&app, &organization_id, include_archived.unwrap_or(false)).await
+}
+
+#[tauri::command]
+pub async fn linear_create_initiative_update(
+    app: AppHandle,
+    organization_id: String,
+    initiative_id: String,
+    body: String,
+    health: String,
+) -> Result<InitiativeUpdate> {
+    if organization_id.trim().is_empty()
+        || initiative_id.trim().is_empty()
+        || body.trim().is_empty()
+        || body.chars().count() > 10_000
+        || !matches!(health.as_str(), "onTrack" | "atRisk" | "offTrack")
+    {
+        return Err(std::io::Error::other("A valid initiative update is required").into());
+    }
+    linear::create_initiative_update(&app, &organization_id, &initiative_id, body.trim(), &health)
+        .await
 }
 
 #[tauri::command]

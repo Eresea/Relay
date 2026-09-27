@@ -9,9 +9,9 @@ use tauri_plugin_store::StoreExt;
 use crate::error::{Error, Result};
 
 pub use api::{
-    Initiative, InitiativeProject, Issue, IssueDetail, IssuePage, LinearComment, LinearCycle,
-    LinearLabel, LinearMilestone, LinearProject, LinearProjectStatus, LinearProjectUpdate, Person,
-    Team, Viewer, WorkflowState,
+    Initiative, InitiativeProject, InitiativeUpdate, Issue, IssueDetail, IssuePage, LinearComment,
+    LinearCycle, LinearLabel, LinearMilestone, LinearProject, LinearProjectStatus,
+    LinearProjectUpdate, Person, Team, Viewer, WorkflowState,
 };
 use oauth::TokenBundle;
 pub use oauth::{LinearCodexLink, LinearCodexProjectPolicy};
@@ -373,6 +373,22 @@ pub async fn initiatives(
     include_archived: bool,
 ) -> Result<Vec<Initiative>> {
     api::initiatives(&access_token(app, organization_id).await?, include_archived).await
+}
+
+pub async fn create_initiative_update(
+    app: &AppHandle,
+    organization_id: &str,
+    initiative_id: &str,
+    body: &str,
+    health: &str,
+) -> Result<InitiativeUpdate> {
+    api::create_initiative_update(
+        &access_token(app, organization_id).await?,
+        initiative_id,
+        body,
+        health,
+    )
+    .await
 }
 
 pub async fn archive_initiative(

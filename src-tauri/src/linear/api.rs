@@ -256,6 +256,20 @@ pub struct Initiative {
     pub archived_at: Option<String>,
     #[serde(default)]
     pub projects: Vec<InitiativeProject>,
+    #[serde(default)]
+    pub updates: Vec<InitiativeUpdate>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct InitiativeUpdate {
+    pub id: String,
+    pub body: String,
+    pub health: String,
+    pub created_at: String,
+    pub user: Person,
+    #[serde(default)]
+    pub archived_at: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -707,6 +721,8 @@ pub async fn initiatives(token: &str, include_archived: bool) -> Result<Vec<Init
         target_date: Option<String>,
         #[serde(rename = "archivedAt")]
         archived_at: Option<String>,
+        #[serde(rename = "initiativeUpdates")]
+        updates: Nodes<InitiativeUpdate>,
     }
     #[derive(Deserialize)]
     struct Data {
@@ -726,7 +742,7 @@ pub async fn initiatives(token: &str, include_archived: bool) -> Result<Vec<Init
     }
     let data = query::<Data>(
         token,
-        "query RelayInitiatives($includeArchived: Boolean!) { initiatives(first: 100, includeArchived: $includeArchived) { nodes { id name description targetDate archivedAt } } initiativeToProjects(first: 100, includeArchived: $includeArchived) { nodes { id initiative { id } project { id name } } } }",
+        "query RelayInitiatives($includeArchived: Boolean!) { initiatives(first: 100, includeArchived: $includeArchived) { nodes { id name description targetDate archivedAt initiativeUpdates(first: 50, includeArchived: $includeArchived) { nodes { id body health createdAt archivedAt user { id name } } } } } initiativeToProjects(first: 100, includeArchived: $includeArchived) { nodes { id initiative { id } project { id name } } } }",
         json!({ "includeArchived": include_archived }),
     )
     .await?;
@@ -751,8 +767,30 @@ pub async fn initiatives(token: &str, include_archived: bool) -> Result<Vec<Init
             target_date: initiative.target_date,
             archived_at: initiative.archived_at,
             projects: projects.remove(&initiative.id).unwrap_or_default(),
+            updates: initiative.updates.nodes,
         })
         .collect())
+}
+
+pub async fn create_initiative_update(
+    token: &str,
+    initiative_id: &str,
+    body: &str,
+    health: &str,
+) -> Result<InitiativeUpdate> {
+    #[derive(Deserialize)]
+    struct Data {
+        #[serde(rename = "initiativeUpdateCreate")]
+        result: InitiativeUpdateMutation,
+    }
+    let data: Data = query(
+        token,
+        "mutation RelayInitiativeUpdateCreate($input: InitiativeUpdateCreateInput!) { initiativeUpdateCreate(input: $input) { success initiativeUpdate { id body health createdAt archivedAt user { id name } } } }",
+        json!({ "input": { "initiativeId": initiative_id, "body": body, "health": health } }),
+    )
+    .await?;
+    data.result
+        .into_value("Linear did not create the initiative update")
 }
 
 pub async fn archive_initiative(token: &str, initiative_id: &str) -> Result<()> {
@@ -1231,6 +1269,13 @@ struct InitiativeMutation {
 }
 
 #[derive(Deserialize)]
+struct InitiativeUpdateMutation {
+    success: bool,
+    #[serde(rename = "initiativeUpdate")]
+    initiative_update: Option<InitiativeUpdate>,
+}
+
+#[derive(Deserialize)]
 struct InitiativeProjectMutation {
     success: bool,
     #[serde(rename = "initiativeToProject")]
@@ -1249,6 +1294,17 @@ impl InitiativeMutation {
         }
         self.initiative
             .ok_or_else(|| Error::LinearApi("Linear returned no initiative".into()))
+    }
+}
+
+impl InitiativeUpdateMutation {
+    fn into_value(self, message: &str) -> Result<InitiativeUpdate> {
+        if self.success {
+            self.initiative_update
+                .ok_or_else(|| Error::LinearApi("Linear returned no initiative update".into()))
+        } else {
+            Err(Error::LinearApi(message.into()))
+        }
     }
 }
 
@@ -1497,6 +1553,26 @@ mod tests {
         let initiative = mutation.into_value("failed").unwrap();
         assert_eq!(initiative.target_date.as_deref(), Some("2026-12-31"));
         assert!(initiative.projects.is_empty());
+    }
+
+    #[test]
+    fn initiative_update_mutation_decodes_health_and_author() {
+        let mutation: InitiativeUpdateMutation = serde_json::from_value(json!({
+            "success": true,
+            "initiativeUpdate": {
+                "id": "update-1",
+                "body": "Launch remains on schedule.",
+                "health": "onTrack",
+                "createdAt": "2026-09-27T20:00:00.000Z",
+                "archivedAt": null,
+                "user": { "id": "user-1", "name": "Alex" }
+            }
+        }))
+        .unwrap();
+        let update = mutation.into_value("failed").unwrap();
+        assert_eq!(update.id, "update-1");
+        assert_eq!(update.health, "onTrack");
+        assert_eq!(update.user.name, "Alex");
     }
 
     #[test]

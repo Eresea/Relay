@@ -16,6 +16,7 @@ import {
   type LinearConnection,
   type LinearCycle,
   type LinearInitiative,
+  type LinearInitiativeUpdate,
   type LinearIssue,
   type LinearIssueDetail,
   type LinearIssuePage,
@@ -1441,6 +1442,37 @@ interface LinearIssueDraft {
                         }
                       </div>
                     }
+                    @if (initiative.updates.length) {
+                      <div class="project-updates" aria-label="Initiative status updates">
+                        @for (update of initiative.updates; track update.id) {
+                          @if (!update.archivedAt) {
+                            <article class="project-update">
+                              <div>
+                                <strong>{{ projectHealthLabel(update.health) }}</strong>
+                                <span class="muted"
+                                  >{{ update.user.name }} ·
+                                  {{ projectUpdateDate(update.createdAt) }}</span
+                                >
+                              </div>
+                              <p>{{ update.body }}</p>
+                            </article>
+                          }
+                        }
+                      </div>
+                    }
+                    @if (!initiative.archivedAt) {
+                      <umbra-button
+                        size="sm"
+                        variant="outline"
+                        (click)="toggleInitiativeUpdate(initiative)"
+                      >
+                        {{
+                          initiativeUpdateId() === initiative.id
+                            ? 'Cancel update'
+                            : 'Post status update'
+                        }}
+                      </umbra-button>
+                    }
                     @if (!initiative.archivedAt && availableInitiativeProjects(initiative).length) {
                       <div class="issue-actions">
                         <label>
@@ -1507,6 +1539,37 @@ interface LinearIssueDraft {
                     }
                   </div>
                 </article>
+                @if (initiativeUpdateId() === initiative.id) {
+                  <form class="project-edit" (submit)="createInitiativeUpdate($event, initiative)">
+                    <label>
+                      <span>Health</span>
+                      <select
+                        [value]="initiativeUpdateHealth()"
+                        (change)="initiativeUpdateHealth.set($any($event.target).value)"
+                      >
+                        <option value="onTrack">On track</option>
+                        <option value="atRisk">At risk</option>
+                        <option value="offTrack">Off track</option>
+                      </select>
+                    </label>
+                    <label>
+                      <span>Status update</span>
+                      <textarea
+                        required
+                        maxlength="10000"
+                        rows="3"
+                        [value]="initiativeUpdateBody()"
+                        (input)="initiativeUpdateBody.set($any($event.target).value)"
+                      ></textarea>
+                    </label>
+                    <umbra-button
+                      size="sm"
+                      [disabled]="creatingInitiativeUpdate() || !initiativeUpdateBody().trim()"
+                    >
+                      {{ creatingInitiativeUpdate() ? 'Posting' : 'Post update' }}
+                    </umbra-button>
+                  </form>
+                }
                 @if (editingInitiativeId() === initiative.id) {
                   <form class="project-edit" (submit)="saveInitiative($event, initiative)">
                     <label>
@@ -1863,6 +1926,10 @@ export class Linear {
   protected readonly projects = signal<readonly LinearProject[]>([]);
   protected readonly projectStatuses = signal<readonly LinearProjectStatus[]>([]);
   protected readonly initiatives = signal<readonly LinearInitiative[]>([]);
+  protected readonly initiativeUpdateId = signal<string | null>(null);
+  protected readonly initiativeUpdateBody = signal('');
+  protected readonly initiativeUpdateHealth = signal<LinearProjectHealth>('onTrack');
+  protected readonly creatingInitiativeUpdate = signal(false);
   protected readonly includeArchivedInitiatives = signal(false);
   protected readonly busyInitiativeId = signal<string | null>(null);
   protected readonly newInitiativeName = signal('');
@@ -2838,6 +2905,48 @@ export class Linear {
       );
     } catch (error) {
       this.error.set(error instanceof Error ? error.message : String(error));
+    }
+  }
+
+  protected toggleInitiativeUpdate(initiative: LinearInitiative): void {
+    if (this.initiativeUpdateId() === initiative.id) {
+      this.initiativeUpdateId.set(null);
+      this.initiativeUpdateBody.set('');
+      return;
+    }
+    this.initiativeUpdateId.set(initiative.id);
+    this.initiativeUpdateBody.set('');
+    this.initiativeUpdateHealth.set('onTrack');
+  }
+
+  protected async createInitiativeUpdate(
+    event: Event,
+    initiative: LinearInitiative,
+  ): Promise<void> {
+    event.preventDefault();
+    const connection = this.selected();
+    const body = this.initiativeUpdateBody().trim();
+    if (!connection || !body || this.creatingInitiativeUpdate()) return;
+    this.creatingInitiativeUpdate.set(true);
+    this.error.set(null);
+    try {
+      const update: LinearInitiativeUpdate = await this.tauri.linearCreateInitiativeUpdate(
+        connection.organizationId,
+        initiative.id,
+        body,
+        this.initiativeUpdateHealth(),
+      );
+      this.initiatives.update((items) =>
+        items.map((item) =>
+          item.id === initiative.id ? { ...item, updates: [update, ...item.updates] } : item,
+        ),
+      );
+      this.initiativeUpdateId.set(null);
+      this.initiativeUpdateBody.set('');
+    } catch (error) {
+      this.error.set(error instanceof Error ? error.message : String(error));
+    } finally {
+      this.creatingInitiativeUpdate.set(false);
     }
   }
 

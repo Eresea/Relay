@@ -758,6 +758,22 @@ export class TauriBridge {
     );
   }
 
+  async linearCreateInitiativeUpdate(
+    organizationId: string,
+    initiativeId: string,
+    body: string,
+    health: LinearProjectHealth,
+  ): Promise<LinearInitiativeUpdate> {
+    const update = await this.invoke<LinearInitiativeUpdate>('linear_create_initiative_update', {
+      organizationId,
+      initiativeId,
+      body,
+      health,
+    });
+    if (!update) throw new Error('Linear returned no initiative update.');
+    return update;
+  }
+
   async linearArchiveInitiative(organizationId: string, initiativeId: string): Promise<void> {
     await this.invoke('linear_archive_initiative', { organizationId, initiativeId });
   }
@@ -1475,7 +1491,10 @@ export interface LinearInitiative {
   readonly targetDate: string | null;
   readonly archivedAt: string | null;
   readonly projects: readonly LinearInitiativeProject[];
+  readonly updates: readonly LinearInitiativeUpdate[];
 }
+
+export type LinearInitiativeUpdate = LinearProjectUpdate;
 
 export interface LinearInitiativeProject {
   readonly id: string;
