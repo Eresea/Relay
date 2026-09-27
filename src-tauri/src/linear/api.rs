@@ -1237,6 +1237,8 @@ pub async fn create_issue(
     estimate: Option<u32>,
     assignee_id: Option<&str>,
     priority: Option<u8>,
+    due_date: Option<&str>,
+    label_ids: Option<&[String]>,
     project_id: Option<&str>,
     project_milestone_id: Option<&str>,
     parent_id: Option<&str>,
@@ -1263,6 +1265,12 @@ pub async fn create_issue(
     if let Some(priority) = priority {
         input.insert("priority".into(), json!(priority));
     }
+    if let Some(due_date) = due_date {
+        input.insert("dueDate".into(), json!(due_date));
+    }
+    if let Some(label_ids) = label_ids {
+        input.insert("labelIds".into(), json!(label_ids));
+    }
     if let Some(project_id) = project_id {
         input.insert("projectId".into(), json!(project_id));
     }
@@ -1274,7 +1282,7 @@ pub async fn create_issue(
     }
     let data: Data = query(
         token,
-        "mutation RelayIssueCreate($input: IssueCreateInput!) { issueCreate(input: $input) { success issue { id identifier title description url priority estimate updatedAt state { id name type } assignee { id name } project { id name } cycle { id name number } labels { nodes { id name color } } team { id name key } } } }",
+        "mutation RelayIssueCreate($input: IssueCreateInput!) { issueCreate(input: $input) { success issue { id identifier title description url priority estimate dueDate updatedAt state { id name type } assignee { id name } project { id name } cycle { id name number } labels { nodes { id name color } } team { id name key } } } }",
         json!({ "input": input }),
     )
     .await?;

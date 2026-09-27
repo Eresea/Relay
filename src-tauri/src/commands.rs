@@ -967,6 +967,8 @@ pub async fn linear_create_issue(
     estimate: Option<u32>,
     assignee_id: Option<String>,
     priority: Option<u8>,
+    due_date: Option<String>,
+    label_ids: Option<Vec<String>>,
     project_id: Option<String>,
     project_milestone_id: Option<String>,
     parent_id: Option<String>,
@@ -978,6 +980,10 @@ pub async fn linear_create_issue(
         || assignee_id
             .as_ref()
             .is_some_and(|value| value.trim().is_empty())
+        || due_date.as_ref().is_some_and(|date| date.trim().is_empty())
+        || label_ids.as_ref().is_some_and(|labels| {
+            labels.len() > 100 || labels.iter().any(|label| label.trim().is_empty())
+        })
         || project_id
             .as_ref()
             .is_some_and(|value| value.trim().is_empty())
@@ -999,6 +1005,8 @@ pub async fn linear_create_issue(
         estimate,
         assignee_id.as_deref(),
         priority,
+        due_date.as_deref(),
+        label_ids.as_deref(),
         project_id.as_deref(),
         project_milestone_id.as_deref(),
         parent_id.as_deref(),

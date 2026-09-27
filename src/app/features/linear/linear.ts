@@ -52,6 +52,8 @@ interface LinearIssueDraft {
   estimate?: string;
   assigneeId?: string;
   priority?: string;
+  dueDate?: string;
+  labelIds?: readonly string[];
 }
 
 @Component({
@@ -839,6 +841,29 @@ interface LinearIssueDraft {
                         }
                       </select>
                     </label>
+                    <label>
+                      <span>Due date</span>
+                      <input
+                        type="date"
+                        [value]="newDueDate()"
+                        (change)="updateIssueDraftDueDate($any($event.target).value)"
+                      />
+                    </label>
+                    @if (labelsFor(createTeamId()).length) {
+                      <label>
+                        <span>Labels</span>
+                        <select multiple size="3" (change)="updateIssueDraftLabels($event)">
+                          @for (label of labelsFor(createTeamId()); track label.id) {
+                            <option
+                              [value]="label.id"
+                              [selected]="newLabelIds().includes(label.id)"
+                            >
+                              {{ label.name }}
+                            </option>
+                          }
+                        </select>
+                      </label>
+                    }
                   </details>
                   <label>
                     <span>New issue</span>
@@ -868,7 +893,9 @@ interface LinearIssueDraft {
                   newDescription() ||
                   newEstimate() ||
                   newAssigneeId() ||
-                  newPriority()
+                  newPriority() ||
+                  newDueDate() ||
+                  newLabelIds().length
                 ) {
                   <p class="hint">Draft saved on this device.</p>
                 }
@@ -1466,6 +1493,29 @@ interface LinearIssueDraft {
                           }
                         </select>
                       </label>
+                      <label>
+                        <span>Due date</span>
+                        <input
+                          type="date"
+                          [value]="newProjectIssueDueDate()"
+                          (change)="updateProjectIssueDueDate($any($event.target).value)"
+                        />
+                      </label>
+                      @if (labelsFor(createTeamId()).length) {
+                        <label>
+                          <span>Labels</span>
+                          <select multiple size="3" (change)="updateProjectIssueLabels($event)">
+                            @for (label of labelsFor(createTeamId()); track label.id) {
+                              <option
+                                [value]="label.id"
+                                [selected]="newProjectIssueLabelIds().includes(label.id)"
+                              >
+                                {{ label.name }}
+                              </option>
+                            }
+                          </select>
+                        </label>
+                      }
                     </details>
                     <label>
                       <span>New project issue</span>
@@ -1509,7 +1559,9 @@ interface LinearIssueDraft {
                     newProjectIssueDescription() ||
                     newProjectIssueEstimate() ||
                     newProjectIssueAssigneeId() ||
-                    newProjectIssuePriority()
+                    newProjectIssuePriority() ||
+                    newProjectIssueDueDate() ||
+                    newProjectIssueLabelIds().length
                   ) {
                     <p class="hint">Draft saved on this device.</p>
                   }
@@ -2689,9 +2741,13 @@ export class Linear {
   protected readonly newProjectIssueEstimate = signal('');
   protected readonly newProjectIssueAssigneeId = signal('');
   protected readonly newProjectIssuePriority = signal('');
+  protected readonly newProjectIssueDueDate = signal('');
+  protected readonly newProjectIssueLabelIds = signal<readonly string[]>([]);
   protected readonly newEstimate = signal('');
   protected readonly newAssigneeId = signal('');
   protected readonly newPriority = signal('');
+  protected readonly newDueDate = signal('');
+  protected readonly newLabelIds = signal<readonly string[]>([]);
   protected readonly newSubIssueTitle = signal('');
   protected readonly newComment = signal('');
   protected readonly editingCommentId = signal<string | null>(null);
@@ -3438,6 +3494,8 @@ export class Linear {
     if (teamId !== this.createTeamId()) {
       this.newEstimate.set('');
       this.newProjectIssueEstimate.set('');
+      this.newLabelIds.set([]);
+      this.newProjectIssueLabelIds.set([]);
     }
     this.createTeamId.set(teamId);
     this.saveIssueDraft();
@@ -3462,6 +3520,18 @@ export class Linear {
 
   protected updateIssueDraftPriority(value: string): void {
     this.newPriority.set(value);
+    this.saveIssueDraft();
+  }
+
+  protected updateIssueDraftDueDate(value: string): void {
+    this.newDueDate.set(value);
+    this.saveIssueDraft();
+  }
+
+  protected updateIssueDraftLabels(event: Event): void {
+    this.newLabelIds.set(
+      Array.from((event.target as HTMLSelectElement).selectedOptions, (option) => option.value),
+    );
     this.saveIssueDraft();
   }
 
@@ -3583,6 +3653,8 @@ export class Linear {
       estimate: this.newEstimate(),
       assigneeId: this.newAssigneeId(),
       priority: this.newPriority(),
+      dueDate: this.newDueDate(),
+      labelIds: this.newLabelIds(),
     });
   }
 
@@ -3595,6 +3667,12 @@ export class Linear {
     this.newEstimate.set(typeof draft?.estimate === 'string' ? draft.estimate : '');
     this.newAssigneeId.set(typeof draft?.assigneeId === 'string' ? draft.assigneeId : '');
     this.newPriority.set(typeof draft?.priority === 'string' ? draft.priority : '');
+    this.newDueDate.set(typeof draft?.dueDate === 'string' ? draft.dueDate : '');
+    this.newLabelIds.set(
+      Array.isArray(draft?.labelIds)
+        ? draft.labelIds.filter((labelId): labelId is string => typeof labelId === 'string')
+        : [],
+    );
     if (typeof draft?.teamId === 'string') this.createTeamId.set(draft.teamId);
   }
 
@@ -3624,6 +3702,18 @@ export class Linear {
     this.saveProjectIssueDraft();
   }
 
+  protected updateProjectIssueDueDate(value: string): void {
+    this.newProjectIssueDueDate.set(value);
+    this.saveProjectIssueDraft();
+  }
+
+  protected updateProjectIssueLabels(event: Event): void {
+    this.newProjectIssueLabelIds.set(
+      Array.from((event.target as HTMLSelectElement).selectedOptions, (option) => option.value),
+    );
+    this.saveProjectIssueDraft();
+  }
+
   private saveProjectIssueDraft(): void {
     const connection = this.selected();
     const project = this.selectedProject();
@@ -3636,6 +3726,8 @@ export class Linear {
       estimate: this.newProjectIssueEstimate(),
       assigneeId: this.newProjectIssueAssigneeId(),
       priority: this.newProjectIssuePriority(),
+      dueDate: this.newProjectIssueDueDate(),
+      labelIds: this.newProjectIssueLabelIds(),
     });
   }
 
@@ -3655,6 +3747,12 @@ export class Linear {
       typeof draft?.assigneeId === 'string' ? draft.assigneeId : '',
     );
     this.newProjectIssuePriority.set(typeof draft?.priority === 'string' ? draft.priority : '');
+    this.newProjectIssueDueDate.set(typeof draft?.dueDate === 'string' ? draft.dueDate : '');
+    this.newProjectIssueLabelIds.set(
+      Array.isArray(draft?.labelIds)
+        ? draft.labelIds.filter((labelId): labelId is string => typeof labelId === 'string')
+        : [],
+    );
     if (typeof draft?.teamId === 'string') this.createTeamId.set(draft.teamId);
   }
 
@@ -4582,12 +4680,16 @@ export class Linear {
         this.newEstimate() === '' ? undefined : Number(this.newEstimate()),
         this.newAssigneeId() || undefined,
         this.newPriority() === '' ? undefined : Number(this.newPriority()),
+        this.newDueDate() || undefined,
+        this.newLabelIds(),
       );
       this.newTitle.set('');
       this.newDescription.set('');
       this.newEstimate.set('');
       this.newAssigneeId.set('');
       this.newPriority.set('');
+      this.newDueDate.set('');
+      this.newLabelIds.set([]);
       this.writeLocal(this.issueDraftKey(connection.organizationId), null);
       if (!this.issueTeamId() || this.issueTeamId() === created.team.id) {
         this.issues.update((issues) => [created, ...issues]);
@@ -4622,6 +4724,8 @@ export class Linear {
         this.newProjectIssueEstimate() === '' ? undefined : Number(this.newProjectIssueEstimate()),
         this.newProjectIssueAssigneeId() || undefined,
         this.newProjectIssuePriority() === '' ? undefined : Number(this.newProjectIssuePriority()),
+        this.newProjectIssueDueDate() || undefined,
+        this.newProjectIssueLabelIds(),
       );
       this.projectIssues.update((issues) => [issue, ...issues]);
       this.newProjectIssueTitle.set('');
@@ -4630,6 +4734,8 @@ export class Linear {
       this.newProjectIssueEstimate.set('');
       this.newProjectIssueAssigneeId.set('');
       this.newProjectIssuePriority.set('');
+      this.newProjectIssueDueDate.set('');
+      this.newProjectIssueLabelIds.set([]);
       this.writeLocal(this.projectIssueDraftKey(connection.organizationId, project.id), null);
     } catch (error) {
       this.error.set(error instanceof Error ? error.message : String(error));
