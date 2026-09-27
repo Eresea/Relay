@@ -10,8 +10,8 @@ use crate::error::{Error, Result};
 
 pub use api::{
     Initiative, InitiativeProject, InitiativeUpdate, Issue, IssueDetail, IssuePage, IssueRelation,
-    LinearComment, LinearCycle, LinearLabel, LinearMilestone, LinearProject,
-    LinearProjectStatus, LinearProjectUpdate, Person, Team, Viewer, WorkflowState,
+    LinearComment, LinearCycle, LinearLabel, LinearMilestone, LinearProject, LinearProjectStatus,
+    LinearProjectUpdate, Person, Team, Viewer, WorkflowState,
 };
 use oauth::TokenBundle;
 pub use oauth::{LinearCodexLink, LinearCodexProjectPolicy};
@@ -178,6 +178,46 @@ pub async fn users(app: &AppHandle, organization_id: &str) -> Result<Vec<Person>
 
 pub async fn issue_labels(app: &AppHandle, organization_id: &str) -> Result<Vec<LinearLabel>> {
     api::issue_labels(&access_token(app, organization_id).await?).await
+}
+
+pub async fn create_issue_label(
+    app: &AppHandle,
+    organization_id: &str,
+    name: &str,
+    color: &str,
+    team_id: Option<&str>,
+) -> Result<LinearLabel> {
+    api::create_issue_label(
+        &access_token(app, organization_id).await?,
+        name,
+        color,
+        team_id,
+    )
+    .await
+}
+
+pub async fn update_issue_label(
+    app: &AppHandle,
+    organization_id: &str,
+    label_id: &str,
+    name: &str,
+    color: &str,
+) -> Result<LinearLabel> {
+    api::update_issue_label(
+        &access_token(app, organization_id).await?,
+        label_id,
+        name,
+        color,
+    )
+    .await
+}
+
+pub async fn delete_issue_label(
+    app: &AppHandle,
+    organization_id: &str,
+    label_id: &str,
+) -> Result<()> {
+    api::delete_issue_label(&access_token(app, organization_id).await?, label_id).await
 }
 
 pub async fn projects(

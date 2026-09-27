@@ -567,6 +567,42 @@ export class TauriBridge {
     return (await this.invoke<LinearLabel[]>('linear_issue_labels', { organizationId })) ?? [];
   }
 
+  async linearCreateIssueLabel(
+    organizationId: string,
+    name: string,
+    color: string,
+    teamId: string | null,
+  ): Promise<LinearLabel> {
+    const label = await this.invoke<LinearLabel>('linear_create_issue_label', {
+      organizationId,
+      name,
+      color,
+      teamId,
+    });
+    if (!label) throw new Error('Linear returned no label.');
+    return label;
+  }
+
+  async linearUpdateIssueLabel(
+    organizationId: string,
+    labelId: string,
+    name: string,
+    color: string,
+  ): Promise<LinearLabel> {
+    const label = await this.invoke<LinearLabel>('linear_update_issue_label', {
+      organizationId,
+      labelId,
+      name,
+      color,
+    });
+    if (!label) throw new Error('Linear returned no label.');
+    return label;
+  }
+
+  async linearDeleteIssueLabel(organizationId: string, labelId: string): Promise<void> {
+    await this.invoke('linear_delete_issue_label', { organizationId, labelId });
+  }
+
   async linearProjects(
     organizationId: string,
     includeArchived = false,

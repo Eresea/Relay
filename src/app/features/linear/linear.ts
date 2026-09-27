@@ -176,6 +176,13 @@ interface LinearIssueDraft {
             >
               Roadmap
             </button>
+            <button
+              type="button"
+              [class.active]="section() === 'labels'"
+              (click)="setSection('labels')"
+            >
+              Labels
+            </button>
           </nav>
           @if (issueDetail(); as detail) {
             <section class="issue-detail" aria-label="Linear issue details">
@@ -1702,7 +1709,7 @@ interface LinearIssueDraft {
                 }
               }
             </section>
-          } @else {
+          } @else if (section() === 'roadmap') {
             <section class="issues" aria-label="Linear roadmap initiatives">
               <div class="issue-actions">
                 <h2>Initiatives</h2>
@@ -2058,6 +2065,119 @@ interface LinearIssueDraft {
                 <p class="hint">No initiatives are available in this workspace.</p>
               }
             </section>
+          } @else {
+            <section class="issues" aria-label="Linear issue labels">
+              <form class="project-edit" (submit)="createLabel($event)">
+                <label>
+                  <span>Label name</span>
+                  <input
+                    required
+                    maxlength="255"
+                    [value]="newLabelName()"
+                    (input)="newLabelName.set($any($event.target).value)"
+                  />
+                </label>
+                <label>
+                  <span>Scope</span>
+                  <select
+                    [value]="newLabelTeamId()"
+                    (change)="newLabelTeamId.set($any($event.target).value)"
+                  >
+                    <option value="">Workspace</option>
+                    @for (team of teams(); track team.id) {
+                      <option [value]="team.id">{{ team.name }}</option>
+                    }
+                  </select>
+                </label>
+                <label>
+                  <span>Color</span>
+                  <input
+                    type="color"
+                    [value]="newLabelColor()"
+                    (input)="newLabelColor.set($any($event.target).value)"
+                  />
+                </label>
+                <umbra-button size="sm" [disabled]="creatingLabel() || !newLabelName().trim()">
+                  {{ creatingLabel() ? 'Creating' : 'Create label' }}
+                </umbra-button>
+              </form>
+              @for (label of labels(); track label.id) {
+                <article class="issue">
+                  <span
+                    class="label-color"
+                    [style.background-color]="label.color ?? '#6b7280'"
+                  ></span>
+                  @if (editingLabelId() === label.id) {
+                    <form class="issue-actions" (submit)="saveLabel($event, label)">
+                      <label>
+                        <span class="sr-only">Label name</span>
+                        <input
+                          required
+                          maxlength="255"
+                          [value]="editLabelName()"
+                          (input)="editLabelName.set($any($event.target).value)"
+                        />
+                      </label>
+                      <label>
+                        <span class="sr-only">Label color</span>
+                        <input
+                          type="color"
+                          [value]="editLabelColor()"
+                          (input)="editLabelColor.set($any($event.target).value)"
+                        />
+                      </label>
+                      <umbra-button size="sm" [disabled]="savingLabel() || !editLabelName().trim()">
+                        {{ savingLabel() ? 'Saving' : 'Save' }}
+                      </umbra-button>
+                      <umbra-button
+                        size="sm"
+                        variant="link"
+                        type="button"
+                        (click)="editingLabelId.set(null)"
+                      >
+                        Cancel
+                      </umbra-button>
+                    </form>
+                  } @else {
+                    <span class="issue-title">{{ label.name }}</span>
+                    <span class="muted">{{
+                      label.team?.id ? teamName(label.team.id) : 'Workspace'
+                    }}</span>
+                    @if (confirmDeleteLabelId() === label.id) {
+                      <span class="muted">Delete this label?</span>
+                      <umbra-button
+                        size="sm"
+                        variant="destructive"
+                        [disabled]="deletingLabelId() === label.id"
+                        (click)="deleteLabel(label)"
+                      >
+                        {{ deletingLabelId() === label.id ? 'Deleting' : 'Confirm delete' }}
+                      </umbra-button>
+                      <umbra-button
+                        size="sm"
+                        variant="link"
+                        (click)="confirmDeleteLabelId.set(null)"
+                      >
+                        Cancel
+                      </umbra-button>
+                    } @else {
+                      <umbra-button size="sm" variant="outline" (click)="editLabel(label)">
+                        Edit
+                      </umbra-button>
+                      <umbra-button
+                        size="sm"
+                        variant="link"
+                        (click)="confirmDeleteLabelId.set(label.id)"
+                      >
+                        Delete
+                      </umbra-button>
+                    }
+                  }
+                </article>
+              } @empty {
+                <p class="hint">No issue labels are available in this workspace.</p>
+              }
+            </section>
           }
         }
       }
@@ -2088,6 +2208,12 @@ interface LinearIssueDraft {
       align-items: center;
       flex-wrap: wrap;
       gap: var(--space-2);
+    }
+    .label-color {
+      width: 0.8rem;
+      height: 0.8rem;
+      flex: 0 0 auto;
+      border-radius: 50%;
     }
     .u-title,
     .hint,
@@ -2458,10 +2584,22 @@ export class Linear {
   protected readonly editMilestoneName = signal('');
   protected readonly editMilestoneDescription = signal('');
   protected readonly editMilestoneDate = signal('');
-  protected readonly section = signal<'work' | 'projects' | 'cycles' | 'roadmap'>('work');
+  protected readonly section = signal<'work' | 'projects' | 'cycles' | 'roadmap' | 'labels'>(
+    'work',
+  );
   protected readonly teams = signal<readonly LinearTeam[]>([]);
   protected readonly users = signal<readonly LinearPerson[]>([]);
   protected readonly labels = signal<readonly LinearLabel[]>([]);
+  protected readonly newLabelName = signal('');
+  protected readonly newLabelTeamId = signal('');
+  protected readonly newLabelColor = signal('#6b7280');
+  protected readonly creatingLabel = signal(false);
+  protected readonly editingLabelId = signal<string | null>(null);
+  protected readonly editLabelName = signal('');
+  protected readonly editLabelColor = signal('#6b7280');
+  protected readonly savingLabel = signal(false);
+  protected readonly confirmDeleteLabelId = signal<string | null>(null);
+  protected readonly deletingLabelId = signal<string | null>(null);
   protected readonly workflowStates = signal<
     Readonly<Record<string, readonly LinearWorkflowState[]>>
   >({});
@@ -2500,6 +2638,7 @@ export class Linear {
       projects: 'Projects',
       cycles: 'Cycles',
       roadmap: 'Roadmap',
+      labels: 'Labels',
     }[this.section()];
   }
 
@@ -2509,6 +2648,7 @@ export class Linear {
       projects: 'Projects and their issues in your connected workspace.',
       cycles: 'Team planning cycles and current work periods.',
       roadmap: 'Initiatives and the projects connected to them.',
+      labels: 'Workspace and team issue labels.',
     }[this.section()];
   }
 
@@ -2580,6 +2720,9 @@ export class Linear {
     this.confirmArchiveIssueId.set(null);
     this.confirmArchiveIssueDetailId.set(null);
     this.confirmDeleteIssueRelationId.set(null);
+    this.newLabelTeamId.set('');
+    this.editingLabelId.set(null);
+    this.confirmDeleteLabelId.set(null);
     this.codexContext.set(null);
     this.nextCursor = null;
     void this.loadTeams(connection);
@@ -3341,7 +3484,7 @@ export class Linear {
     if (typeof draft?.teamId === 'string') this.createTeamId.set(draft.teamId);
   }
 
-  protected setSection(section: 'work' | 'projects' | 'cycles' | 'roadmap'): void {
+  protected setSection(section: 'work' | 'projects' | 'cycles' | 'roadmap' | 'labels'): void {
     this.section.set(section);
     this.selectedProject.set(null);
     this.confirmArchiveProjectId.set(null);
@@ -4155,6 +4298,7 @@ export class Linear {
   }
 
   private async loadSection(connection: LinearConnection): Promise<void> {
+    if (this.section() === 'labels') await this.loadLabels(connection);
     if (this.section() === 'projects') await this.loadProjects();
     if (this.section() === 'roadmap') {
       await Promise.all([this.loadInitiatives(), this.loadProjects()]);
@@ -4171,6 +4315,17 @@ export class Linear {
         );
         this.cycles.set(Object.fromEntries(entries));
       } catch (error) {
+        this.error.set(error instanceof Error ? error.message : String(error));
+      }
+    }
+  }
+
+  private async loadLabels(connection: LinearConnection): Promise<void> {
+    try {
+      const labels = await this.tauri.linearIssueLabels(connection.organizationId);
+      if (this.selected()?.organizationId === connection.organizationId) this.labels.set(labels);
+    } catch (error) {
+      if (this.selected()?.organizationId === connection.organizationId) {
         this.error.set(error instanceof Error ? error.message : String(error));
       }
     }
@@ -4381,6 +4536,103 @@ export class Linear {
 
   protected labelsFor(teamId: string): readonly LinearLabel[] {
     return this.labels().filter((label) => !label.team?.id || label.team.id === teamId);
+  }
+
+  protected editLabel(label: LinearLabel): void {
+    this.error.set(null);
+    this.editingLabelId.set(label.id);
+    this.editLabelName.set(label.name);
+    this.editLabelColor.set(label.color ?? '#6b7280');
+  }
+
+  protected async createLabel(event: Event): Promise<void> {
+    event.preventDefault();
+    const connection = this.selected();
+    const name = this.newLabelName().trim();
+    if (!connection || !name || this.creatingLabel()) return;
+    this.creatingLabel.set(true);
+    this.error.set(null);
+    try {
+      const label = await this.tauri.linearCreateIssueLabel(
+        connection.organizationId,
+        name,
+        this.newLabelColor(),
+        this.newLabelTeamId() || null,
+      );
+      if (this.selected()?.organizationId === connection.organizationId) {
+        this.labels.update((items) => [...items, label]);
+      }
+      this.newLabelName.set('');
+    } catch (error) {
+      this.error.set(error instanceof Error ? error.message : String(error));
+    } finally {
+      this.creatingLabel.set(false);
+    }
+  }
+
+  protected async saveLabel(event: Event, label: LinearLabel): Promise<void> {
+    event.preventDefault();
+    const connection = this.selected();
+    const name = this.editLabelName().trim();
+    if (!connection || this.editingLabelId() !== label.id || !name || this.savingLabel()) {
+      return;
+    }
+    this.savingLabel.set(true);
+    this.error.set(null);
+    try {
+      const updated = await this.tauri.linearUpdateIssueLabel(
+        connection.organizationId,
+        label.id,
+        name,
+        this.editLabelColor(),
+      );
+      if (this.selected()?.organizationId === connection.organizationId) {
+        this.labels.update((items) =>
+          items.map((item) => (item.id === updated.id ? updated : item)),
+        );
+        for (const issue of [...this.issues(), ...this.projectIssues()]) {
+          if (issue.labels.some((item) => item.id === updated.id)) {
+            this.applyUpdatedIssue(connection.organizationId, {
+              ...issue,
+              labels: issue.labels.map((item) => (item.id === updated.id ? updated : item)),
+            });
+          }
+        }
+      }
+      this.editingLabelId.set(null);
+    } catch (error) {
+      this.error.set(error instanceof Error ? error.message : String(error));
+    } finally {
+      this.savingLabel.set(false);
+    }
+  }
+
+  protected async deleteLabel(label: LinearLabel): Promise<void> {
+    const connection = this.selected();
+    if (!connection || this.confirmDeleteLabelId() !== label.id || this.deletingLabelId()) {
+      return;
+    }
+    this.deletingLabelId.set(label.id);
+    this.error.set(null);
+    try {
+      await this.tauri.linearDeleteIssueLabel(connection.organizationId, label.id);
+      if (this.selected()?.organizationId === connection.organizationId) {
+        this.labels.update((items) => items.filter((item) => item.id !== label.id));
+        for (const issue of [...this.issues(), ...this.projectIssues()]) {
+          if (issue.labels.some((item) => item.id === label.id)) {
+            this.applyUpdatedIssue(connection.organizationId, {
+              ...issue,
+              labels: issue.labels.filter((item) => item.id !== label.id),
+            });
+          }
+        }
+        this.confirmDeleteLabelId.set(null);
+      }
+    } catch (error) {
+      this.error.set(error instanceof Error ? error.message : String(error));
+    } finally {
+      this.deletingLabelId.set(null);
+    }
   }
 
   protected async updateLabels(issue: LinearIssue, event: Event): Promise<void> {

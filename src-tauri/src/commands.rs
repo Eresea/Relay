@@ -365,6 +365,67 @@ pub async fn linear_issue_labels(
 }
 
 #[tauri::command]
+pub async fn linear_create_issue_label(
+    app: AppHandle,
+    organization_id: String,
+    name: String,
+    color: String,
+    team_id: Option<String>,
+) -> Result<LinearLabel> {
+    let name = name.trim();
+    let color = color.trim();
+    if organization_id.trim().is_empty()
+        || name.is_empty()
+        || name.len() > 255
+        || color.len() != 7
+        || !color.starts_with('#')
+        || !color[1..].bytes().all(|byte| byte.is_ascii_hexdigit())
+    {
+        return Err(std::io::Error::other("A valid label is required").into());
+    }
+    let team_id = team_id
+        .as_deref()
+        .map(str::trim)
+        .filter(|id| !id.is_empty());
+    linear::create_issue_label(&app, organization_id.trim(), name, color, team_id).await
+}
+
+#[tauri::command]
+pub async fn linear_update_issue_label(
+    app: AppHandle,
+    organization_id: String,
+    label_id: String,
+    name: String,
+    color: String,
+) -> Result<LinearLabel> {
+    let name = name.trim();
+    let color = color.trim();
+    if organization_id.trim().is_empty()
+        || label_id.trim().is_empty()
+        || name.is_empty()
+        || name.len() > 255
+        || color.len() != 7
+        || !color.starts_with('#')
+        || !color[1..].bytes().all(|byte| byte.is_ascii_hexdigit())
+    {
+        return Err(std::io::Error::other("A valid label is required").into());
+    }
+    linear::update_issue_label(&app, organization_id.trim(), label_id.trim(), name, color).await
+}
+
+#[tauri::command]
+pub async fn linear_delete_issue_label(
+    app: AppHandle,
+    organization_id: String,
+    label_id: String,
+) -> Result<()> {
+    if organization_id.trim().is_empty() || label_id.trim().is_empty() {
+        return Err(std::io::Error::other("Issue label is required").into());
+    }
+    linear::delete_issue_label(&app, organization_id.trim(), label_id.trim()).await
+}
+
+#[tauri::command]
 pub async fn linear_projects(
     app: AppHandle,
     organization_id: String,

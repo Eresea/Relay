@@ -380,6 +380,69 @@ pub async fn issue_labels(token: &str) -> Result<Vec<LinearLabel>> {
     .nodes)
 }
 
+pub async fn create_issue_label(
+    token: &str,
+    name: &str,
+    color: &str,
+    team_id: Option<&str>,
+) -> Result<LinearLabel> {
+    #[derive(Deserialize)]
+    struct Data {
+        #[serde(rename = "issueLabelCreate")]
+        result: IssueLabelMutation,
+    }
+    let mut input = json!({ "name": name, "color": color });
+    if let Some(team_id) = team_id {
+        input["teamId"] = json!(team_id);
+    }
+    let data: Data = query(
+        token,
+        "mutation RelayIssueLabelCreate($input: IssueLabelCreateInput!) { issueLabelCreate(input: $input) { success issueLabel { id name color team { id } } } }",
+        json!({ "input": input }),
+    )
+    .await?;
+    data.result.into_value("Linear did not create the label")
+}
+
+pub async fn update_issue_label(
+    token: &str,
+    label_id: &str,
+    name: &str,
+    color: &str,
+) -> Result<LinearLabel> {
+    #[derive(Deserialize)]
+    struct Data {
+        #[serde(rename = "issueLabelUpdate")]
+        result: IssueLabelMutation,
+    }
+    let data: Data = query(
+        token,
+        "mutation RelayIssueLabelUpdate($id: String!, $input: IssueLabelUpdateInput!) { issueLabelUpdate(id: $id, input: $input) { success issueLabel { id name color team { id } } } }",
+        json!({ "id": label_id, "input": { "name": name, "color": color } }),
+    )
+    .await?;
+    data.result.into_value("Linear did not update the label")
+}
+
+pub async fn delete_issue_label(token: &str, label_id: &str) -> Result<()> {
+    #[derive(Deserialize)]
+    struct Data {
+        #[serde(rename = "issueLabelDelete")]
+        result: DeleteMutation,
+    }
+    let data: Data = query(
+        token,
+        "mutation RelayIssueLabelDelete($id: String!) { issueLabelDelete(id: $id) { success } }",
+        json!({ "id": label_id }),
+    )
+    .await?;
+    if data.result.success {
+        Ok(())
+    } else {
+        Err(Error::LinearApi("Linear did not delete the label".into()))
+    }
+}
+
 pub async fn projects(token: &str, include_archived: bool) -> Result<Vec<LinearProject>> {
     #[derive(Deserialize)]
     struct Data {
@@ -1491,6 +1554,23 @@ struct IssueRelationMutation {
     issue_relation: Option<IssueRelation>,
 }
 
+#[derive(Deserialize)]
+struct IssueLabelMutation {
+    success: bool,
+    #[serde(rename = "issueLabel")]
+    issue_label: Option<LinearLabel>,
+}
+
+impl IssueLabelMutation {
+    fn into_value(self, message: &str) -> Result<LinearLabel> {
+        if !self.success {
+            return Err(Error::LinearApi(message.into()));
+        }
+        self.issue_label
+            .ok_or_else(|| Error::LinearApi("Linear returned no label".into()))
+    }
+}
+
 impl IssueRelationMutation {
     fn into_value(self, message: &str) -> Result<IssueRelation> {
         if !self.success {
@@ -1781,6 +1861,27 @@ mod tests {
         assert_eq!(labels.labels[0].id, "label-1");
         let encoded = serde_json::to_value(labels).unwrap();
         assert_eq!(encoded["labels"][0]["id"], "label-1");
+    }
+
+    #[test]
+    fn issue_label_mutation_decodes_linear_payload_and_requires_a_label() {
+        let result: IssueLabelMutation = serde_json::from_value(json!({
+            "success": true,
+            "issueLabel": {
+                "id": "label-1",
+                "name": "Bug",
+                "color": "#ff0000",
+                "team": { "id": "team-1" }
+            }
+        }))
+        .unwrap();
+        let label = result.into_value("failed").unwrap();
+        assert_eq!(label.name, "Bug");
+        assert_eq!(label.team.unwrap().id, "team-1");
+
+        let missing: IssueLabelMutation =
+            serde_json::from_value(json!({ "success": true, "issueLabel": null })).unwrap();
+        assert!(missing.into_value("failed").is_err());
     }
 
     #[test]
