@@ -36,6 +36,7 @@ import { UmbraButtonComponent } from '@umbra/components/umbra-button/umbra-butto
 import {
   isPendingLinearIssueUpdate,
   linearEstimateOptions,
+  linearCodexPrompt,
   mergeLinearIssueUpdates,
   type LinearIssueUpdate,
   type PendingLinearIssueUpdate,
@@ -2709,12 +2710,7 @@ export class Linear {
       if (inProgress && inProgress.id !== issue.state?.id) {
         await this.saveIssueUpdate(issue, { stateId: inProgress.id });
       }
-      const prompt = [
-        `Work on Linear issue ${issue.identifier}: ${issue.title}`,
-        issue.description ? `\nIssue description:\n${issue.description}` : '',
-        `\nLinear issue: ${issue.url}`,
-        '\nUse the selected repository and follow its existing conventions. Implement the issue, run relevant validation, and report what changed, which checks passed or failed, and any commit or pull request links. Do not mark the Linear issue done; Relay will move it to review and post your final report.',
-      ].join('');
+      const prompt = linearCodexPrompt(issue, this.issueDetail());
       const run = await this.tauri.codexSend(
         prompt,
         workspace.path,
