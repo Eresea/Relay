@@ -1122,11 +1122,13 @@ export class TauriBridge {
     organizationId: string,
     after: string | null = null,
     includeArchived = false,
+    search = '',
   ): Promise<LinearIssuePage> {
     const result = await this.invoke<LinearIssuePage>('linear_my_issues', {
       organizationId,
       after,
       includeArchived,
+      search,
     });
     if (!result) throw new Error('Linear returned no issues.');
     return result;
@@ -1137,12 +1139,14 @@ export class TauriBridge {
     teamId: string,
     after: string | null = null,
     includeArchived = false,
+    search = '',
   ): Promise<LinearIssuePage> {
     const result = await this.invoke<LinearIssuePage>('linear_team_issues', {
       organizationId,
       teamId,
       after,
       includeArchived,
+      search,
     });
     if (!result) throw new Error('Linear returned no team issues.');
     return result;

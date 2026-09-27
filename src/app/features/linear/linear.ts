@@ -712,8 +712,42 @@ interface LinearIssueDraft {
           @if (section() === 'work') {
             <section class="issues" aria-label="Linear issues">
               <div class="issue-heading">
-                <h2>{{ issueTeamId() ? teamName(issueTeamId()) + ' issues' : 'My work' }}</h2>
+                <h2>
+                  {{
+                    issueSearchTerm()
+                      ? 'Search results'
+                      : issueTeamId()
+                        ? teamName(issueTeamId()) + ' issues'
+                        : 'My work'
+                  }}
+                </h2>
                 <div class="issue-actions">
+                  <form class="issue-actions" role="search" (submit)="searchIssues($event)">
+                    <label>
+                      <span class="sr-only">Search issue titles</span>
+                      <input
+                        type="search"
+                        maxlength="255"
+                        [value]="issueSearchInput()"
+                        (input)="issueSearchInput.set($any($event.target).value)"
+                        placeholder="Search issue titles"
+                      />
+                    </label>
+                    <umbra-button size="sm" [disabled]="loading()">
+                      {{ loading() ? 'Searching' : 'Search' }}
+                    </umbra-button>
+                    @if (issueSearchTerm()) {
+                      <umbra-button
+                        size="sm"
+                        variant="link"
+                        type="button"
+                        [disabled]="loading()"
+                        (click)="clearIssueSearch()"
+                      >
+                        Clear
+                      </umbra-button>
+                    }
+                  </form>
                   <label>
                     <span class="sr-only">Issue scope</span>
                     <select
@@ -2605,6 +2639,8 @@ export class Linear {
   >({});
   protected readonly createTeamId = signal('');
   protected readonly issueTeamId = signal('');
+  protected readonly issueSearchInput = signal('');
+  protected readonly issueSearchTerm = signal('');
   protected readonly newTitle = signal('');
   protected readonly newDescription = signal('');
   protected readonly hasNextPage = signal(false);
@@ -2741,6 +2777,27 @@ export class Linear {
     this.nextCursor = null;
     this.hasNextPage.set(false);
     this.issues.set([]);
+    void this.loadIssues();
+  }
+
+  protected searchIssues(event: Event): void {
+    event.preventDefault();
+    const search = this.issueSearchInput().trim();
+    if (this.loading() || search === this.issueSearchTerm()) return;
+    this.issueSearchTerm.set(search);
+    this.issues.set([]);
+    this.nextCursor = null;
+    this.hasNextPage.set(false);
+    void this.loadIssues();
+  }
+
+  protected clearIssueSearch(): void {
+    if (this.loading() || !this.issueSearchTerm()) return;
+    this.issueSearchInput.set('');
+    this.issueSearchTerm.set('');
+    this.issues.set([]);
+    this.nextCursor = null;
+    this.hasNextPage.set(false);
     void this.loadIssues();
   }
 
@@ -3326,7 +3383,9 @@ export class Linear {
     const scope = teamId
       ? `relay.linear.issues.${connection.organizationId}.${connection.viewerId}.team.${teamId}`
       : `relay.linear.issues.${connection.organizationId}.${connection.viewerId}`;
-    return this.includeArchivedIssues() ? `${scope}.all` : scope;
+    const archived = this.includeArchivedIssues() ? '.all' : '';
+    const search = this.issueSearchTerm().trim();
+    return `${scope}${archived}${search ? `.search.${encodeURIComponent(search)}` : ''}`;
   }
 
   private projectCacheKey(connection: LinearConnection, includeArchived = false): string {
@@ -4741,8 +4800,19 @@ export class Linear {
   private fetchIssues(organizationId: string, after: string | null = null) {
     const teamId = this.issueTeamId();
     return teamId
-      ? this.tauri.linearTeamIssues(organizationId, teamId, after, this.includeArchivedIssues())
-      : this.tauri.linearMyIssues(organizationId, after, this.includeArchivedIssues());
+      ? this.tauri.linearTeamIssues(
+          organizationId,
+          teamId,
+          after,
+          this.includeArchivedIssues(),
+          this.issueSearchTerm(),
+        )
+      : this.tauri.linearMyIssues(
+          organizationId,
+          after,
+          this.includeArchivedIssues(),
+          this.issueSearchTerm(),
+        );
   }
 
   protected async openIssue(url: string): Promise<void> {

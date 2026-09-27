@@ -1199,6 +1199,7 @@ pub async fn project_issues(
     issues(
         token,
         json!({ "project": { "id": { "eq": project_id } } }),
+        None,
         after,
         include_archived,
     )
@@ -1688,12 +1689,14 @@ impl<T> MutationResult<T> {
 pub async fn my_issues(
     token: &str,
     assignee_id: &str,
+    search: Option<&str>,
     after: Option<&str>,
     include_archived: bool,
 ) -> Result<IssuePage> {
     issues(
         token,
         json!({ "assignee": { "id": { "eq": assignee_id } } }),
+        search,
         after,
         include_archived,
     )
@@ -1703,12 +1706,14 @@ pub async fn my_issues(
 pub async fn team_issues(
     token: &str,
     team_id: &str,
+    search: Option<&str>,
     after: Option<&str>,
     include_archived: bool,
 ) -> Result<IssuePage> {
     issues(
         token,
         json!({ "team": { "id": { "eq": team_id } } }),
+        search,
         after,
         include_archived,
     )
@@ -1718,6 +1723,7 @@ pub async fn team_issues(
 async fn issues(
     token: &str,
     filter: Value,
+    search: Option<&str>,
     after: Option<&str>,
     include_archived: bool,
 ) -> Result<IssuePage> {
@@ -1726,6 +1732,7 @@ async fn issues(
         issues: IssueConnection,
     }
 
+    let filter = with_title_search(filter, search);
     let data: Data = query(
         token,
         "query RelayIssues($filter: IssueFilter, $after: String, $includeArchived: Boolean!) { issues(filter: $filter, includeArchived: $includeArchived, first: 50, after: $after) { nodes { id identifier title description url priority updatedAt archivedAt state { id name type } assignee { id name } project { id name } cycle { id name number } labels { nodes { id name color } } team { id name key } } pageInfo { endCursor hasNextPage } } }",
@@ -1741,6 +1748,13 @@ async fn issues(
         end_cursor: data.issues.page_info.end_cursor,
         has_next_page: data.issues.page_info.has_next_page,
     })
+}
+
+fn with_title_search(filter: Value, search: Option<&str>) -> Value {
+    match search.map(str::trim).filter(|search| !search.is_empty()) {
+        Some(search) => json!({ "and": [filter, { "title": { "contains": search } }] }),
+        None => filter,
+    }
 }
 
 pub async fn archive_issue(token: &str, issue_id: &str) -> Result<()> {
@@ -1882,6 +1896,21 @@ mod tests {
         let missing: IssueLabelMutation =
             serde_json::from_value(json!({ "success": true, "issueLabel": null })).unwrap();
         assert!(missing.into_value("failed").is_err());
+    }
+
+    #[test]
+    fn issue_title_search_preserves_the_existing_scope_filter() {
+        let team = json!({ "team": { "id": { "eq": "team-1" } } });
+        assert_eq!(with_title_search(team.clone(), None), team);
+        assert_eq!(
+            with_title_search(team, Some("  deploy  ")),
+            json!({
+                "and": [
+                    { "team": { "id": { "eq": "team-1" } } },
+                    { "title": { "contains": "deploy" } }
+                ]
+            })
+        );
     }
 
     #[test]

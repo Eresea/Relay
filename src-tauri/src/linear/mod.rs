@@ -881,6 +881,7 @@ fn local_codex_device_id(app: &AppHandle) -> Result<String> {
 pub async fn my_issues(
     app: &AppHandle,
     organization_id: &str,
+    search: Option<&str>,
     after: Option<&str>,
     include_archived: bool,
 ) -> Result<IssuePage> {
@@ -891,6 +892,7 @@ pub async fn my_issues(
     api::my_issues(
         &access_token(app, organization_id).await?,
         &connection.viewer_id,
+        search,
         after,
         include_archived,
     )
@@ -901,12 +903,14 @@ pub async fn team_issues(
     app: &AppHandle,
     organization_id: &str,
     team_id: &str,
+    search: Option<&str>,
     after: Option<&str>,
     include_archived: bool,
 ) -> Result<IssuePage> {
     api::team_issues(
         &access_token(app, organization_id).await?,
         team_id,
+        search,
         after,
         include_archived,
     )

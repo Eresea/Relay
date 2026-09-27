@@ -1256,12 +1256,20 @@ pub async fn linear_update_issue(
 pub async fn linear_my_issues(
     app: AppHandle,
     organization_id: String,
+    search: Option<String>,
     after: Option<String>,
     include_archived: Option<bool>,
 ) -> Result<IssuePage> {
+    if search.as_deref().is_some_and(|query| query.len() > 255) {
+        return Err(std::io::Error::other("Issue search is too long").into());
+    }
     linear::my_issues(
         &app,
         &organization_id,
+        search
+            .as_deref()
+            .map(str::trim)
+            .filter(|search| !search.is_empty()),
         after.as_deref(),
         include_archived.unwrap_or(false),
     )
@@ -1273,16 +1281,24 @@ pub async fn linear_team_issues(
     app: AppHandle,
     organization_id: String,
     team_id: String,
+    search: Option<String>,
     after: Option<String>,
     include_archived: Option<bool>,
 ) -> Result<IssuePage> {
     if team_id.trim().is_empty() {
         return Err(std::io::Error::other("A Linear team is required").into());
     }
+    if search.as_deref().is_some_and(|query| query.len() > 255) {
+        return Err(std::io::Error::other("Issue search is too long").into());
+    }
     linear::team_issues(
         &app,
         &organization_id,
         &team_id,
+        search
+            .as_deref()
+            .map(str::trim)
+            .filter(|search| !search.is_empty()),
         after.as_deref(),
         include_archived.unwrap_or(false),
     )
