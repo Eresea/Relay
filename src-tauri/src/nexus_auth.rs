@@ -347,7 +347,7 @@ fn emit_connected(app: &AppHandle, session: &Session) {
     );
 }
 
-fn emit_disconnected(app: &AppHandle, error: String) {
+fn emit_disconnected(app: &AppHandle, error: Option<String>) {
     let _ = app.emit(
         "nexus://auth",
         NexusAuthStatus {
@@ -356,7 +356,7 @@ fn emit_disconnected(app: &AppHandle, error: String) {
             user_id: None,
             email: None,
             display_name: None,
-            error: Some(error),
+            error,
         },
     );
 }
@@ -421,11 +421,13 @@ pub fn start(app: &AppHandle) -> Result<()> {
     Ok(())
 }
 
-pub fn logout() -> Result<()> {
+pub fn logout(app: &AppHandle) -> Result<()> {
     match entry()?.delete_credential() {
         Ok(()) | Err(keyring::Error::NoEntry) => Ok(()),
         Err(error) => Err(Error::TokenStore(error.to_string())),
-    }
+    }?;
+    emit_disconnected(app, None);
+    Ok(())
 }
 
 pub async fn handle_callback(app: AppHandle, callback: Url) {
@@ -460,7 +462,7 @@ pub async fn handle_callback(app: AppHandle, callback: Url) {
             Ok(session) => emit_connected(&app, &session),
             Err(error) => {
                 log::warn!("Nexus Google sign-in failed: {error}");
-                emit_disconnected(&app, error.to_string());
+                emit_disconnected(&app, Some(error.to_string()));
             }
         }
         return;

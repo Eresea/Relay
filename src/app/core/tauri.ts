@@ -526,7 +526,7 @@ export class TauriBridge {
     return this.invoke<DeviceAuthorization>('github_connect_start');
   }
 
-  /** Disconnects the GitHub account and stops the poll job, if running. */
+  /** Removes the GitHub token and its registered webhooks. */
   async githubDisconnect(): Promise<void> {
     await this.invoke('github_disconnect');
   }
@@ -595,7 +595,7 @@ export class TauriBridge {
     return mergeGithubSettings(stored);
   }
 
-  /** Persists the connector's rules and poll interval to `settings.json`. */
+  /** Persists the connector's rules to `settings.json`. */
   async setGithubSettings(settings: GithubConnectorSettings): Promise<void> {
     await this.setSetting('github.settings', settings);
   }
@@ -830,7 +830,7 @@ export interface GithubRepositorySummary {
   readonly defaultBranch: string;
 }
 
-/** Mirrors the latest PR snapshot maintained by the GitHub poller. */
+/** Mirrors the latest PR snapshot refreshed by GitHub webhook deliveries. */
 export interface GithubPullRequestSummary {
   readonly repository: string;
   readonly number: number;
@@ -957,7 +957,6 @@ export function ruleFor(
 
 /** Mirrors `github::rules::GithubConnectorSettings`. */
 export interface GithubConnectorSettings {
-  readonly pollIntervalSecs: number;
   readonly notifications: NotificationSettings;
   readonly muted: readonly string[];
   /** A GitHub OAuth App (Device Flow enabled) client id. `null` until configured. */
@@ -977,7 +976,6 @@ function enabledRule(repoPattern: string): NotificationTypeRule {
 
 /** Mirrors `GithubConnectorSettings::default()` in `github::rules`. */
 export const DEFAULT_GITHUB_SETTINGS: GithubConnectorSettings = {
-  pollIntervalSecs: 300,
   notifications: {
     opened: enabledRule('*'),
     closed: DISABLED_RULE,
@@ -1003,7 +1001,6 @@ function mergeGithubSettings(
   const notifications = stored?.notifications;
   const defaults = DEFAULT_GITHUB_SETTINGS;
   return {
-    pollIntervalSecs: stored?.pollIntervalSecs ?? defaults.pollIntervalSecs,
     muted: stored?.muted ?? defaults.muted,
     clientId: stored?.clientId ?? defaults.clientId,
     notifications: {

@@ -97,8 +97,7 @@ function connectorErrorMessage(error: unknown): string {
 /**
  * The GitHub connector: connect an account over Device Flow, then configure
  * which pull request activity is worth a notification, one switch per kind
- * of event. The poll job itself lives entirely core-side
- * (`src-tauri/src/github`); this component only ever shows connection
+ * of event. GitHub events arrive through Nexus webhooks; this component only ever shows connection
  * status and edits `settings.json` — it never talks to GitHub directly.
  *
  * Rendered inside the Settings page's "GitHub" tab (`settings.ts`), which
@@ -126,8 +125,8 @@ function connectorErrorMessage(error: unknown): string {
             <rl-icon name="inbox" [size]="20" />
             <p class="u-title">Connect GitHub</p>
             <p class="hint">
-              Relay polls the signed-in account's pull requests and notifies you about the activity
-              your settings ask for — new PRs, reviews requested, and CI results.
+              Relay receives pull request and CI events for repositories with webhooks enabled, then
+              applies the notification rules below.
             </p>
 
             <div class="client-id-setup">
@@ -258,27 +257,6 @@ function connectorErrorMessage(error: unknown): string {
             @if (webhookSuccess()) {
               <p class="hint">{{ webhookSuccess() }}</p>
             }
-          </section>
-
-          <section class="group">
-            <h2 class="u-caption">Polling</h2>
-            <div class="row">
-              <div>
-                <p class="label">Check every</p>
-                <p class="hint">A minimum of 60 seconds is always enforced.</p>
-              </div>
-              <div class="option">
-                <umbra-input
-                  type="number"
-                  min="60"
-                  ariaLabel="Check every, in seconds"
-                  [value]="pollIntervalSecs().toString()"
-                  (valueChange)="pollIntervalSecs.set(+$event)"
-                  (touch)="save()"
-                />
-                <span>seconds</span>
-              </div>
-            </div>
           </section>
 
           <section class="group">
@@ -616,7 +594,6 @@ export class Github {
   private connectFallbackPoll: ReturnType<typeof setInterval> | null = null;
 
   protected readonly clientId = signal('');
-  protected readonly pollIntervalSecs = signal(DEFAULT_GITHUB_SETTINGS.pollIntervalSecs);
   protected readonly notifications = signal<EditableNotifications>(
     toEditableNotifications(DEFAULT_GITHUB_SETTINGS.notifications),
   );
@@ -752,7 +729,6 @@ export class Github {
   private async loadSettings(): Promise<void> {
     const settings = await this.tauri.githubSettings();
     this.clientId.set(settings.clientId ?? '');
-    this.pollIntervalSecs.set(settings.pollIntervalSecs);
     this.notifications.set(toEditableNotifications(settings.notifications));
     this.muted.set([...settings.muted]);
     try {
@@ -765,7 +741,6 @@ export class Github {
   private buildSettings(): GithubConnectorSettings {
     return {
       clientId: this.clientId().trim() || null,
-      pollIntervalSecs: this.pollIntervalSecs(),
       notifications: fromEditableNotifications(this.notifications()),
       muted: this.muted(),
     };

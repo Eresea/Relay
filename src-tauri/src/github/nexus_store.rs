@@ -3,7 +3,9 @@ use reqwest::header::{HeaderValue, ETAG, IF_MATCH};
 use reqwest::StatusCode;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
+use std::time::{SystemTime, UNIX_EPOCH};
 use tauri::AppHandle;
+use tauri::Manager;
 use tauri_plugin_store::StoreExt;
 
 use crate::error::{Error, Result};
@@ -62,6 +64,7 @@ impl NexusGitHubTokenStore {
             app,
             http: reqwest::Client::builder()
                 .redirect(reqwest::redirect::Policy::none())
+                .timeout(std::time::Duration::from_secs(30))
                 .build()
                 .expect("Nexus HTTP client configuration is valid"),
         }
@@ -78,6 +81,30 @@ impl NexusGitHubTokenStore {
         }
         let username = local.map(|token| token.username).or(Some(pointer.username));
         Ok((username, !pointer.pending_upload, pointer.pending_upload))
+    }
+
+    pub async fn get_valid(&self) -> Result<Option<StoredToken>> {
+        let Some(stored) = TokenStore::get(self).await? else {
+            return Ok(None);
+        };
+        let now = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_millis() as u64;
+        if !super::poll::needs_refresh(stored.expires_at, now) {
+            return Ok(Some(stored));
+        }
+        let settings = super::read_settings(&self.app);
+        let client_id = super::rules::effective_client_id(&settings)
+            .ok_or(Error::GithubClientIdNotConfigured)?;
+        let client = self
+            .app
+            .state::<super::client::HttpGitHubClient>()
+            .inner()
+            .clone();
+        let refreshed = super::poll::refresh_stored_token(&client, client_id, &stored).await?;
+        TokenStore::set(self, &refreshed).await?;
+        Ok(Some(refreshed))
     }
 
     fn pointer(&self) -> Result<Option<CredentialPointer>> {

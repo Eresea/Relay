@@ -204,7 +204,7 @@ to test in isolation:
   is paid once per login, not per session. The OAuth App client id is not
   baked into the binary: device flow has no client secret to protect, so the
   id is exactly as sensitive as a URL, and it lives in `GithubConnectorSettings`
-  (`settings.json`, key `github.settings`) alongside the polling rules — set
+  (`settings.json`, key `github.settings`) alongside notification rules — set
   once from the connector's "Connect GitHub" screen, which links out to
   GitHub's OAuth App settings. `connect_start` fails fast, before any network
   call, if none is configured (`rules::effective_client_id`), rather than
@@ -227,7 +227,7 @@ to test in isolation:
   login, already access-controlled per-OS-user without Relay reimplementing
   that. `TokenStore` is a trait for the same reason `EventSink` is: tests run
   against an in-memory fake rather than a real keychain.
-- `rules.rs` — `GithubConnectorSettings`: a poll interval, `NotificationSettings`
+- `rules.rs` — `GithubConnectorSettings`: `NotificationSettings`
   (one `NotificationTypeRule` per `PrEventKind` — an on/off switch plus a
   `*`-glob repo pattern and optional branch include/exclude globs), and a
   flat `muted` list of exact exceptions (`"owner/repo"`, `"owner/repo@branch"`,
@@ -237,47 +237,36 @@ to test in isolation:
   settings UI can show one row per kind without an "add rule" step. This is
   not secret, so unlike the token it lives in the same `settings.json` every
   other preference does, under the key `github.settings` — the frontend
-  settings page and the Rust poll loop both read it through
+  settings page and the webhook consumer both read it through
   `tauri-plugin-store`, so there is one copy instead of two that can drift.
   The default settings notify on opened, merged, review-requested and a
   failed build, but not a passing one or a plain close — the one status that
   mostly confirms nothing is wrong, which gets noisy fast if it fires on
   every PR you touch.
-- `poll.rs` — the recurring job. Each cycle runs one GitHub Search API query
-  (`is:pr involves:<username>`, the broadest reading of "the signed-in user's
-  PRs" that still fits one call) sent with the previous cycle's ETag; a 304
-  costs nothing against the rate limit and skips the rest of the cycle
-  entirely. For anything the search returns, it fetches the pull request and
-  its check runs, diffs the result against an on-disk cache
-  (`github-poll-cache.json`, plain JSON — nothing in it is secret) keyed by
-  `"owner/repo#number"`, and for every real change it spawns a short-lived
-  job via `jobs::spawn` that reports one `AppEvent::Notification` and
-  finishes — the same job/event pipeline any other producer uses, one
-  ephemeral job per notification rather than the long-running poll job
-  reporting through its own id. `MIN_POLL_INTERVAL_SECS` (60s) is enforced
-  regardless of what settings.json says, since GitHub's Search API allows 30
-  authenticated requests/minute and one cycle costs one search call plus one
-  pair of calls per changed PR.
+- `events.rs` — Nexus WebSocket connection and durable inbox consumer. It
+  drains on connection and `events.available`, claims one event at a time, refreshes PR
+  and CI state through the GitHub API, applies the same per-event rules, and
+  acknowledges only after the local delivery/notification transaction commits.
+  The socket pings, checks the current Nexus session, and reconnects with
+  backoff; accepted inbox deliveries survive Relay being offline.
+- `poll.rs` — OAuth Device Flow polling plus the on-disk PR snapshot cache
+  (`github-poll-cache.json`). GitHub event notifications no longer use a
+  recurring Search API poll. Repository hooks cover `pull_request` and
+  `check_run`; polling the Nexus inbox is limited to startup/reconnect and
+  WebSocket wakeups.
 
-Known simplifications, acceptable at personal-PR-list scale: CI state comes
-from the Checks API only (GitHub Actions and anything else reporting check
-runs), not the older separate Statuses API; the search query is not
-paginated, so an account with more than 100 relevant open items at once
-would not see all of them; and the on-disk PR cache means a very old,
-low-activity PR could in principle scroll off the search API's relevance
-ranking and later reappear as a fresh "opened" notification.
+Repository hooks are enabled only for repositories explicitly selected in
+Relay and where the user can manage hooks. CI state comes from GitHub Checks
+API events, not the older separate Statuses API.
 
 Connecting is a command (`github_connect_start`) that makes one blocking
 call (`tauri::async_runtime::block_on`, the same tool `jobs` reaches for
 when sync code needs one async result — see the note on why commands stay
 synchronous, above) to fetch the device code, then hands the wait for the
 user's approval to a background job and returns immediately with the code to
-display. That job reports `Waiting` while it polls, and on success stores
-the token and starts the recurring poll job itself — `github::GithubState`
-only ever tracks that one job's id, so `github_disconnect` can cancel it and
-clear the keychain entry. Resuming polling after a restart is one call in
-`lib.rs`'s `setup()`: if a token is already in the keychain, start the poll
-job without asking the user to reconnect.
+display. That job reports `Waiting` while it polls GitHub's Device Flow
+endpoint. On success it stores the token; the Nexus WebSocket consumer runs
+independently and resumes from the durable inbox after startup or reconnect.
 
 Every failure path in that job — denied, expired, a malformed response, a
 network error, a keychain write that fails — is funneled through one

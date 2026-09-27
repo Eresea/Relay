@@ -1,6 +1,5 @@
 //! The GitHub connector: connect an account over OAuth Device Flow, then
-//! poll for pull request activity on an interval and surface it through the
-//! HUD like any other job.
+//! consume repository webhook events through the Nexus inbox.
 //!
 //! Three concerns, three files: `oauth` and `client` know how to talk to
 //! GitHub (device flow, search, pull request detail, check runs);
@@ -18,16 +17,14 @@ pub mod poll;
 pub mod rules;
 pub mod token_store;
 
-use std::path::PathBuf;
-use std::sync::{Arc, Mutex};
-
 use serde::Serialize;
+use std::path::PathBuf;
 use tauri::{AppHandle, Manager};
 use tauri_plugin_store::StoreExt;
 
 use crate::error::{Error, Result};
 use crate::events::{NotificationAction, NotificationStatus};
-use crate::jobs::{self, JobId, JobRegistry, NotificationOptions};
+use crate::jobs::{self, JobRegistry, NotificationOptions};
 
 use client::{GitHubClient, HttpGitHubClient, RepositorySummary};
 use nexus_store::NexusGitHubTokenStore;
@@ -38,15 +35,6 @@ use token_store::TokenStore;
 
 const SETTINGS_KEY: &str = "github.settings";
 const POLL_CACHE_FILE: &str = "github-poll-cache.json";
-
-/// Tracks the one long-running poll job so `disconnect` can cancel it.
-/// Nothing else about the connection is kept here — the token lives in the
-/// keychain and the rules live in `settings.json`, both readable fresh
-/// whenever they're needed.
-#[derive(Default)]
-pub struct GithubState {
-    poll_job: Mutex<Option<JobId>>,
-}
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -88,7 +76,7 @@ pub async fn repositories(
     app: &AppHandle,
     client: HttpGitHubClient,
 ) -> Result<Vec<RepositorySummary>> {
-    let Some(token) = NexusGitHubTokenStore::new(app.clone()).get().await? else {
+    let Some(token) = NexusGitHubTokenStore::new(app.clone()).get_valid().await? else {
         return Ok(Vec::new());
     };
     client.list_repositories(&token.access_token).await
@@ -142,7 +130,6 @@ pub fn connect_start(
     let expires_in = device.expires_in;
 
     let job_client = client.clone();
-    let job_registry = registry.clone();
     let job_app = app.clone();
     let sink = app.clone();
     let job_id = jobs::spawn(sink, registry, "github", move |ctx| async move {
@@ -180,7 +167,6 @@ pub fn connect_start(
             None,
             None,
         );
-        start_polling(&job_app, job_client, &job_registry);
         Ok(())
     });
     log::info!("github: connect job spawned as {job_id}");
@@ -193,66 +179,21 @@ pub fn connect_start(
     })
 }
 
-/// Cancels the poll job, if one is running, and removes the token from the
-/// keychain. The on-disk PR cache is also removed so a future reconnect
-/// starts from a clean slate rather than diffing against months-old state.
-pub async fn disconnect(app: &AppHandle, registry: &JobRegistry) -> Result<()> {
+/// Removes registered hooks, the GitHub credential, and the local PR cache.
+pub async fn disconnect(app: &AppHandle) -> Result<()> {
     events::unregister_all(app).await?;
     NexusGitHubTokenStore::new(app.clone()).clear().await?;
-    if let Some(job_id) = app.state::<GithubState>().poll_job.lock().unwrap().take() {
-        let _ = registry.cancel(&job_id);
-    }
     let _ = std::fs::remove_file(poll_cache_path(app));
     Ok(())
 }
 
-/// Called once at startup: if a token is already in the keychain from a
-/// previous session, resume polling without requiring the user to
-/// reconnect.
-pub async fn resume_polling_if_connected(
-    app: &AppHandle,
-    client: HttpGitHubClient,
-    registry: &JobRegistry,
-) {
-    match NexusGitHubTokenStore::new(app.clone()).get().await {
-        Ok(Some(_)) => start_polling(app, client, registry),
-        Ok(None) => {}
-        Err(error) => log::warn!("could not check the GitHub connection at startup: {error}"),
-    }
-}
-
-fn start_polling(app: &AppHandle, client: HttpGitHubClient, registry: &JobRegistry) {
-    let token_store = Arc::new(NexusGitHubTokenStore::new(app.clone()));
-    let sink = app.clone();
-    let cache_path = poll_cache_path(app);
-    let settings_app = app.clone();
-    let job_registry = registry.clone();
-
-    let job_id = jobs::spawn(sink.clone(), registry.clone(), "github", move |ctx| {
-        poll::run_poll_loop(
-            ctx,
-            client,
-            token_store,
-            job_registry,
-            sink,
-            cache_path,
-            move || read_settings(&settings_app),
-        )
-    });
-
-    *app.state::<GithubState>().poll_job.lock().unwrap() = Some(job_id);
-}
-
 fn read_settings(app: &AppHandle) -> GithubConnectorSettings {
-    let mut settings: GithubConnectorSettings = app
+    let settings: GithubConnectorSettings = app
         .store("settings.json")
         .ok()
         .and_then(|store| store.get(SETTINGS_KEY))
         .and_then(|value| serde_json::from_value(value).ok())
         .unwrap_or_default();
-    settings.poll_interval_secs = settings
-        .poll_interval_secs
-        .max(rules::MIN_POLL_INTERVAL_SECS);
     settings
 }
 

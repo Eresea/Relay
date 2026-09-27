@@ -1,41 +1,16 @@
 //! Talking to GitHub: the two device-flow endpoints on `github.com`, and the
 //! REST API on `api.github.com` for the signed-in user's pull requests.
 //!
-//! Every method is on a trait so `poll::run_poll_cycle` and
-//! `poll::run_device_flow` can be tested against canned responses (see
+//! The trait lets `poll::run_device_flow` be tested against canned responses (see
 //! `fake` below) rather than a live GitHub — the same split `jobs::spawn`
 //! makes with `EventSink`.
 
 use serde::{Deserialize, Serialize};
+use std::time::Duration;
 
 use crate::error::{Error, Result};
 
 use super::oauth::{DeviceCodeResponse, TokenResponse};
-
-/// A conditionally-fetched resource. `NotModified` means GitHub answered 304
-/// against the ETag Relay sent — the poll loop treats that exactly like "no
-/// change" and, importantly, it does not count against the API rate limit,
-/// which is the whole reason to send `If-None-Match` on every poll.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum Conditional<T> {
-    Fresh { value: T, etag: Option<String> },
-    NotModified,
-}
-
-#[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
-pub struct SearchIssueItem {
-    pub number: u64,
-    pub title: String,
-    /// `"https://api.github.com/repos/OWNER/REPO"` — parsed by
-    /// `poll::repo_full_name_from_url` rather than a second field, since
-    /// that is the only place the search API puts the owner/repo pair.
-    pub repository_url: String,
-}
-
-#[derive(Debug, Clone, Deserialize)]
-pub struct SearchIssuesResponse {
-    pub items: Vec<SearchIssueItem>,
-}
 
 #[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
 pub struct PullRequestRef {
@@ -134,12 +109,6 @@ pub trait GitHubClient: Clone + Send + Sync + 'static {
     async fn poll_device_token(&self, client_id: &str, device_code: &str) -> Result<TokenResponse>;
     async fn refresh_token(&self, client_id: &str, refresh_token: &str) -> Result<TokenResponse>;
     async fn fetch_viewer_login(&self, token: &str) -> Result<String>;
-    async fn search_involved_prs(
-        &self,
-        token: &str,
-        username: &str,
-        etag: Option<&str>,
-    ) -> Result<Conditional<Vec<SearchIssueItem>>>;
     async fn list_repositories(&self, token: &str) -> Result<Vec<RepositorySummary>>;
     async fn fetch_pr(
         &self,
@@ -165,6 +134,7 @@ impl Default for HttpGitHubClient {
         Self(
             reqwest::Client::builder()
                 .user_agent("relay-desktop")
+                .timeout(Duration::from_secs(30))
                 .build()
                 .expect("the default reqwest TLS backend is always available"),
         )
@@ -282,32 +252,6 @@ impl GitHubClient for HttpGitHubClient {
         Ok(user.login)
     }
 
-    async fn search_involved_prs(
-        &self,
-        token: &str,
-        username: &str,
-        etag: Option<&str>,
-    ) -> Result<Conditional<Vec<SearchIssueItem>>> {
-        // `involves:` covers authored, assigned, mentioned, commented-on and
-        // review-requested PRs in one query — the broadest reading of "the
-        // signed-in user's PRs across their repos" that still fits one call.
-        let url = format!(
-            "https://api.github.com/search/issues?q={}",
-            urlencode(&format!("is:pr involves:{username}"))
-        );
-        let response = self.authed_get(token, &url, etag).await?;
-        if response.status() == reqwest::StatusCode::NOT_MODIFIED {
-            return Ok(Conditional::NotModified);
-        }
-        let new_etag = etag_header(&response);
-        check_rate_limit(&response)?;
-        let body: SearchIssuesResponse = read_json(response).await?;
-        Ok(Conditional::Fresh {
-            value: body.items,
-            etag: new_etag,
-        })
-    }
-
     async fn list_repositories(&self, token: &str) -> Result<Vec<RepositorySummary>> {
         let response = self
             .authed_get(
@@ -348,18 +292,9 @@ impl GitHubClient for HttpGitHubClient {
     }
 }
 
-fn etag_header(response: &reqwest::Response) -> Option<String> {
-    response
-        .headers()
-        .get(reqwest::header::ETAG)
-        .and_then(|v| v.to_str().ok())
-        .map(str::to_string)
-}
-
 /// GitHub answers a rate-limited request with 403/429 and an
 /// `X-RateLimit-Remaining: 0` (or a `Retry-After`) rather than a normal
-/// error body. The poll loop treats this as "try again next cycle" instead
-/// of a hard failure — see `poll::run_poll_cycle`.
+/// error body so the caller can leave the Nexus delivery unacknowledged.
 fn check_rate_limit(response: &reqwest::Response) -> Result<()> {
     let status = response.status();
     if status == reqwest::StatusCode::FORBIDDEN || status == reqwest::StatusCode::TOO_MANY_REQUESTS
@@ -367,19 +302,6 @@ fn check_rate_limit(response: &reqwest::Response) -> Result<()> {
         return Err(Error::GithubRateLimited);
     }
     Ok(())
-}
-
-fn urlencode(value: &str) -> String {
-    value
-        .bytes()
-        .map(|b| match b {
-            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' => {
-                (b as char).to_string()
-            }
-            b' ' => "+".to_string(),
-            _ => format!("%{b:02X}"),
-        })
-        .collect()
 }
 
 #[cfg(test)]
@@ -396,7 +318,6 @@ pub mod fake {
     type PrKey = (String, String, u64);
     type PrResponses = Arc<Mutex<std::collections::HashMap<PrKey, Result<PullRequestDetail>>>>;
     type CiStateResponses = Arc<Mutex<std::collections::HashMap<String, Result<Option<CiState>>>>>;
-    type SearchResponses = Arc<Mutex<Vec<Result<Conditional<Vec<SearchIssueItem>>>>>>;
     type RepositoryResponses = Arc<Mutex<Vec<Result<Vec<RepositorySummary>>>>>;
 
     #[derive(Clone, Default)]
@@ -405,7 +326,6 @@ pub mod fake {
         pub token_polls: Arc<Mutex<Vec<Result<TokenResponse>>>>,
         pub refreshes: Arc<Mutex<Vec<Result<TokenResponse>>>>,
         pub viewer_login: Arc<Mutex<Vec<Result<String>>>>,
-        pub searches: SearchResponses,
         pub repositories: RepositoryResponses,
         pub prs: PrResponses,
         pub ci_states: CiStateResponses,
@@ -442,15 +362,6 @@ pub mod fake {
 
         async fn fetch_viewer_login(&self, _token: &str) -> Result<String> {
             take(&self.viewer_login)
-        }
-
-        async fn search_involved_prs(
-            &self,
-            _token: &str,
-            _username: &str,
-            _etag: Option<&str>,
-        ) -> Result<Conditional<Vec<SearchIssueItem>>> {
-            take(&self.searches)
         }
 
         async fn list_repositories(&self, _token: &str) -> Result<Vec<RepositorySummary>> {
@@ -553,14 +464,6 @@ mod tests {
         assert_eq!(repository.full_name, "openai/relay");
         assert_eq!(repository.size_kb, 2048);
         assert_eq!(repository.visibility, "private");
-    }
-
-    #[test]
-    fn urlencode_escapes_spaces_and_colons() {
-        assert_eq!(
-            urlencode("is:pr involves:octocat"),
-            "is%3Apr+involves%3Aoctocat"
-        );
     }
 
     #[test]

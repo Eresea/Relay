@@ -142,7 +142,7 @@ pub fn upsert(app: &AppHandle, record: &NotificationRecord) -> Result<()> {
 pub fn persist_webhook(
     app: &AppHandle,
     event_id: &str,
-    record: &NotificationRecord,
+    records: &[NotificationRecord],
 ) -> Result<bool> {
     let mut connection = connection(app)?;
     ensure_webhook_table(&connection)?;
@@ -156,7 +156,9 @@ pub fn persist_webhook(
         transaction.rollback()?;
         return Ok(false);
     }
-    upsert_in(&transaction, record)?;
+    for record in records {
+        upsert_in(&transaction, record)?;
+    }
     transaction.commit()?;
     Ok(true)
 }

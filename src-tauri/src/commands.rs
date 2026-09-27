@@ -297,11 +297,10 @@ pub fn github_connect_start(
     github::connect_start(app, client.inner().clone(), jobs.inner().clone())
 }
 
-/// Disconnects the GitHub account: stops the poll job, if running, and
-/// removes the token from the keychain.
+/// Disconnects the GitHub account and removes its registered hooks and token.
 #[tauri::command]
-pub async fn github_disconnect(app: AppHandle, jobs: tauri::State<'_, JobRegistry>) -> Result<()> {
-    github::disconnect(&app, &jobs).await
+pub async fn github_disconnect(app: AppHandle) -> Result<()> {
+    github::disconnect(&app).await
 }
 
 #[tauri::command]
@@ -352,8 +351,8 @@ pub fn nexus_auth_google_start(app: AppHandle) -> Result<()> {
 }
 
 #[tauri::command]
-pub fn nexus_auth_logout() -> Result<()> {
-    nexus_auth::logout()
+pub fn nexus_auth_logout(app: AppHandle) -> Result<()> {
+    nexus_auth::logout(&app)
 }
 
 /// Whether Gmail is connected, mid-handshake, or neither.
