@@ -32,7 +32,7 @@ export class UmbraSliderComponent implements FormValueControl<number> {
   readonly required = input(false);
   readonly invalid = input(false);
   readonly showValue = input(false);
-  readonly name = input<string>();
+  readonly name = input('');
   readonly inputId = input<string>();
   readonly ariaLabel = input<string>();
   readonly ariaLabelledBy = input<string>();

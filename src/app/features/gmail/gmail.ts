@@ -2,6 +2,9 @@ import { ChangeDetectionStrategy, Component, DestroyRef, inject, signal } from '
 import { FormsModule } from '@angular/forms';
 
 import { TauriBridge, type GmailStatus, type Rule, type RuleKind } from '@core/tauri';
+import { UmbraButtonComponent } from '@umbra/components/umbra-button/umbra-button.component';
+import { UmbraInputComponent } from '@umbra/components/umbra-input/umbra-input.component';
+import { UmbraSwitchComponent } from '@umbra/components/umbra-switch/umbra-switch.component';
 import { Icon } from '@shared/icon';
 
 let nextRuleId = 0;
@@ -21,7 +24,7 @@ let nextRuleId = 0;
 @Component({
   selector: 'rl-gmail',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [FormsModule, Icon],
+  imports: [FormsModule, Icon, UmbraButtonComponent, UmbraInputComponent, UmbraSwitchComponent],
   template: `
     <section class="group">
       <h2 class="u-caption">Gmail</h2>
@@ -32,9 +35,9 @@ let nextRuleId = 0;
             <p class="label">{{ status().accountEmail }}</p>
             <p class="hint">Polling every {{ pollIntervalSecs() }}s for new inbox mail.</p>
           </div>
-          <button type="button" class="link" [disabled]="busy()" (click)="disconnect()">
+          <umbra-button size="sm" variant="link" [disabled]="busy()" (click)="disconnect()">
             Disconnect
-          </button>
+          </umbra-button>
         </div>
 
         <div class="row">
@@ -44,15 +47,11 @@ let nextRuleId = 0;
               Off by default — only Gmail's Important label triggers a HUD notification.
             </p>
           </div>
-          <button
-            type="button"
-            role="switch"
-            class="switch"
-            [attr.aria-checked]="notifyAll()"
-            (click)="toggleNotifyAll()"
-          >
-            <span class="switch-thumb"></span>
-          </button>
+          <umbra-switch
+            ariaLabel="Notify on every new message"
+            [value]="notifyAll()"
+            (valueChange)="setNotifyAll($event)"
+          />
         </div>
 
         <div class="row">
@@ -60,15 +59,11 @@ let nextRuleId = 0;
             <p class="label">Notify on Gmail's Important label</p>
             <p class="hint">Gmail's own priority-inbox signal.</p>
           </div>
-          <button
-            type="button"
-            role="switch"
-            class="switch"
-            [attr.aria-checked]="notifyImportant()"
-            (click)="toggleNotifyImportant()"
-          >
-            <span class="switch-thumb"></span>
-          </button>
+          <umbra-switch
+            ariaLabel="Notify on Gmail's Important label"
+            [value]="notifyImportant()"
+            (valueChange)="setNotifyImportant($event)"
+          />
         </div>
 
         <div class="row poll-row">
@@ -76,14 +71,15 @@ let nextRuleId = 0;
             <p class="label">Poll interval</p>
             <p class="hint">How often to check for new mail, in seconds (minimum 30).</p>
           </div>
-          <input
-            class="field poll-field"
-            type="number"
-            min="30"
-            [(ngModel)]="pollIntervalSecs"
-            [ngModelOptions]="{ updateOn: 'blur' }"
-            (ngModelChange)="saveSettings()"
-          />
+          <span class="poll-field">
+            <umbra-input
+              type="number"
+              [min]="30"
+              [(value)]="pollIntervalText"
+              ariaLabel="Poll interval in seconds"
+              (touch)="savePollInterval()"
+            />
+          </span>
         </div>
 
         <div class="rules">
@@ -93,24 +89,20 @@ let nextRuleId = 0;
           } @else {
             @for (rule of rules(); track rule.id) {
               <div class="rule">
-                <button
-                  type="button"
-                  role="switch"
-                  class="switch switch-sm"
-                  [attr.aria-checked]="rule.enabled"
-                  (click)="toggleRule(rule.id)"
-                >
-                  <span class="switch-thumb"></span>
-                </button>
+                <umbra-switch
+                  [ariaLabel]="describeRule(rule)"
+                  [value]="rule.enabled"
+                  (valueChange)="setRuleEnabled(rule.id, $event)"
+                />
                 <span class="rule-text">{{ describeRule(rule) }}</span>
-                <button
-                  type="button"
-                  class="icon-btn"
+                <umbra-button
+                  size="icon"
+                  variant="ghost"
+                  ariaLabel="Remove rule"
                   (click)="removeRule(rule.id)"
-                  aria-label="Remove rule"
                 >
-                  <rl-icon name="trash-2" [size]="14" />
-                </button>
+                  <rl-icon umbraButtonIcon name="trash-2" [size]="14" />
+                </umbra-button>
               </div>
             }
           }
@@ -121,14 +113,16 @@ let nextRuleId = 0;
               <option value="subjectContains">Subject contains</option>
               <option value="label">Has label</option>
             </select>
-            <input
-              class="field rule-input"
-              [placeholder]="newRuleKind() === 'label' ? 'STARRED' : 'e.g. boss@work.com'"
-              [(ngModel)]="newRuleText"
-              name="newRuleText"
-              required
-            />
-            <button type="submit" class="link" [disabled]="!newRuleText().trim()">Add</button>
+            <span class="rule-input">
+              <umbra-input
+                [(value)]="newRuleText"
+                [placeholder]="newRuleKind() === 'label' ? 'STARRED' : 'e.g. boss@work.com'"
+                [required]="true"
+              />
+            </span>
+            <umbra-button size="sm" variant="link" type="submit" [disabled]="!newRuleText().trim()">
+              Add
+            </umbra-button>
           </form>
         </div>
       } @else if (status().connecting) {
@@ -137,7 +131,7 @@ let nextRuleId = 0;
             <p class="label">Waiting for the browser</p>
             <p class="hint">Complete sign-in in the window Relay just opened.</p>
           </div>
-          <button type="button" class="link" (click)="cancelConnect()">Cancel</button>
+          <umbra-button size="sm" variant="link" (click)="cancelConnect()">Cancel</umbra-button>
         </div>
       } @else {
         <div class="row">
@@ -145,9 +139,9 @@ let nextRuleId = 0;
             <p class="label">Not connected</p>
             <p class="hint">Get a HUD notification for important new mail.</p>
           </div>
-          <button type="button" class="link" [disabled]="busy()" (click)="connect()">
+          <umbra-button size="sm" variant="link" [disabled]="busy()" (click)="connect()">
             Connect Gmail
-          </button>
+          </umbra-button>
         </div>
       }
 
@@ -186,21 +180,8 @@ let nextRuleId = 0;
       color: var(--text-muted);
     }
 
-    .link {
+    :host ::ng-deep .row umbra-button {
       flex: none;
-      font-size: var(--text-13);
-      color: var(--accent);
-      padding: var(--space-2) var(--space-3);
-      border-radius: var(--radius-sm);
-      transition: background-color var(--dur-hover) var(--ease-standard);
-    }
-
-    .link:hover {
-      background: var(--tint-hover);
-    }
-
-    .link:disabled {
-      opacity: 0.5;
     }
 
     .field {
@@ -214,49 +195,8 @@ let nextRuleId = 0;
 
     .poll-field {
       inline-size: 5em;
-    }
-
-    .switch {
-      position: relative;
       flex: none;
-      inline-size: 36px;
-      block-size: 20px;
-      border-radius: var(--radius-pill);
-      background: var(--border-subtle);
-      transition: background-color var(--dur-hover) var(--ease-standard);
-    }
-
-    .switch[aria-checked='true'] {
-      background: var(--accent);
-    }
-
-    .switch-thumb {
-      position: absolute;
-      inset-block-start: 2px;
-      inset-inline-start: 2px;
-      inline-size: 16px;
-      block-size: 16px;
-      border-radius: var(--radius-pill);
-      background: var(--bg-app);
-      transition: transform var(--dur-hover) var(--ease-standard);
-    }
-
-    .switch[aria-checked='true'] .switch-thumb {
-      transform: translateX(16px);
-    }
-
-    .switch-sm {
-      inline-size: 28px;
-      block-size: 16px;
-    }
-
-    .switch-sm .switch-thumb {
-      inline-size: 12px;
-      block-size: 12px;
-    }
-
-    .switch-sm[aria-checked='true'] .switch-thumb {
-      transform: translateX(12px);
+      display: block;
     }
 
     .rules {
@@ -274,20 +214,6 @@ let nextRuleId = 0;
       flex: 1;
       font-size: var(--text-13);
       color: var(--text-body);
-    }
-
-    .icon-btn {
-      display: grid;
-      place-items: center;
-      inline-size: var(--control-sm);
-      block-size: var(--control-sm);
-      color: var(--text-subtle);
-      border-radius: var(--radius-sm);
-    }
-
-    .icon-btn:hover {
-      color: var(--danger-ink);
-      background: var(--danger);
     }
 
     .rule-form {
@@ -323,6 +249,7 @@ export class Gmail {
   protected readonly notifyAll = signal(false);
   protected readonly notifyImportant = signal(true);
   protected readonly pollIntervalSecs = signal(60);
+  protected readonly pollIntervalText = signal('60');
   protected readonly rules = signal<readonly Rule[]>([]);
 
   protected readonly newRuleKind = signal<RuleKind['kind']>('fromContains');
@@ -343,6 +270,7 @@ export class Gmail {
       this.notifyAll.set(settings.rules.notifyAll);
       this.notifyImportant.set(settings.rules.notifyImportant);
       this.pollIntervalSecs.set(settings.pollIntervalSecs);
+      this.pollIntervalText.set(String(settings.pollIntervalSecs));
       this.rules.set(settings.rules.custom);
     }
   }
@@ -382,19 +310,29 @@ export class Gmail {
     }
   }
 
-  protected toggleNotifyAll(): void {
-    this.notifyAll.set(!this.notifyAll());
+  protected setNotifyAll(value: boolean): void {
+    this.notifyAll.set(value);
     this.saveSettings();
   }
 
-  protected toggleNotifyImportant(): void {
-    this.notifyImportant.set(!this.notifyImportant());
+  protected setNotifyImportant(value: boolean): void {
+    this.notifyImportant.set(value);
     this.saveSettings();
   }
 
-  protected toggleRule(id: string): void {
+  protected savePollInterval(): void {
+    const seconds = Number.parseInt(this.pollIntervalText(), 10);
+    if (!Number.isFinite(seconds) || seconds < 30) {
+      this.pollIntervalText.set(String(this.pollIntervalSecs()));
+      return;
+    }
+    this.pollIntervalSecs.set(seconds);
+    this.saveSettings();
+  }
+
+  protected setRuleEnabled(id: string, enabled: boolean): void {
     this.rules.update((rules) =>
-      rules.map((rule) => (rule.id === id ? { ...rule, enabled: !rule.enabled } : rule)),
+      rules.map((rule) => (rule.id === id ? { ...rule, enabled } : rule)),
     );
     this.saveSettings();
   }

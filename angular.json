@@ -36,7 +36,7 @@
                 "ignore": ["fonts/**"]
               }
             ],
-            "styles": ["src/styles.css"]
+            "styles": ["src/styles.scss", "src/styles.css"]
           },
           "configurations": {
             "production": {

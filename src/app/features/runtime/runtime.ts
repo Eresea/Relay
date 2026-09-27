@@ -11,6 +11,8 @@ import {
   type RuntimeSignalEvent,
 } from '@core/tauri';
 import { Icon } from '@shared/icon';
+import { UmbraButtonComponent } from '@umbra/components/umbra-button/umbra-button.component';
+import { UmbraInputComponent } from '@umbra/components/umbra-input/umbra-input.component';
 
 const RUNTIME_STATUS_POLL_INTERVAL_MS = 30_000;
 const RUNTIME_STATUS_STALE_AFTER_MS = 90_000;
@@ -18,7 +20,7 @@ const RUNTIME_STATUS_STALE_AFTER_MS = 90_000;
 @Component({
   selector: 'rl-runtime',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [Icon],
+  imports: [Icon, UmbraButtonComponent, UmbraInputComponent],
   template: `
     <section class="runtime" aria-labelledby="runtime-title">
       <header class="page-header">
@@ -28,9 +30,9 @@ const RUNTIME_STATUS_STALE_AFTER_MS = 90_000;
           <p class="page-description">Leaf production status and a direct Nexus readiness check.</p>
         </div>
         <div class="page-actions">
-          <button
-            type="button"
-            class="secondary-button"
+          <umbra-button
+            size="sm"
+            variant="outline"
             [disabled]="
               leafRefreshing() ||
               nexusRefreshing() ||
@@ -39,15 +41,15 @@ const RUNTIME_STATUS_STALE_AFTER_MS = 90_000;
             (click)="refreshRuntimeStatus()"
           >
             {{ leafRefreshing() || nexusRefreshing() ? 'Refreshing…' : 'Refresh status' }}
-          </button>
-          <button
-            type="button"
-            class="open-button"
+          </umbra-button>
+          <umbra-button
+            size="sm"
+            variant="outline"
             [disabled]="loading() || (!dashboardUrl().trim() && !grafanaUrl().trim())"
             (click)="openGrafana()"
           >
             Open Grafana
-          </button>
+          </umbra-button>
         </div>
       </header>
 
@@ -91,15 +93,14 @@ const RUNTIME_STATUS_STALE_AFTER_MS = 90_000;
                       {{ leafHealthLabel() }} · {{ probeEvidence(leafHealth()) }}
                     </span>
                     <p>{{ leafHealthDetail() }}</p>
-                    <button
-                      type="button"
-                      class="secondary-button"
+                    <umbra-button
+                      size="sm"
+                      variant="outline"
                       [disabled]="leafHealthState() === 'unavailable'"
-                      aria-label="Open Leaf API liveness endpoint"
                       (click)="openHealthSource('https://leaf.eresea.net/api/version/health')"
                     >
                       View source
-                    </button>
+                    </umbra-button>
                   </div>
                 </td>
               </tr>
@@ -123,15 +124,14 @@ const RUNTIME_STATUS_STALE_AFTER_MS = 90_000;
                       {{ nexusHealthLabel() }} · {{ probeEvidence(nexusHealth()) }}
                     </span>
                     <p>{{ nexusHealthDetail() }}</p>
-                    <button
-                      type="button"
-                      class="secondary-button"
+                    <umbra-button
+                      size="sm"
+                      variant="outline"
                       [disabled]="nexusHealthState() === 'unavailable'"
-                      aria-label="Open Nexus readiness endpoint"
                       (click)="openHealthSource('https://nexus.eresea.net/readyz')"
                     >
                       View source
-                    </button>
+                    </umbra-button>
                   </div>
                 </td>
               </tr>
@@ -222,43 +222,38 @@ const RUNTIME_STATUS_STALE_AFTER_MS = 90_000;
         }
 
         <div class="fields">
-          <label class="field">
-            <span>Grafana URL</span>
-            <input
-              type="url"
-              autocomplete="url"
-              placeholder="https://grafana.example.net"
-              [value]="grafanaUrl()"
-              [disabled]="loading() || saving() || checking()"
-              (input)="setGrafanaUrl($event)"
-            />
-          </label>
-          <label class="field">
-            <span>Dashboard URL</span>
-            <input
-              type="url"
-              autocomplete="url"
-              placeholder="Leave blank until known"
-              [value]="dashboardUrl()"
-              [disabled]="loading() || saving() || checking()"
-              (input)="setDashboardUrl($event)"
-            />
-          </label>
+          <umbra-input
+            label="Grafana URL"
+            type="url"
+            autocomplete="url"
+            placeholder="https://grafana.example.net"
+            [value]="grafanaUrl()"
+            [disabled]="loading() || saving() || checking()"
+            (valueChange)="setGrafanaUrl($event)"
+          />
+          <umbra-input
+            label="Dashboard URL"
+            type="url"
+            autocomplete="url"
+            placeholder="Leave blank until known"
+            [value]="dashboardUrl()"
+            [disabled]="loading() || saving() || checking()"
+            (valueChange)="dashboardUrl.set($event)"
+          />
           <div class="field token-field">
-            <label for="grafana-token">Grafana API token</label>
             <div class="token-input-row">
-              <input
-                id="grafana-token"
+              <umbra-input
+                label="Grafana API token"
                 type="password"
                 autocomplete="new-password"
                 placeholder="Leave blank until configured"
                 [value]="tokenInput()"
                 [disabled]="loading() || saving() || checking()"
-                (input)="setTokenInput($event)"
+                (valueChange)="tokenInput.set($event)"
               />
-              <button
-                type="button"
-                class="secondary-button"
+              <umbra-button
+                size="sm"
+                variant="outline"
                 [disabled]="
                   saving() ||
                   checking() ||
@@ -269,16 +264,16 @@ const RUNTIME_STATUS_STALE_AFTER_MS = 90_000;
                 (click)="saveToken()"
               >
                 Store token
-              </button>
+              </umbra-button>
               @if (tokenConfigured()) {
-                <button
-                  type="button"
-                  class="secondary-button"
+                <umbra-button
+                  size="sm"
+                  variant="outline"
                   [disabled]="saving() || checking()"
                   (click)="clearToken()"
                 >
                   Remove
-                </button>
+                </umbra-button>
               }
             </div>
             <span class="field-hint">
@@ -290,22 +285,17 @@ const RUNTIME_STATUS_STALE_AFTER_MS = 90_000;
 
         <footer class="config-footer">
           <p>Metrics and thresholds will be mapped after the datasource and dashboard are known.</p>
-          <button
-            type="button"
-            class="secondary-button"
+          <umbra-button
+            size="sm"
+            variant="outline"
             [disabled]="saving() || loading() || checking() || !grafanaUrl().trim()"
             (click)="checkGrafana()"
           >
             {{ checking() ? 'Checking Grafana…' : 'Check connection' }}
-          </button>
-          <button
-            type="button"
-            class="primary-button"
-            [disabled]="saving() || loading() || checking()"
-            (click)="saveSettings()"
-          >
+          </umbra-button>
+          <umbra-button [disabled]="saving() || loading() || checking()" (click)="saveSettings()">
             Save URLs
-          </button>
+          </umbra-button>
         </footer>
       </section>
 
@@ -336,34 +326,34 @@ const RUNTIME_STATUS_STALE_AFTER_MS = 90_000;
             <ul class="dashboard-list" aria-label="Grafana dashboards">
               @for (dashboard of result.dashboards; track dashboard.uid) {
                 <li>
-                  <button
-                    type="button"
-                    class="dashboard-open"
+                  <umbra-button
+                    variant="link"
+                    size="sm"
                     [disabled]="saving()"
                     (click)="openDashboard(dashboard.url)"
                   >
                     {{ dashboard.title }}
-                  </button>
+                  </umbra-button>
                   @if (dashboardUrl() === dashboard.url) {
                     <span class="dashboard-default">Default</span>
                   } @else {
-                    <button
-                      type="button"
-                      class="dashboard-use"
+                    <umbra-button
+                      variant="outline"
+                      size="sm"
                       [disabled]="saving()"
                       (click)="selectDashboard(dashboard)"
                     >
                       Set default
-                    </button>
+                    </umbra-button>
                   }
-                  <button
-                    type="button"
-                    class="dashboard-use"
+                  <umbra-button
+                    variant="outline"
+                    size="sm"
                     [disabled]="saving() || inspectingPanels()"
                     (click)="inspectDashboard(dashboard)"
                   >
                     Inspect
-                  </button>
+                  </umbra-button>
                 </li>
               }
             </ul>
@@ -546,47 +536,6 @@ const RUNTIME_STATUS_STALE_AFTER_MS = 90_000;
       line-height: 1.5;
     }
 
-    .open-button,
-    .primary-button,
-    .secondary-button {
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      min-block-size: var(--control-sm);
-      padding-inline: var(--space-3);
-      border-radius: var(--radius-sm);
-      font-size: var(--text-12);
-      font-weight: var(--weight-medium);
-      white-space: nowrap;
-    }
-
-    .open-button,
-    .secondary-button {
-      color: var(--text-body);
-      border: 1px solid var(--border-subtle);
-    }
-
-    .open-button:hover:not(:disabled),
-    .secondary-button:hover:not(:disabled) {
-      background: var(--tint-hover);
-    }
-
-    .primary-button {
-      color: var(--primary-ink);
-      background: var(--primary);
-    }
-
-    .primary-button:hover:not(:disabled) {
-      background: var(--primary-hover);
-    }
-
-    .open-button:disabled,
-    .primary-button:disabled,
-    .secondary-button:disabled {
-      cursor: not-allowed;
-      opacity: 0.55;
-    }
-
     .setup-notice {
       display: flex;
       align-items: flex-start;
@@ -663,31 +612,6 @@ const RUNTIME_STATUS_STALE_AFTER_MS = 90_000;
       margin-block-start: var(--space-5);
     }
 
-    .field {
-      display: grid;
-      gap: var(--space-2);
-      min-inline-size: 0;
-      color: var(--text-body);
-      font-size: var(--text-12);
-    }
-
-    .field input {
-      inline-size: 100%;
-      min-inline-size: 0;
-      min-block-size: var(--control-sm);
-      padding: var(--space-2) var(--space-3);
-      color: var(--text-body);
-      background: var(--bg-sunken);
-      border: 1px solid var(--border-subtle);
-      border-radius: var(--radius-sm);
-      font: inherit;
-    }
-
-    .field input:focus-visible {
-      outline: 2px solid var(--accent);
-      outline-offset: 1px;
-    }
-
     .token-field {
       grid-column: 1 / -1;
     }
@@ -697,8 +621,9 @@ const RUNTIME_STATUS_STALE_AFTER_MS = 90_000;
       gap: var(--space-2);
     }
 
-    .token-input-row input {
+    .token-input-row umbra-input {
       flex: 1;
+      min-inline-size: 0;
     }
 
     .field-hint {
@@ -770,34 +695,20 @@ const RUNTIME_STATUS_STALE_AFTER_MS = 90_000;
       background: var(--bg-sunken);
     }
 
-    .dashboard-list button {
-      color: var(--text-body);
-      font: inherit;
-    }
-
-    .dashboard-open {
+    :host ::ng-deep .dashboard-list li umbra-button:first-child {
       flex: 1;
       min-inline-size: 0;
-      padding: var(--space-2);
-      overflow-wrap: anywhere;
-      text-align: start;
-      border: 0;
-      border-radius: var(--radius-sm);
-      background: transparent;
     }
 
-    .dashboard-use {
+    :host ::ng-deep .dashboard-list umbra-button:not(:first-child) {
       flex: none;
-      padding: var(--space-2);
-      border: 1px solid var(--border-subtle);
-      border-radius: var(--radius-sm);
-      background: var(--bg-raised);
-      white-space: nowrap;
+      width: auto;
     }
 
-    .dashboard-open:hover:not(:disabled),
-    .dashboard-use:hover:not(:disabled) {
-      background: var(--tint-hover);
+    :host ::ng-deep .page-actions umbra-button,
+    :host ::ng-deep .config-footer umbra-button,
+    :host ::ng-deep .token-input-row umbra-button {
+      width: auto;
     }
 
     .dashboard-error {
@@ -1018,9 +929,7 @@ export class Runtime implements OnDestroy {
     this.loading.set(false);
   }
 
-  protected setGrafanaUrl(event: Event): void {
-    if (!(event.target instanceof HTMLInputElement)) return;
-    const grafanaUrl = event.target.value;
+  protected setGrafanaUrl(grafanaUrl: string): void {
     if (normalizeWebUrl(grafanaUrl) !== normalizeWebUrl(this.grafanaUrl())) {
       this.dashboardUrl.set('');
       this.checkResult.set(null);
@@ -1030,14 +939,6 @@ export class Runtime implements OnDestroy {
     }
     this.grafanaUrl.set(grafanaUrl);
     void this.refreshGrafanaTokenStatus(grafanaUrl);
-  }
-
-  protected setDashboardUrl(event: Event): void {
-    if (event.target instanceof HTMLInputElement) this.dashboardUrl.set(event.target.value);
-  }
-
-  protected setTokenInput(event: Event): void {
-    if (event.target instanceof HTMLInputElement) this.tokenInput.set(event.target.value);
   }
 
   private async refreshGrafanaTokenStatus(grafanaUrl: string): Promise<void> {

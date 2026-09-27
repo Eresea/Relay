@@ -29,16 +29,14 @@ export class UmbraTextareaComponent implements FormValueControl<string> {
   readonly hint = input<string>();
   readonly error = input<string>();
   readonly rows = input(3, { transform: numberAttribute });
-  readonly resize = input<'none' | 'vertical' | 'horizontal' | 'both'>(
-    'vertical',
-  );
+  readonly resize = input<'none' | 'vertical' | 'horizontal' | 'both'>('vertical');
   readonly autoResize = input(false);
   readonly disabled = input(false);
   readonly readonly = input(false);
   readonly required = input(false);
   readonly invalid = input(false);
   readonly showCount = input(false);
-  readonly name = input<string>();
+  readonly name = input('');
   readonly autocomplete = input<string>();
   readonly minLength = input<number>();
   readonly maxLength = input<number>();

@@ -1,4 +1,4 @@
-import { NgTemplateOutlet } from "@angular/common";
+import { NgTemplateOutlet } from '@angular/common';
 import {
   ChangeDetectionStrategy,
   Component,
@@ -8,21 +8,21 @@ import {
   input,
   model,
   output,
-} from "@angular/core";
-import type { FormValueControl } from "@angular/forms/signals";
+} from '@angular/core';
+import type { FormValueControl } from '@angular/forms/signals';
 
 let nextId = 0;
 
 @Component({
-  selector: "umbra-checkbox",
+  selector: 'umbra-checkbox',
   standalone: true,
   imports: [NgTemplateOutlet],
-  templateUrl: "./umbra-checkbox.component.html",
-  styleUrl: "./umbra-checkbox.component.scss",
+  templateUrl: './umbra-checkbox.component.html',
+  styleUrl: './umbra-checkbox.component.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,
   host: {
-    class: "umbra-checkbox",
-    "[attr.data-disabled]": "disabled()",
+    class: 'umbra-checkbox',
+    '[attr.data-disabled]': 'disabled()',
   },
 })
 export class UmbraCheckboxComponent implements FormValueControl<boolean> {
@@ -35,8 +35,8 @@ export class UmbraCheckboxComponent implements FormValueControl<boolean> {
   readonly disabled = input(false);
   readonly required = input(false);
   readonly invalid = input(false);
-  readonly name = input<string>();
-  readonly formValue = input("on");
+  readonly name = input('');
+  readonly formValue = input('on');
   readonly inputId = input<string>();
   readonly ariaLabel = input<string>();
   readonly ariaLabelledBy = input<string>();
@@ -56,7 +56,7 @@ export class UmbraCheckboxComponent implements FormValueControl<boolean> {
         !this.error() && this.hint() ? this.hintId : undefined,
       ]
         .filter(Boolean)
-        .join(" ") || null,
+        .join(' ') || null,
   );
 
   private readonly host = inject(ElementRef<HTMLElement>);

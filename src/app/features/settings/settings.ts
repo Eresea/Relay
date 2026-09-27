@@ -4,6 +4,9 @@ import { TauriBridge } from '@core/tauri';
 import { ThemeService } from '@core/theme';
 import { Github } from '@features/github/github';
 import { Gmail } from '@features/gmail/gmail';
+import { UmbraButtonComponent } from '@umbra/components/umbra-button/umbra-button.component';
+import { UmbraInputComponent } from '@umbra/components/umbra-input/umbra-input.component';
+import { UmbraSwitchComponent } from '@umbra/components/umbra-switch/umbra-switch.component';
 
 const HUD_TOP_OFFSET_KEY = 'hud.topOffset';
 const DEFAULT_HUD_TOP_OFFSET = 80;
@@ -29,7 +32,7 @@ const MAX_HUD_TOP_OFFSET = 2000;
 @Component({
   selector: 'rl-settings',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [Github, Gmail],
+  imports: [Github, Gmail, UmbraButtonComponent, UmbraInputComponent, UmbraSwitchComponent],
   template: `
     <nav class="tabs">
       <button
@@ -66,25 +69,26 @@ const MAX_HUD_TOP_OFFSET = 2000;
             <p class="label">Theme</p>
             <p class="hint">{{ theme.theme() === 'dark' ? 'Dark' : 'Light' }} is active.</p>
           </div>
-          <button type="button" class="link" (click)="theme.toggle()">
+          <umbra-button size="sm" variant="link" (click)="theme.toggle()">
             Switch to {{ theme.theme() === 'dark' ? 'light' : 'dark' }}
-          </button>
+          </umbra-button>
         </div>
         <div class="row">
           <div>
             <p class="label">Notification top offset</p>
             <p class="hint">Distance from the top-right corner, in pixels.</p>
           </div>
-          <input
-            class="number-input"
-            type="number"
-            min="0"
-            max="2000"
-            step="1"
-            [value]="hudTopOffset()"
-            aria-label="Notification top offset in pixels"
-            (change)="saveHudTopOffset($event)"
-          />
+          <span class="number-input">
+            <umbra-input
+              type="number"
+              [min]="0"
+              [max]="2000"
+              [step]="1"
+              [value]="hudTopOffset().toString()"
+              ariaLabel="Notification top offset in pixels"
+              (valueChange)="saveHudTopOffset($event)"
+            />
+          </span>
         </div>
       </section>
 
@@ -95,16 +99,12 @@ const MAX_HUD_TOP_OFFSET = 2000;
             <p class="label">Launch at login</p>
             <p class="hint">Starts hidden in the tray, the same as any other launch.</p>
           </div>
-          <button
-            type="button"
-            role="switch"
-            class="switch"
-            [attr.aria-checked]="launchAtLogin()"
+          <umbra-switch
+            ariaLabel="Launch at login"
+            [value]="launchAtLogin()"
             [disabled]="launchAtLoginPending()"
-            (click)="toggleLaunchAtLogin()"
-          >
-            <span class="switch-thumb"></span>
-          </button>
+            (valueChange)="setLaunchAtLogin($event)"
+          />
         </div>
       </section>
     </div>
@@ -187,61 +187,18 @@ const MAX_HUD_TOP_OFFSET = 2000;
       color: var(--text-muted);
     }
 
-    .link {
+    :host ::ng-deep .row umbra-button {
       flex: none;
-      font-size: var(--text-13);
-      color: var(--accent);
-      padding: var(--space-2) var(--space-3);
-      border-radius: var(--radius-sm);
-      transition: background-color var(--dur-hover) var(--ease-standard);
-    }
-
-    .link:hover {
-      background: var(--tint-hover);
     }
 
     .number-input {
       inline-size: 76px;
       flex: none;
-      padding: var(--space-2) var(--space-3);
-      color: var(--text-body);
-      background: var(--bg-sunken);
-      border: 1px solid var(--border-subtle);
-      border-radius: var(--radius-sm);
+      display: block;
+    }
+
+    :host ::ng-deep .number-input input {
       text-align: end;
-    }
-
-    .switch {
-      position: relative;
-      flex: none;
-      inline-size: 36px;
-      block-size: 20px;
-      border-radius: var(--radius-pill);
-      background: var(--border-subtle);
-      transition: background-color var(--dur-hover) var(--ease-standard);
-    }
-
-    .switch[aria-checked='true'] {
-      background: var(--accent);
-    }
-
-    .switch:disabled {
-      opacity: 0.6;
-    }
-
-    .switch-thumb {
-      position: absolute;
-      inset-block-start: 2px;
-      inset-inline-start: 2px;
-      inline-size: 16px;
-      block-size: 16px;
-      border-radius: var(--radius-pill);
-      background: var(--bg-app);
-      transition: transform var(--dur-hover) var(--ease-standard);
-    }
-
-    .switch[aria-checked='true'] .switch-thumb {
-      transform: translateX(16px);
     }
   `,
 })
@@ -270,21 +227,20 @@ export class Settings {
       .then((offset) => this.hudTopOffset.set(clampHudTopOffset(offset)));
   }
 
-  protected saveHudTopOffset(event: Event): void {
-    if (!(event.target instanceof HTMLInputElement)) return;
-    const offset = clampHudTopOffset(Number.parseInt(event.target.value, 10));
+  protected saveHudTopOffset(value: string): void {
+    const offset = clampHudTopOffset(Number.parseInt(value, 10));
     this.hudTopOffset.set(offset);
     void this.tauri.setSetting(HUD_TOP_OFFSET_KEY, offset);
   }
 
-  protected toggleLaunchAtLogin(): void {
-    const next = !this.launchAtLogin();
+  protected setLaunchAtLogin(next: boolean): void {
+    const previous = this.launchAtLogin();
     this.launchAtLogin.set(next);
     this.launchAtLoginPending.set(true);
 
     void this.tauri
       .setAutostart(next)
-      .catch(() => this.launchAtLogin.set(!next))
+      .catch(() => this.launchAtLogin.set(previous))
       .finally(() => this.launchAtLoginPending.set(false));
   }
 }

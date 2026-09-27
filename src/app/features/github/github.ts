@@ -1,6 +1,7 @@
 import { ChangeDetectionStrategy, Component, DestroyRef, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 
+import { NexusAccount } from '@core/nexus-account';
 import {
   DEFAULT_GITHUB_SETTINGS,
   PR_EVENT_KINDS,
@@ -12,10 +13,13 @@ import {
   type GithubRepositorySummary,
   type NotificationSettings,
   type NotificationTypeRule,
-  type NexusAuthStatus,
   type PrEventKind,
 } from '@core/tauri';
 import { Icon } from '@shared/icon';
+import { UmbraButtonComponent } from '@umbra/components/umbra-button/umbra-button.component';
+import { UmbraInputComponent } from '@umbra/components/umbra-input/umbra-input.component';
+import { UmbraCheckboxComponent } from '@umbra/components/umbra-checkbox/umbra-checkbox.component';
+import { UmbraSwitchComponent } from '@umbra/components/umbra-switch/umbra-switch.component';
 
 const KIND_LABELS: Readonly<Record<PrEventKind, string>> = {
   opened: 'Opened',
@@ -106,38 +110,16 @@ function connectorErrorMessage(error: unknown): string {
 @Component({
   selector: 'rl-github',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [FormsModule, Icon],
+  imports: [
+    FormsModule,
+    Icon,
+    UmbraButtonComponent,
+    UmbraCheckboxComponent,
+    UmbraInputComponent,
+    UmbraSwitchComponent,
+  ],
   template: `
     <section class="wrap">
-      <section class="group">
-        <div class="row-header">
-          <h2 class="u-caption">Nexus account</h2>
-          @if (nexusAuth().connected) {
-            <button type="button" class="link" [disabled]="nexusBusy()" (click)="logoutNexus()">
-              Sign out
-            </button>
-          }
-        </div>
-        <div class="row">
-          @if (nexusAuth().connected) {
-            <p class="label">
-              Connected as <strong>{{ nexusAuth().email || nexusAuth().displayName }}</strong>
-            </p>
-          } @else {
-            <div>
-              <p class="label">Connect Relay to Nexus</p>
-              <p class="hint">Enables shared connector credentials and durable event delivery.</p>
-            </div>
-            <button type="button" class="primary" [disabled]="nexusBusy()" (click)="connectNexus()">
-              {{ nexusBusy() ? 'Waiting for sign-in…' : 'Connect Nexus' }}
-            </button>
-          }
-        </div>
-        @if (nexusError()) {
-          <p class="error">{{ nexusError() }}</p>
-        }
-      </section>
-
       @switch (status()) {
         @case ('disconnected') {
           <div class="connect">
@@ -153,25 +135,24 @@ function connectorErrorMessage(error: unknown): string {
                 Needs a GitHub OAuth App with Device Flow enabled. Create one, then paste its client
                 id below.
               </p>
-              <button type="button" class="link" (click)="openDeveloperSettings()">
+              <umbra-button size="sm" variant="link" (click)="openDeveloperSettings()">
                 Open GitHub Developer Settings
-              </button>
-              <input
-                class="field"
+              </umbra-button>
+              <umbra-input
                 placeholder="OAuth App client id"
-                [(ngModel)]="clientId"
-                (change)="save()"
+                [value]="clientId()"
+                (valueChange)="clientId.set($event)"
+                (touch)="save()"
               />
             </div>
 
-            <button
-              type="button"
-              class="primary"
+            <umbra-button
+              variant="default"
               [disabled]="busy() || !clientId().trim()"
               (click)="connect()"
             >
               Connect
-            </button>
+            </umbra-button>
             @if (error()) {
               <p class="error">{{ error() }}</p>
             }
@@ -185,19 +166,14 @@ function connectorErrorMessage(error: unknown): string {
               <code class="user-code">{{ auth.userCode }}</code>
               <p class="hint">{{ auth.verificationUri }}</p>
               <div class="connect-actions">
-                <button type="button" class="primary" (click)="openVerification(auth)">
-                  Open on GitHub
-                </button>
-                <button
-                  type="button"
-                  class="link"
-                  (click)="copyCode(auth)"
-                  [attr.aria-label]="codeCopied() ? 'Copied user code' : 'Copy user code'"
-                >
+                <umbra-button (click)="openVerification(auth)"> Open on GitHub </umbra-button>
+                <umbra-button size="sm" variant="link" (click)="copyCode(auth)">
                   {{ codeCopied() ? 'Copied' : 'Copy code' }}
-                </button>
+                </umbra-button>
               </div>
-              <button type="button" class="link" (click)="cancelConnect(auth)">Cancel</button>
+              <umbra-button size="sm" variant="link" (click)="cancelConnect(auth)"
+                >Cancel</umbra-button
+              >
               @if (error()) {
                 <p class="error">{{ error() }}</p>
               }
@@ -208,7 +184,9 @@ function connectorErrorMessage(error: unknown): string {
           <section class="group">
             <div class="row-header">
               <h2 class="u-caption">Account</h2>
-              <button type="button" class="link" (click)="disconnect()">Disconnect</button>
+              <umbra-button size="sm" variant="link" (click)="disconnect()"
+                >Disconnect</umbra-button
+              >
             </div>
             <div class="row">
               <div class="account-status">
@@ -237,42 +215,41 @@ function connectorErrorMessage(error: unknown): string {
               manage hooks and also grants broad repository access.
             </p>
             @if (!nexusAuth().connected) {
-              <p class="hint">Connect your Nexus account to enable webhook delivery.</p>
+              <p class="hint">
+                Connect through the account button below Settings to enable webhook delivery.
+              </p>
             } @else if (webhookRepositories().length === 0) {
               <p class="hint">No repositories are available from GitHub.</p>
             } @else {
               <div class="webhook-repositories">
                 @for (repo of webhookRepositories(); track repo.fullName) {
-                  <label class="webhook-repository">
-                    <input
-                      type="checkbox"
-                      [checked]="selectedWebhookRepos().includes(repo.fullName)"
-                      (change)="toggleWebhookRepo(repo.fullName)"
+                  <div class="webhook-repository">
+                    <umbra-checkbox
+                      [label]="repo.fullName"
+                      [value]="selectedWebhookRepos().includes(repo.fullName)"
+                      (valueChange)="toggleWebhookRepo(repo.fullName)"
                     />
-                    <span>{{ repo.fullName }}</span>
-                  </label>
+                  </div>
                 }
               </div>
-              <button
-                type="button"
-                class="primary"
+              <umbra-button
                 [disabled]="webhookBusy() || selectedWebhookRepos().length === 0"
                 (click)="registerWebhooks()"
               >
                 {{ webhookBusy() ? 'Registering…' : 'Enable webhooks for selected repos' }}
-              </button>
+              </umbra-button>
             }
             @for (repository of registeredWebhookRepos(); track repository) {
               <div class="entry">
                 <code>{{ repository }}</code>
-                <button
-                  type="button"
-                  class="link"
+                <umbra-button
+                  size="sm"
+                  variant="link"
                   [disabled]="webhookBusy()"
                   (click)="unregisterWebhook(repository)"
                 >
                   Remove webhook
-                </button>
+                </umbra-button>
               </div>
             }
             @if (webhookError()) {
@@ -290,15 +267,17 @@ function connectorErrorMessage(error: unknown): string {
                 <p class="label">Check every</p>
                 <p class="hint">A minimum of 60 seconds is always enforced.</p>
               </div>
-              <label class="option">
-                <input
+              <div class="option">
+                <umbra-input
                   type="number"
                   min="60"
-                  [(ngModel)]="pollIntervalSecs"
-                  (ngModelChange)="save()"
+                  ariaLabel="Check every, in seconds"
+                  [value]="pollIntervalSecs().toString()"
+                  (valueChange)="pollIntervalSecs.set(+$event)"
+                  (touch)="save()"
                 />
                 <span>seconds</span>
-              </label>
+              </div>
             </div>
           </section>
 
@@ -313,36 +292,32 @@ function connectorErrorMessage(error: unknown): string {
               @let rule = notifications()[kind];
               <div class="rule" [class.rule-disabled]="!rule.enabled">
                 <div class="rule-header">
-                  <button
-                    type="button"
-                    role="switch"
-                    class="switch"
-                    [attr.aria-checked]="rule.enabled"
-                    (click)="toggleKind(kind)"
-                  >
-                    <span class="switch-thumb"></span>
-                  </button>
+                  <umbra-switch
+                    [value]="rule.enabled"
+                    [ariaLabel]="kindLabel(kind)"
+                    (valueChange)="toggleKind(kind)"
+                  />
                   <p class="label kind-label">{{ kindLabel(kind) }}</p>
                 </div>
 
                 <div class="rule-fields">
-                  <input
-                    class="field"
+                  <umbra-input
                     placeholder="Repo pattern, e.g. my-org/*"
-                    [(ngModel)]="rule.repoPattern"
-                    (change)="save()"
+                    [value]="rule.repoPattern"
+                    (valueChange)="rule.repoPattern = $event"
+                    (touch)="save()"
                   />
-                  <input
-                    class="field"
+                  <umbra-input
                     placeholder="Branches to include (comma-separated globs, empty = all)"
-                    [(ngModel)]="rule.branchInclude"
-                    (change)="save()"
+                    [value]="rule.branchInclude"
+                    (valueChange)="rule.branchInclude = $event"
+                    (touch)="save()"
                   />
-                  <input
-                    class="field"
+                  <umbra-input
                     placeholder="Branches to exclude"
-                    [(ngModel)]="rule.branchExclude"
-                    (change)="save()"
+                    [value]="rule.branchExclude"
+                    (valueChange)="rule.branchExclude = $event"
+                    (touch)="save()"
                   />
                 </div>
               </div>
@@ -363,21 +338,32 @@ function connectorErrorMessage(error: unknown): string {
               @for (key of muted(); track key) {
                 <div class="entry">
                   <code class="mute-key">{{ key }}</code>
-                  <button
-                    type="button"
-                    class="icon-btn danger"
+                  <umbra-button
+                    size="icon"
+                    variant="destructive"
+                    ariaLabel="Remove mute"
                     (click)="removeMute(key)"
-                    aria-label="Remove mute"
                   >
-                    <rl-icon name="trash-2" [size]="16" />
-                  </button>
+                    <rl-icon umbraButtonIcon name="trash-2" [size]="16" />
+                  </umbra-button>
                 </div>
               }
             }
 
             <form class="mute-form" (ngSubmit)="addMute()">
-              <input class="field" placeholder="owner/repo" [(ngModel)]="newMuteKey" name="mute" />
-              <button type="submit" class="link" [disabled]="!newMuteKey().trim()">Mute</button>
+              <umbra-input
+                placeholder="owner/repo"
+                [value]="newMuteKey()"
+                (valueChange)="newMuteKey.set($event)"
+              />
+              <umbra-button
+                type="submit"
+                size="sm"
+                variant="link"
+                [disabled]="!newMuteKey().trim()"
+              >
+                Mute
+              </umbra-button>
             </form>
           </section>
         }
@@ -485,54 +471,6 @@ function connectorErrorMessage(error: unknown): string {
       color: var(--text-muted);
     }
 
-    .option input {
-      inline-size: 5.5em;
-      padding: var(--space-2) var(--space-3);
-      background: var(--bg-sunken);
-      border: 1px solid var(--border-subtle);
-      border-radius: var(--radius-sm);
-      color: var(--text-body);
-    }
-
-    .link {
-      flex: none;
-      font-size: var(--text-13);
-      color: var(--accent);
-      padding: var(--space-2) var(--space-3);
-      border-radius: var(--radius-sm);
-      transition: background-color var(--dur-hover) var(--ease-standard);
-    }
-
-    .link:hover {
-      background: var(--tint-hover);
-    }
-
-    .link:disabled {
-      opacity: 0.5;
-    }
-
-    .primary {
-      padding: var(--space-3) var(--space-5);
-      font-size: var(--text-13);
-      font-weight: var(--weight-semibold);
-      color: var(--bg-app);
-      background: var(--accent);
-      border-radius: var(--radius-sm);
-    }
-
-    .primary:disabled {
-      opacity: 0.5;
-    }
-
-    .field {
-      padding: var(--space-3) var(--space-4);
-      font-size: var(--text-13);
-      background: var(--bg-sunken);
-      border: 1px solid var(--border-subtle);
-      border-radius: var(--radius-sm);
-      color: var(--text-body);
-    }
-
     .connect {
       display: flex;
       flex-direction: column;
@@ -560,8 +498,12 @@ function connectorErrorMessage(error: unknown): string {
       border-radius: var(--radius-sm);
     }
 
-    .client-id-setup .field {
+    :host ::ng-deep .client-id-setup umbra-input {
       inline-size: 100%;
+    }
+
+    :host ::ng-deep .option umbra-input {
+      inline-size: 5.5em;
     }
 
     .user-code {
@@ -608,56 +550,9 @@ function connectorErrorMessage(error: unknown): string {
       gap: var(--space-3);
     }
 
-    .rule-fields .field {
+    .rule-fields umbra-input {
       flex: 1;
-    }
-
-    .switch {
-      position: relative;
-      flex: none;
-      inline-size: 36px;
-      block-size: 20px;
-      border-radius: var(--radius-pill);
-      background: var(--border-subtle);
-      transition: background-color var(--dur-hover) var(--ease-standard);
-    }
-
-    .switch[aria-checked='true'] {
-      background: var(--accent);
-    }
-
-    .switch-thumb {
-      position: absolute;
-      inset-block-start: 2px;
-      inset-inline-start: 2px;
-      inline-size: 16px;
-      block-size: 16px;
-      border-radius: var(--radius-pill);
-      background: var(--bg-app);
-      transition: transform var(--dur-hover) var(--ease-standard);
-    }
-
-    .switch[aria-checked='true'] .switch-thumb {
-      transform: translateX(16px);
-    }
-
-    .icon-btn {
-      display: grid;
-      place-items: center;
-      inline-size: var(--control-sm);
-      block-size: var(--control-sm);
-      color: var(--text-subtle);
-      border-radius: var(--radius-sm);
-    }
-
-    .icon-btn:hover {
-      color: var(--text-body);
-      background: var(--tint-hover);
-    }
-
-    .icon-btn.danger:hover {
-      color: var(--danger-ink);
-      background: var(--danger);
+      min-inline-size: 0;
     }
 
     .entry {
@@ -680,7 +575,7 @@ function connectorErrorMessage(error: unknown): string {
       margin-block-start: var(--space-4);
     }
 
-    .mute-form .field {
+    .mute-form umbra-input {
       flex: 1;
     }
   `,
@@ -704,14 +599,7 @@ export class Github {
   protected readonly webhookBusy = signal(false);
   protected readonly webhookError = signal('');
   protected readonly webhookSuccess = signal('');
-  protected readonly nexusAuth = signal<NexusAuthStatus>({
-    connected: false,
-    userId: null,
-    email: null,
-    displayName: null,
-  });
-  protected readonly nexusBusy = signal(false);
-  protected readonly nexusError = signal('');
+  protected readonly nexusAuth = inject(NexusAccount).status;
   protected readonly deviceAuth = signal<DeviceAuthorization | null>(null);
   /** The most recent "blocked" detail reported for the in-flight connect job, if any — the real
    * reason a connection attempt failed, shown in place of a generic message when it is available. */
@@ -740,15 +628,6 @@ export class Github {
 
   constructor() {
     void this.refreshStatus();
-    void this.refreshNexusAuth();
-    void this.tauri
-      .onNexusAuth((status) => {
-        this.nexusAuth.set(status);
-        this.nexusBusy.set(false);
-        if (!status.connected) this.nexusError.set('Nexus sign-in did not complete. Try again.');
-        else this.nexusError.set('');
-      })
-      .then((unlisten) => this.destroyRef.onDestroy(unlisten));
 
     console.log('[github] component constructed, subscribing to relay://event');
     void this.tauri
@@ -783,37 +662,6 @@ export class Github {
       this.stopConnectFallbackPoll();
       if (this.copyCodeTimeout) clearTimeout(this.copyCodeTimeout);
     });
-  }
-
-  protected async connectNexus(): Promise<void> {
-    this.nexusBusy.set(true);
-    this.nexusError.set('');
-    try {
-      await this.tauri.nexusAuthStart();
-    } catch (error) {
-      this.nexusBusy.set(false);
-      this.nexusError.set(connectorErrorMessage(error));
-    }
-  }
-
-  protected async logoutNexus(): Promise<void> {
-    this.nexusBusy.set(true);
-    try {
-      await this.tauri.nexusAuthLogout();
-      await this.refreshNexusAuth();
-    } catch (error) {
-      this.nexusError.set(connectorErrorMessage(error));
-    } finally {
-      this.nexusBusy.set(false);
-    }
-  }
-
-  private async refreshNexusAuth(): Promise<void> {
-    try {
-      this.nexusAuth.set(await this.tauri.nexusAuthStatus());
-    } catch (error) {
-      this.nexusError.set(connectorErrorMessage(error));
-    }
   }
 
   private startConnectFallbackPoll(jobId: string): void {

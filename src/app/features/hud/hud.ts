@@ -3,6 +3,7 @@ import { ChangeDetectionStrategy, Component, computed, input, output } from '@an
 import { hueVar, type EntityHue } from '@core/entity-hue';
 import type { NotificationAction } from '@core/events';
 import { Icon } from '@shared/icon';
+import { UmbraButtonComponent } from '@umbra/components/umbra-button/umbra-button.component';
 
 export type HudStatus = 'running' | 'waiting' | 'blocked' | 'done' | 'idle';
 
@@ -14,7 +15,7 @@ export type HudStatus = 'running' | 'waiting' | 'blocked' | 'done' | 'idle';
 @Component({
   selector: 'rl-hud',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [Icon],
+  imports: [Icon, UmbraButtonComponent],
   host: {
     class: 'u-glass u-chrome',
   },
@@ -32,18 +33,18 @@ export type HudStatus = 'running' | 'waiting' | 'blocked' | 'done' | 'idle';
 
     <div class="controls">
       @for (item of actions(); track item.id) {
-        <button type="button" class="action" (click)="action.emit(item)">
+        <umbra-button size="sm" variant="ghost" (click)="action.emit(item)">
           {{ item.label }}
-        </button>
+        </umbra-button>
       }
-      <button
-        type="button"
-        class="dismiss"
-        [attr.aria-label]="dismissLabel()"
+      <umbra-button
+        size="icon"
+        variant="ghost"
+        [ariaLabel]="dismissLabel()"
         (click)="dismiss.emit()"
       >
-        <rl-icon name="x" [size]="14" />
-      </button>
+        <rl-icon umbraButtonIcon name="x" [size]="14" />
+      </umbra-button>
     </div>
 
     <span class="u-sr-only">{{ status() }}</span>
@@ -95,33 +96,8 @@ export type HudStatus = 'running' | 'waiting' | 'blocked' | 'done' | 'idle';
       pointer-events: auto;
     }
 
-    .action,
-    .dismiss {
-      display: grid;
-      place-items: center;
-      min-block-size: var(--control-sm);
-      padding-inline: var(--space-2);
-      color: var(--text-subtle);
-      border-radius: var(--radius-sm);
-      white-space: nowrap;
-      transition:
-        background-color var(--dur-hover) var(--ease-standard),
-        color var(--dur-hover) var(--ease-standard);
-    }
-
-    .action {
-      font-size: var(--text-12);
-    }
-
-    .dismiss {
-      inline-size: var(--control-sm);
-      padding-inline: 0;
-    }
-
-    .action:hover,
-    .dismiss:hover {
-      color: var(--text-body);
-      background: var(--tint-hover);
+    :host ::ng-deep .controls umbra-button {
+      width: auto;
     }
 
     .title {

@@ -7,7 +7,13 @@ a complete mirror of every semantic token.
 
 ## How the binding works
 
-`src/styles/tokens/` mirrors Umbra's own file names one for one:
+`packages/umbra` is the Git subtree for [Umbra](https://github.com/Eresea/Umbra).
+`src/styles.scss` imports its canonical tokens and baseline, and `@umbra/*`
+resolves shared Angular components. `src/styles.css` still loads the token
+compatibility layer and mobile command styles while older screens migrate to
+the shared tokens.
+
+`src/styles/tokens/` retains the token compatibility layer during migration:
 
 | File             | Holds                                          |
 | ---------------- | ---------------------------------------------- |
@@ -22,15 +28,14 @@ a complete mirror of every semantic token.
 | `motion.css`     | four durations, two curves, reduced-motion     |
 | `base.css`       | reset and the global rules                     |
 
-`src/styles.css` is an import list and nothing else, exactly as Umbra's is.
-When Umbra changes, the corresponding file here can be replaced directly.
+New Relay UI should use Umbra tokens and components directly. Keep compatibility
+tokens only where existing Relay screens still depend on them.
 
 ## Deviations, and why
 
-**Fonts are vendored, not loaded from Google Fonts.** Umbra links the CDN.
-Relay is a desktop app: it must render with the network down, and it should not
-announce every window open to a third party. The five weights actually used are
-committed under `src/assets/fonts/` (Geist, SIL Open Font License).
+**Fonts are vendored, not loaded from Google Fonts.** Relay imports Umbra's
+self-hosted Geist files from the subtree, so it renders with the network down
+without contacting a third party.
 
 **Icons are vendored, not loaded from unpkg.** Same reason. The glyphs in use
 are committed under `src/assets/icons/` from `lucide-static@0.544.0` (ISC).
@@ -41,12 +46,9 @@ part of the build.
 wordmark is "Relay" in Geist Semibold at `-0.045em`. The window icon is a
 placeholder tile; replace it with `npx tauri icon path/to/mark.png`.
 
-**Exact token values are reconstructed from Umbra's README**, not read from its
-`tokens/*.css`, because Umbra is not published as a design system artifact yet.
-The semantic structure, the surface values, the accent, the radii, the spacing
-scale, the layout constants, the motion curves and the glass recipe are all as
-documented; the finer alpha values on borders and shadows were derived. Publish
-Umbra and these can be synced exactly.
+Umbra owns Relay's shared tokens and guidelines. Relay's compatibility tokens
+exist only to keep unmigrated screens working and should be removed as those
+screens adopt Umbra's names and components.
 
 ## The rules that bite
 

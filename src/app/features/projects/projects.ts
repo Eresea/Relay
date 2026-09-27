@@ -8,6 +8,7 @@ import {
 } from '@core/tauri';
 import { Icon } from '@shared/icon';
 import { IconPicker } from '@shared/icon-picker';
+import { UmbraButtonComponent } from '@umbra/components/umbra-button/umbra-button.component';
 
 import { ProjectActionsMenu, type ProjectAction } from './project-actions-menu';
 import { mergeProjectSummaries, projectKey, type ProjectSummary } from './project-summary';
@@ -15,7 +16,7 @@ import { mergeProjectSummaries, projectKey, type ProjectSummary } from './projec
 @Component({
   selector: 'rl-projects',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [Icon, IconPicker, ProjectActionsMenu],
+  imports: [Icon, IconPicker, ProjectActionsMenu, UmbraButtonComponent],
   template: `
     <section class="projects" aria-labelledby="projects-title">
       <header class="page-header">
@@ -24,15 +25,10 @@ import { mergeProjectSummaries, projectKey, type ProjectSummary } from './projec
           <h1 id="projects-title">Projects</h1>
           <p class="page-description">Local clones and recent GitHub repositories.</p>
         </div>
-        <button
-          type="button"
-          class="scan-button"
-          [disabled]="loading() || syncing()"
-          (click)="sync()"
-        >
-          <rl-icon [name]="syncing() ? 'loader-circle' : 'search'" [size]="14" />
+        <umbra-button size="sm" [disabled]="loading() || syncing()" (click)="sync()">
+          <rl-icon umbraButtonIcon [name]="syncing() ? 'loader-circle' : 'search'" [size]="14" />
           {{ syncing() ? 'Syncing' : 'Sync projects' }}
-        </button>
+        </umbra-button>
       </header>
 
       @if (error()) {
@@ -108,31 +104,16 @@ import { mergeProjectSummaries, projectKey, type ProjectSummary } from './projec
               </div>
               <div class="project-actions">
                 @if (project.path) {
-                  <button
-                    type="button"
-                    class="open-button"
-                    (click)="open(project)"
-                    [attr.aria-label]="'Open ' + project.name"
-                  >
+                  <umbra-button size="sm" variant="link" (click)="open(project)">
                     Open
-                  </button>
-                  <button
-                    type="button"
-                    class="terminal-button"
-                    (click)="openTerminal(project)"
-                    [attr.aria-label]="'Open terminal in ' + project.name"
-                  >
+                  </umbra-button>
+                  <umbra-button size="sm" variant="outline" (click)="openTerminal(project)">
                     Terminal
-                  </button>
+                  </umbra-button>
                 } @else {
-                  <button
-                    type="button"
-                    class="open-button"
-                    (click)="open(project)"
-                    [attr.aria-label]="'View ' + project.name"
-                  >
+                  <umbra-button size="sm" variant="outline" (click)="open(project)">
                     View
-                  </button>
+                  </umbra-button>
                 }
                 <rl-project-actions-menu
                   [project]="project"
@@ -191,30 +172,10 @@ import { mergeProjectSummaries, projectKey, type ProjectSummary } from './projec
       color: var(--text-muted);
     }
 
-    .scan-button,
-    .open-button {
-      display: inline-flex;
-      align-items: center;
-      gap: var(--space-2);
+    :host ::ng-deep .page-header umbra-button,
+    :host ::ng-deep .project-actions umbra-button {
+      width: auto;
       flex: none;
-      border-radius: var(--radius-sm);
-      font-size: var(--text-12);
-      font-weight: var(--weight-medium);
-    }
-
-    .scan-button {
-      min-block-size: var(--control-sm);
-      padding-inline: var(--space-3);
-      color: var(--primary-ink);
-      background: var(--primary);
-    }
-
-    .scan-button:hover:not(:disabled) {
-      background: var(--primary-hover);
-    }
-
-    .scan-button:disabled {
-      opacity: 0.7;
     }
 
     .empty-state {
@@ -349,28 +310,10 @@ import { mergeProjectSummaries, projectKey, type ProjectSummary } from './projec
       background: var(--status-done);
     }
 
-    .open-button {
-      padding: var(--space-2) var(--space-3);
-      color: var(--text-muted);
-    }
-
     .project-actions {
       display: inline-flex;
       flex: none;
       gap: var(--space-2);
-    }
-
-    .terminal-button {
-      padding: var(--space-2) var(--space-3);
-      color: var(--text-muted);
-      border: 1px solid var(--border-subtle);
-      border-radius: var(--radius-sm);
-    }
-
-    .open-button:hover,
-    .terminal-button:hover {
-      color: var(--text-body);
-      background: var(--tint-hover);
     }
 
     @media (max-width: 620px) {
@@ -383,7 +326,7 @@ import { mergeProjectSummaries, projectKey, type ProjectSummary } from './projec
         flex-direction: column;
       }
 
-      .scan-button {
+      :host ::ng-deep .page-header umbra-button {
         align-self: flex-start;
       }
     }

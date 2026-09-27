@@ -7,11 +7,11 @@ import {
   input,
   model,
   output,
-} from "@angular/core";
-import type { FormValueControl } from "@angular/forms/signals";
+} from '@angular/core';
+import type { FormValueControl } from '@angular/forms/signals';
 
 export type UmbraRadioValue = string | number;
-export type UmbraRadioOrientation = "horizontal" | "vertical";
+export type UmbraRadioOrientation = 'horizontal' | 'vertical';
 
 export interface UmbraRadioOption {
   label: string;
@@ -23,28 +23,28 @@ export interface UmbraRadioOption {
 let nextId = 0;
 
 @Component({
-  selector: "umbra-radio-group",
+  selector: 'umbra-radio-group',
   standalone: true,
-  templateUrl: "./umbra-radio-group.component.html",
-  styleUrl: "./umbra-radio-group.component.scss",
+  templateUrl: './umbra-radio-group.component.html',
+  styleUrl: './umbra-radio-group.component.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,
   host: {
-    class: "umbra-radio-group",
-    "[attr.data-orientation]": "orientation()",
-    "[attr.data-disabled]": "disabled()",
+    class: 'umbra-radio-group',
+    '[attr.data-orientation]': 'orientation()',
+    '[attr.data-disabled]': 'disabled()',
   },
 })
 export class UmbraRadioGroupComponent implements FormValueControl<UmbraRadioValue | null> {
   readonly value = model<UmbraRadioValue | null>(null);
   readonly options = input.required<readonly UmbraRadioOption[]>();
-  readonly orientation = input<UmbraRadioOrientation>("vertical");
+  readonly orientation = input<UmbraRadioOrientation>('vertical');
   readonly label = input<string>();
   readonly hint = input<string>();
   readonly error = input<string>();
   readonly disabled = input(false);
   readonly required = input(false);
   readonly invalid = input(false);
-  readonly name = input<string>();
+  readonly name = input('');
   readonly ariaLabel = input<string>();
   readonly ariaLabelledBy = input<string>();
   readonly ariaDescribedBy = input<string>();
@@ -63,7 +63,7 @@ export class UmbraRadioGroupComponent implements FormValueControl<UmbraRadioValu
         !this.error() && this.hint() ? this.hintId : undefined,
       ]
         .filter(Boolean)
-        .join(" ") || null,
+        .join(' ') || null,
   );
 
   private readonly host = inject(ElementRef<HTMLElement>);

@@ -52,7 +52,7 @@ export class UmbraDateComponent implements FormValueControl<string | null> {
   readonly placeholder = input('DD/MM/YYYY');
   readonly hint = input<string>();
   readonly error = input<string>();
-  readonly name = input<string>();
+  readonly name = input('');
   readonly inputId = input<string>();
   readonly ariaLabel = input<string>();
   readonly disabled = input(false);
@@ -88,8 +88,9 @@ export class UmbraDateComponent implements FormValueControl<string | null> {
   );
   readonly yearRange = computed(() => {
     const start = Math.floor(this.viewDate().getFullYear() / 10) * 10;
-    return Array.from({ length: 10 }, (_, offset) => start + offset)
-      .filter((year) => year >= 1 && year <= 9999);
+    return Array.from({ length: 10 }, (_, offset) => start + offset).filter(
+      (year) => year >= 1 && year <= 9999,
+    );
   });
   readonly yearRangeLabel = computed(() => {
     const years = this.yearRange();
@@ -97,24 +98,28 @@ export class UmbraDateComponent implements FormValueControl<string | null> {
   });
   readonly monthLabel = computed(() => this.months[this.viewDate().getMonth()]);
   readonly yearLabel = computed(() =>
-    this.calendarView() === 'years'
-      ? this.yearRangeLabel()
-      : String(this.viewDate().getFullYear()),
+    this.calendarView() === 'years' ? this.yearRangeLabel() : String(this.viewDate().getFullYear()),
   );
   readonly canGoPrevious = computed(() => {
     const date = this.viewDate();
     switch (this.calendarView()) {
-      case 'days': return date.getFullYear() > 1 || date.getMonth() > 0;
-      case 'months': return date.getFullYear() > 1;
-      case 'years': return this.yearRange()[0] > 1;
+      case 'days':
+        return date.getFullYear() > 1 || date.getMonth() > 0;
+      case 'months':
+        return date.getFullYear() > 1;
+      case 'years':
+        return this.yearRange()[0] > 1;
     }
   });
   readonly canGoNext = computed(() => {
     const date = this.viewDate();
     switch (this.calendarView()) {
-      case 'days': return date.getFullYear() < 9999 || date.getMonth() < 11;
-      case 'months': return date.getFullYear() < 9999;
-      case 'years': return this.yearRange()[this.yearRange().length - 1] < 9999;
+      case 'days':
+        return date.getFullYear() < 9999 || date.getMonth() < 11;
+      case 'months':
+        return date.getFullYear() < 9999;
+      case 'years':
+        return this.yearRange()[this.yearRange().length - 1] < 9999;
     }
   });
 
@@ -133,17 +138,14 @@ export class UmbraDateComponent implements FormValueControl<string | null> {
       };
     });
   });
-  readonly resolvedError = computed(() =>
-    this.error() ||
-    (this.invalidText() ? 'Enter a valid date in DD/MM/YYYY format.' : '') ||
-    (this.wasTouched() && this.required() && !this.value() ? 'Choose a date.' : ''),
+  readonly resolvedError = computed(
+    () =>
+      this.error() ||
+      (this.invalidText() ? 'Enter a valid date in DD/MM/YYYY format.' : '') ||
+      (this.wasTouched() && this.required() && !this.value() ? 'Choose a date.' : ''),
   );
   readonly describedBy = computed(() =>
-    this.resolvedError()
-      ? this.errorId
-      : this.hint()
-        ? this.hintId
-        : null,
+    this.resolvedError() ? this.errorId : this.hint() ? this.hintId : null,
   );
   readonly calendarTriggerLabel = computed(() =>
     this.label() ? `Open calendar for ${this.label()}` : 'Open calendar',
@@ -194,7 +196,11 @@ export class UmbraDateComponent implements FormValueControl<string | null> {
     } else if (event.key === 'ArrowLeft' && input.selectionStart === 0 && index > 0) {
       event.preventDefault();
       this.focusSegment(index - 1);
-    } else if (event.key === 'ArrowRight' && input.selectionEnd === input.value.length && index < 2) {
+    } else if (
+      event.key === 'ArrowRight' &&
+      input.selectionEnd === input.value.length &&
+      index < 2
+    ) {
       event.preventDefault();
       this.focusSegment(index + 1);
     } else if (event.altKey && event.key === 'ArrowDown') {
@@ -222,7 +228,11 @@ export class UmbraDateComponent implements FormValueControl<string | null> {
 
   onControlBlur(event: FocusEvent): void {
     const next = event.relatedTarget;
-    if (this.open() || (next instanceof Node && (event.currentTarget as HTMLElement).contains(next))) return;
+    if (
+      this.open() ||
+      (next instanceof Node && (event.currentTarget as HTMLElement).contains(next))
+    )
+      return;
     this.wasTouched.set(true);
     this.invalidText.set(this.hasSegments() && !this.parseSegments());
     this.touch.emit();
@@ -287,9 +297,15 @@ export class UmbraDateComponent implements FormValueControl<string | null> {
     if (!this.canGoPrevious()) return;
     const date = this.viewDate();
     switch (this.calendarView()) {
-      case 'days': this.setViewDate(subMonths(date, 1)); break;
-      case 'months': this.setViewYear(date.getFullYear() - 1); break;
-      case 'years': this.setViewYear(this.yearRange()[0] - 10); break;
+      case 'days':
+        this.setViewDate(subMonths(date, 1));
+        break;
+      case 'months':
+        this.setViewYear(date.getFullYear() - 1);
+        break;
+      case 'years':
+        this.setViewYear(this.yearRange()[0] - 10);
+        break;
     }
   }
 
@@ -297,9 +313,15 @@ export class UmbraDateComponent implements FormValueControl<string | null> {
     if (!this.canGoNext()) return;
     const date = this.viewDate();
     switch (this.calendarView()) {
-      case 'days': this.setViewDate(addMonths(date, 1)); break;
-      case 'months': this.setViewYear(date.getFullYear() + 1); break;
-      case 'years': this.setViewYear(this.yearRange()[0] + 10); break;
+      case 'days':
+        this.setViewDate(addMonths(date, 1));
+        break;
+      case 'months':
+        this.setViewYear(date.getFullYear() + 1);
+        break;
+      case 'years':
+        this.setViewYear(this.yearRange()[0] + 10);
+        break;
     }
   }
 
@@ -398,5 +420,4 @@ export class UmbraDateComponent implements FormValueControl<string | null> {
     const value = Number.parseFloat(styles.getPropertyValue(token));
     return Number.isFinite(value) ? value : 0;
   }
-
 }

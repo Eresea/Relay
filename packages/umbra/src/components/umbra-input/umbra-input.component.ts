@@ -52,7 +52,7 @@ export class UmbraInputComponent implements FormValueControl<string> {
   readonly invalid = input(false);
   readonly showClear = input(false);
   readonly showCount = input(false);
-  readonly name = input<string>();
+  readonly name = input('');
   readonly autocomplete = input<string>();
   readonly inputMode = input<string>();
   readonly minLength = input<number>();
