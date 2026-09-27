@@ -862,11 +862,13 @@ pub async fn project_issues(
     organization_id: &str,
     project_id: &str,
     after: Option<&str>,
+    include_archived: bool,
 ) -> Result<IssuePage> {
     api::project_issues(
         &access_token(app, organization_id).await?,
         project_id,
         after,
+        include_archived,
     )
     .await
 }

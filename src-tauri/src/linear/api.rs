@@ -1108,12 +1108,13 @@ pub async fn project_issues(
     token: &str,
     project_id: &str,
     after: Option<&str>,
+    include_archived: bool,
 ) -> Result<IssuePage> {
     issues(
         token,
         json!({ "project": { "id": { "eq": project_id } } }),
         after,
-        false,
+        include_archived,
     )
     .await
 }

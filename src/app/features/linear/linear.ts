@@ -1212,6 +1212,17 @@ interface LinearIssueDraft {
                     </form>
                   }
                 </section>
+                <div class="issue-heading">
+                  <h3>Issues</h3>
+                  <umbra-button
+                    size="sm"
+                    variant="link"
+                    [disabled]="loadingProjectIssues()"
+                    (click)="toggleArchivedProjectIssues()"
+                  >
+                    {{ includeArchivedProjectIssues() ? 'Hide archived' : 'Include archived' }}
+                  </umbra-button>
+                </div>
                 @if (teams().length) {
                   <form class="create-form" (submit)="createProjectIssue($event)">
                     <label>
@@ -1292,17 +1303,57 @@ interface LinearIssueDraft {
                     <button type="button" class="issue-title" (click)="openIssueDetail(issue)">
                       {{ issue.title }}
                     </button>
-                    <label class="status-control">
-                      <span class="sr-only">Status for {{ issue.identifier }}</span>
-                      <select
-                        [value]="issue.state?.id ?? ''"
-                        (change)="updateStatus(issue, $any($event.target).value)"
-                      >
-                        @for (state of statesFor(issue); track state.id) {
-                          <option [value]="state.id">{{ state.name }}</option>
+                    <div class="issue-actions">
+                      @if (issue.archivedAt) {
+                        <span class="hint">Archived</span>
+                        <umbra-button
+                          size="sm"
+                          variant="outline"
+                          [disabled]="!!archivingIssueId()"
+                          (click)="setIssueArchived(issue, false)"
+                        >
+                          {{ archivingIssueId() === issue.id ? 'Restoring' : 'Restore' }}
+                        </umbra-button>
+                      } @else {
+                        <label class="status-control">
+                          <span class="sr-only">Status for {{ issue.identifier }}</span>
+                          <select
+                            [value]="issue.state?.id ?? ''"
+                            (change)="updateStatus(issue, $any($event.target).value)"
+                          >
+                            @for (state of statesFor(issue); track state.id) {
+                              <option [value]="state.id">{{ state.name }}</option>
+                            }
+                          </select>
+                        </label>
+                        @if (confirmArchiveIssueId() === issue.id) {
+                          <umbra-button
+                            size="sm"
+                            variant="outline"
+                            [disabled]="!!archivingIssueId()"
+                            (click)="setIssueArchived(issue, true)"
+                          >
+                            {{ archivingIssueId() === issue.id ? 'Archiving' : 'Confirm archive' }}
+                          </umbra-button>
+                          <umbra-button
+                            size="sm"
+                            variant="link"
+                            type="button"
+                            (click)="confirmArchiveIssueId.set(null)"
+                          >
+                            Cancel
+                          </umbra-button>
+                        } @else {
+                          <umbra-button
+                            size="sm"
+                            variant="link"
+                            (click)="confirmArchiveIssueId.set(issue.id)"
+                          >
+                            Archive
+                          </umbra-button>
                         }
-                      </select>
-                    </label>
+                      }
+                    </div>
                   </article>
                 } @empty {
                   <p class="hint">No issues are linked to this project.</p>
@@ -2192,6 +2243,8 @@ export class Linear {
   protected readonly selectedCodexWorkspacePath = signal('');
   protected readonly selectedCodexProjectRepo = signal('');
   protected readonly projectIssues = signal<readonly LinearIssue[]>([]);
+  protected readonly includeArchivedProjectIssues = signal(false);
+  protected readonly loadingProjectIssues = signal(false);
   protected readonly milestones = signal<readonly LinearMilestone[]>([]);
   protected readonly projectUpdates = signal<readonly LinearProjectUpdate[]>([]);
   protected readonly newProjectUpdateBody = signal('');
@@ -2309,6 +2362,7 @@ export class Linear {
   protected readonly sendingComment = signal(false);
   protected readonly codexPending = signal(false);
   private nextCursor: string | null = null;
+  private projectIssuesRequest = 0;
 
   protected pageTitle(): string {
     return {
@@ -2380,6 +2434,10 @@ export class Linear {
 
   protected select(connection: LinearConnection): void {
     this.selected.set(connection);
+    this.selectedProject.set(null);
+    this.projectIssues.set([]);
+    this.projectIssuesRequest++;
+    this.loadingProjectIssues.set(false);
     this.issueTeamId.set('');
     this.restoreIssueDraft(connection);
     this.restorePendingIssueUpdates(connection);
@@ -2431,7 +2489,9 @@ export class Linear {
       }
       this.confirmArchiveIssueId.set(null);
       this.writeLocal(this.issueCacheKey(connection), null);
-      await this.loadIssues();
+      const project = this.selectedProject();
+      if (project) await this.loadProjectIssues(project.id);
+      else await this.loadIssues();
     } catch (error) {
       this.error.set(error instanceof Error ? error.message : String(error));
     } finally {
@@ -3539,8 +3599,11 @@ export class Linear {
   protected async openProject(project: LinearProject): Promise<void> {
     this.closeIssueDetail();
     this.confirmArchiveProjectId.set(null);
+    this.confirmArchiveIssueId.set(null);
     this.confirmDeleteMilestoneId.set(null);
+    this.includeArchivedProjectIssues.set(false);
     this.selectedProject.set(project);
+    this.projectIssues.set([]);
     const connection = this.selected();
     if (connection) this.restoreProjectIssueDraft(connection, project.id);
     this.editProjectName.set(project.name);
@@ -3557,6 +3620,13 @@ export class Linear {
       this.loadProjectUpdates(project.id),
       this.canUseCodex ? this.loadCodexPolicy() : Promise.resolve(),
     ]);
+  }
+
+  protected toggleArchivedProjectIssues(): void {
+    const project = this.selectedProject();
+    if (!project || this.loadingProjectIssues()) return;
+    this.includeArchivedProjectIssues.update((value) => !value);
+    void this.loadProjectIssues(project.id);
   }
 
   protected closeSelectedProject(): void {
@@ -3862,11 +3932,24 @@ export class Linear {
   private async loadProjectIssues(projectId: string): Promise<void> {
     const connection = this.selected();
     if (!connection) return;
+    const request = ++this.projectIssuesRequest;
+    this.loadingProjectIssues.set(true);
     try {
-      const page = await this.tauri.linearProjectIssues(connection.organizationId, projectId);
-      this.projectIssues.set(page.issues);
+      const page = await this.tauri.linearProjectIssues(
+        connection.organizationId,
+        projectId,
+        null,
+        this.includeArchivedProjectIssues(),
+      );
+      if (request === this.projectIssuesRequest && this.selectedProject()?.id === projectId) {
+        this.projectIssues.set(page.issues);
+      }
     } catch (error) {
-      this.error.set(error instanceof Error ? error.message : String(error));
+      if (request === this.projectIssuesRequest) {
+        this.error.set(error instanceof Error ? error.message : String(error));
+      }
+    } finally {
+      if (request === this.projectIssuesRequest) this.loadingProjectIssues.set(false);
     }
   }
 

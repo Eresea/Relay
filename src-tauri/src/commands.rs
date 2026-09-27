@@ -1214,8 +1214,16 @@ pub async fn linear_project_issues(
     organization_id: String,
     project_id: String,
     after: Option<String>,
+    include_archived: Option<bool>,
 ) -> Result<IssuePage> {
-    linear::project_issues(&app, &organization_id, &project_id, after.as_deref()).await
+    linear::project_issues(
+        &app,
+        &organization_id,
+        &project_id,
+        after.as_deref(),
+        include_archived.unwrap_or(false),
+    )
+    .await
 }
 
 #[tauri::command]
