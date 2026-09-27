@@ -30,7 +30,7 @@ use crate::jobs::{JobId, JobRegistry};
 use crate::linear::{
     self, Initiative, InitiativeProject, Issue, IssueDetail, IssuePage, LinearCodexContext,
     LinearComment, LinearConnection, LinearCycle, LinearLabel, LinearMilestone, LinearProject,
-    LinearProjectStatus, Person, Team, WorkflowState,
+    LinearProjectStatus, LinearProjectUpdate, Person, Team, WorkflowState,
 };
 #[cfg(mobile)]
 use crate::mobile_updates;
@@ -487,6 +487,40 @@ pub async fn linear_project_milestones(
         return Err(std::io::Error::other("Project is required").into());
     }
     linear::project_milestones(&app, &organization_id, &project_id).await
+}
+
+#[tauri::command]
+pub async fn linear_project_updates(
+    app: AppHandle,
+    organization_id: String,
+    project_id: String,
+) -> Result<Vec<LinearProjectUpdate>> {
+    if project_id.trim().is_empty() {
+        return Err(std::io::Error::other("Project is required").into());
+    }
+    linear::project_updates(&app, &organization_id, &project_id).await
+}
+
+#[tauri::command]
+pub async fn linear_create_project_update(
+    app: AppHandle,
+    organization_id: String,
+    project_id: String,
+    body: String,
+    health: String,
+) -> Result<LinearProjectUpdate> {
+    let body = body.trim();
+    if project_id.trim().is_empty() || body.is_empty() || body.chars().count() > 10_000 {
+        return Err(
+            std::io::Error::other("A project update up to 10,000 characters is required").into(),
+        );
+    }
+    if !matches!(health.as_str(), "onTrack" | "atRisk" | "offTrack") {
+        return Err(
+            std::io::Error::other("Project health must be onTrack, atRisk, or offTrack").into(),
+        );
+    }
+    linear::create_project_update(&app, &organization_id, &project_id, body, &health).await
 }
 
 #[tauri::command]

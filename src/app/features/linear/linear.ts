@@ -22,7 +22,9 @@ import {
   type LinearLabel,
   type LinearMilestone,
   type LinearProject,
+  type LinearProjectHealth,
   type LinearProjectStatus,
+  type LinearProjectUpdate,
   type LinearPerson,
   type LinearTeam,
   type LinearWorkflowState,
@@ -907,6 +909,51 @@ interface LinearIssueDraft {
                     </umbra-button>
                   </form>
                 </section>
+                <section class="milestones" aria-label="Project status updates">
+                  <h3>Status updates</h3>
+                  @for (update of projectUpdates(); track update.id) {
+                    <article class="issue">
+                      <strong>{{ projectHealthLabel(update.health) }}</strong>
+                      <span class="muted"
+                        >{{ update.user.name }} · {{ projectUpdateDate(update.createdAt) }}</span
+                      >
+                      <p>{{ update.body }}</p>
+                    </article>
+                  } @empty {
+                    <p class="hint">No status updates yet.</p>
+                  }
+                  @if (!selectedProject()!.archivedAt) {
+                    <form class="project-edit" (submit)="createProjectUpdate($event)">
+                      <label>
+                        <span>Health</span>
+                        <select
+                          [value]="newProjectUpdateHealth()"
+                          (change)="newProjectUpdateHealth.set($any($event.target).value)"
+                        >
+                          <option value="onTrack">On track</option>
+                          <option value="atRisk">At risk</option>
+                          <option value="offTrack">Off track</option>
+                        </select>
+                      </label>
+                      <label>
+                        <span>Update</span>
+                        <textarea
+                          required
+                          maxlength="10000"
+                          rows="3"
+                          [value]="newProjectUpdateBody()"
+                          (input)="newProjectUpdateBody.set($any($event.target).value)"
+                        ></textarea>
+                      </label>
+                      <umbra-button
+                        size="sm"
+                        [disabled]="creatingProjectUpdate() || !newProjectUpdateBody().trim()"
+                      >
+                        {{ creatingProjectUpdate() ? 'Posting' : 'Post update' }}
+                      </umbra-button>
+                    </form>
+                  }
+                </section>
                 @if (teams().length) {
                   <form class="create-form" (submit)="createProjectIssue($event)">
                     <label>
@@ -1677,6 +1724,10 @@ export class Linear {
   protected readonly selectedCodexProjectRepo = signal('');
   protected readonly projectIssues = signal<readonly LinearIssue[]>([]);
   protected readonly milestones = signal<readonly LinearMilestone[]>([]);
+  protected readonly projectUpdates = signal<readonly LinearProjectUpdate[]>([]);
+  protected readonly newProjectUpdateBody = signal('');
+  protected readonly newProjectUpdateHealth = signal<LinearProjectHealth>('onTrack');
+  protected readonly creatingProjectUpdate = signal(false);
   protected readonly projects = signal<readonly LinearProject[]>([]);
   protected readonly projectStatuses = signal<readonly LinearProjectStatus[]>([]);
   protected readonly initiatives = signal<readonly LinearInitiative[]>([]);
@@ -2753,9 +2804,12 @@ export class Linear {
     this.editProjectTargetDate.set(project.targetDate ?? '');
     this.editProjectStatusId.set(project.status?.id ?? '');
     this.editProjectLeadId.set(project.lead?.id ?? '');
+    this.projectUpdates.set([]);
+    this.newProjectUpdateBody.set('');
     await Promise.all([
       this.loadProjectIssues(project.id),
       this.loadMilestones(project.id),
+      this.loadProjectUpdates(project.id),
       this.canUseCodex ? this.loadCodexPolicy() : Promise.resolve(),
     ]);
   }
@@ -2763,6 +2817,39 @@ export class Linear {
   protected closeSelectedProject(): void {
     this.selectedProject.set(null);
     this.confirmArchiveProjectId.set(null);
+    this.projectUpdates.set([]);
+  }
+
+  protected projectHealthLabel(health: LinearProjectHealth): string {
+    return health === 'onTrack' ? 'On track' : health === 'atRisk' ? 'At risk' : 'Off track';
+  }
+
+  protected projectUpdateDate(createdAt: string): string {
+    return new Date(createdAt).toLocaleString();
+  }
+
+  protected async createProjectUpdate(event: Event): Promise<void> {
+    event.preventDefault();
+    const connection = this.selected();
+    const project = this.selectedProject();
+    const body = this.newProjectUpdateBody().trim();
+    if (!connection || !project || !body || this.creatingProjectUpdate()) return;
+    this.creatingProjectUpdate.set(true);
+    this.error.set(null);
+    try {
+      const update = await this.tauri.linearCreateProjectUpdate(
+        connection.organizationId,
+        project.id,
+        body,
+        this.newProjectUpdateHealth(),
+      );
+      this.projectUpdates.update((updates) => [update, ...updates]);
+      this.newProjectUpdateBody.set('');
+    } catch (error) {
+      this.error.set(error instanceof Error ? error.message : String(error));
+    } finally {
+      this.creatingProjectUpdate.set(false);
+    }
   }
 
   protected async createMilestone(event: Event): Promise<void> {
@@ -2962,6 +3049,18 @@ export class Linear {
     try {
       this.milestones.set(
         await this.tauri.linearProjectMilestones(connection.organizationId, projectId),
+      );
+    } catch (error) {
+      this.error.set(error instanceof Error ? error.message : String(error));
+    }
+  }
+
+  private async loadProjectUpdates(projectId: string): Promise<void> {
+    const connection = this.selected();
+    if (!connection) return;
+    try {
+      this.projectUpdates.set(
+        await this.tauri.linearProjectUpdates(connection.organizationId, projectId),
       );
     } catch (error) {
       this.error.set(error instanceof Error ? error.message : String(error));

@@ -656,6 +656,34 @@ export class TauriBridge {
     );
   }
 
+  async linearProjectUpdates(
+    organizationId: string,
+    projectId: string,
+  ): Promise<readonly LinearProjectUpdate[]> {
+    return (
+      (await this.invoke<LinearProjectUpdate[]>('linear_project_updates', {
+        organizationId,
+        projectId,
+      })) ?? []
+    );
+  }
+
+  async linearCreateProjectUpdate(
+    organizationId: string,
+    projectId: string,
+    body: string,
+    health: LinearProjectHealth,
+  ): Promise<LinearProjectUpdate> {
+    const update = await this.invoke<LinearProjectUpdate>('linear_create_project_update', {
+      organizationId,
+      projectId,
+      body,
+      health,
+    });
+    if (!update) throw new Error('Linear returned no project update.');
+    return update;
+  }
+
   async linearCreateMilestone(
     organizationId: string,
     projectId: string,
@@ -1385,6 +1413,16 @@ export interface LinearMilestone {
   readonly name: string;
   readonly description: string | null;
   readonly targetDate: string | null;
+}
+
+export type LinearProjectHealth = 'onTrack' | 'atRisk' | 'offTrack';
+
+export interface LinearProjectUpdate {
+  readonly id: string;
+  readonly body: string;
+  readonly health: LinearProjectHealth;
+  readonly createdAt: string;
+  readonly user: LinearPerson;
 }
 
 export interface LinearInitiative {

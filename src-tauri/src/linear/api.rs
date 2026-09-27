@@ -204,6 +204,16 @@ pub struct LinearProjectStatus {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct LinearProjectUpdate {
+    pub id: String,
+    pub body: String,
+    pub health: String,
+    pub created_at: String,
+    pub user: Person,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct LinearMilestone {
     pub id: String,
     pub name: String,
@@ -515,6 +525,51 @@ pub async fn project_milestones(token: &str, project_id: &str) -> Result<Vec<Lin
         .next()
         .map(|project| project.project_milestones.nodes)
         .unwrap_or_default())
+}
+
+pub async fn project_updates(token: &str, project_id: &str) -> Result<Vec<LinearProjectUpdate>> {
+    #[derive(Deserialize)]
+    struct ProjectNode {
+        project_updates: Nodes<LinearProjectUpdate>,
+    }
+    #[derive(Deserialize)]
+    struct Data {
+        projects: Nodes<ProjectNode>,
+    }
+    let data: Data = query(
+        token,
+        "query RelayProjectUpdates($projectId: String!) { projects(filter: { id: { eq: $projectId } }, first: 1) { nodes { projectUpdates(first: 50, orderBy: createdAt) { nodes { id body health createdAt user { id name } } } } } }",
+        json!({ "projectId": project_id }),
+    )
+    .await?;
+    Ok(data
+        .projects
+        .nodes
+        .into_iter()
+        .next()
+        .map(|project| project.project_updates.nodes)
+        .unwrap_or_default())
+}
+
+pub async fn create_project_update(
+    token: &str,
+    project_id: &str,
+    body: &str,
+    health: &str,
+) -> Result<LinearProjectUpdate> {
+    #[derive(Deserialize)]
+    struct Data {
+        #[serde(rename = "projectUpdateCreate")]
+        result: ProjectUpdateMutation,
+    }
+    let data: Data = query(
+        token,
+        "mutation RelayProjectUpdateCreate($input: ProjectUpdateCreateInput!) { projectUpdateCreate(input: $input) { success projectUpdate { id body health createdAt user { id name } } } }",
+        json!({ "input": { "projectId": project_id, "body": body, "health": health } }),
+    )
+    .await?;
+    data.result
+        .into_value("Linear did not create the project update")
 }
 
 pub async fn create_milestone(
@@ -1047,6 +1102,13 @@ struct MilestoneMutation {
 }
 
 #[derive(Deserialize)]
+struct ProjectUpdateMutation {
+    success: bool,
+    #[serde(rename = "projectUpdate")]
+    project_update: Option<LinearProjectUpdate>,
+}
+
+#[derive(Deserialize)]
 struct InitiativeMutation {
     success: bool,
     initiative: Option<Initiative>,
@@ -1107,6 +1169,17 @@ impl MilestoneMutation {
         if self.success {
             self.milestone
                 .ok_or_else(|| Error::LinearApi("Linear returned no milestone".into()))
+        } else {
+            Err(Error::LinearApi(message.into()))
+        }
+    }
+}
+
+impl ProjectUpdateMutation {
+    fn into_value(self, message: &str) -> Result<LinearProjectUpdate> {
+        if self.success {
+            self.project_update
+                .ok_or_else(|| Error::LinearApi("Linear returned no project update".into()))
         } else {
             Err(Error::LinearApi(message.into()))
         }

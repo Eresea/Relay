@@ -10,8 +10,8 @@ use crate::error::{Error, Result};
 
 pub use api::{
     Initiative, InitiativeProject, Issue, IssueDetail, IssuePage, LinearComment, LinearCycle,
-    LinearLabel, LinearMilestone, LinearProject, LinearProjectStatus, Person, Team, Viewer,
-    WorkflowState,
+    LinearLabel, LinearMilestone, LinearProject, LinearProjectStatus, LinearProjectUpdate, Person,
+    Team, Viewer, WorkflowState,
 };
 use oauth::TokenBundle;
 pub use oauth::{LinearCodexLink, LinearCodexProjectPolicy};
@@ -267,6 +267,30 @@ pub async fn project_milestones(
     project_id: &str,
 ) -> Result<Vec<LinearMilestone>> {
     api::project_milestones(&access_token(app, organization_id).await?, project_id).await
+}
+
+pub async fn project_updates(
+    app: &AppHandle,
+    organization_id: &str,
+    project_id: &str,
+) -> Result<Vec<LinearProjectUpdate>> {
+    api::project_updates(&access_token(app, organization_id).await?, project_id).await
+}
+
+pub async fn create_project_update(
+    app: &AppHandle,
+    organization_id: &str,
+    project_id: &str,
+    body: &str,
+    health: &str,
+) -> Result<LinearProjectUpdate> {
+    api::create_project_update(
+        &access_token(app, organization_id).await?,
+        project_id,
+        body,
+        health,
+    )
+    .await
 }
 
 pub async fn create_milestone(
