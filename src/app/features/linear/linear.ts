@@ -292,6 +292,20 @@ interface LinearIssueDraft {
                     }
                   </select>
                 </label>
+                @if (detail.issue.project) {
+                  <label>
+                    <span>Milestone</span>
+                    <select
+                      [value]="detail.issue.projectMilestone?.id ?? ''"
+                      (change)="updateIssueMilestone(detail.issue, $any($event.target).value)"
+                    >
+                      <option value="">No milestone</option>
+                      @for (milestone of milestones(); track milestone.id) {
+                        <option [value]="milestone.id">{{ milestone.name }}</option>
+                      }
+                    </select>
+                  </label>
+                }
                 <label>
                   <span>Labels</span>
                   <select multiple size="4" (change)="updateLabels(detail.issue, $event)">
@@ -1635,6 +1649,7 @@ export class Linear {
     this.error.set(null);
     try {
       const detail = await this.tauri.linearIssueDetail(connection.organizationId, issue.id);
+      if (detail.issue.project) await this.loadMilestones(detail.issue.project.id);
       const teamCycles = await this.tauri.linearCycles(
         connection.organizationId,
         detail.issue.team.id,
@@ -2653,7 +2668,24 @@ export class Linear {
   }
 
   protected async updateProject(issue: LinearIssue, projectId: string): Promise<void> {
-    await this.saveIssueUpdate(issue, projectId ? { projectId } : { clearProject: true });
+    const saved = await this.saveIssueUpdate(
+      issue,
+      projectId ? { projectId, clearProjectMilestone: true } : { clearProject: true },
+    );
+    if (!saved) return;
+    if (projectId) await this.loadMilestones(projectId);
+    else this.milestones.set([]);
+  }
+
+  protected async updateIssueMilestone(
+    issue: LinearIssue,
+    projectMilestoneId: string,
+  ): Promise<void> {
+    if (projectMilestoneId === (issue.projectMilestone?.id ?? '')) return;
+    await this.saveIssueUpdate(
+      issue,
+      projectMilestoneId ? { projectMilestoneId } : { clearProjectMilestone: true },
+    );
   }
 
   protected labelsFor(teamId: string): readonly LinearLabel[] {

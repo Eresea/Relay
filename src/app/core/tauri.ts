@@ -856,6 +856,8 @@ export class TauriBridge {
       description?: string;
       projectId?: string;
       clearProject?: boolean;
+      projectMilestoneId?: string;
+      clearProjectMilestone?: boolean;
       stateId?: string;
       assigneeId?: string;
       clearAssignee?: boolean;
@@ -1364,6 +1366,7 @@ export interface LinearIssue {
   readonly state: { readonly id: string; readonly name: string; readonly kind: string } | null;
   readonly assignee: { readonly id: string; readonly name: string } | null;
   readonly project: { readonly id: string; readonly name: string } | null;
+  readonly projectMilestone?: { readonly id: string; readonly name: string } | null;
   readonly cycle: {
     readonly id: string;
     readonly name: string | null;

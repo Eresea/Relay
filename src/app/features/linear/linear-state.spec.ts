@@ -26,10 +26,18 @@ describe('Linear issue update drafts', () => {
   it('replaces a pending project move with the latest association change', () => {
     expect(mergeLinearIssueUpdates({ projectId: 'project-1' }, { clearProject: true })).toEqual({
       clearProject: true,
+      clearProjectMilestone: true,
     });
     expect(mergeLinearIssueUpdates({ clearProject: true }, { projectId: 'project-2' })).toEqual({
       projectId: 'project-2',
+      clearProjectMilestone: true,
     });
+  });
+
+  it('drops a pending milestone when its issue changes projects', () => {
+    expect(
+      mergeLinearIssueUpdates({ projectMilestoneId: 'milestone-1' }, { projectId: 'project-2' }),
+    ).toEqual({ projectId: 'project-2', clearProjectMilestone: true });
   });
 
   it('replaces mutually exclusive assignee and cycle changes', () => {

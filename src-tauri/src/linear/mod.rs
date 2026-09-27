@@ -437,6 +437,8 @@ pub async fn update_issue(
     description: Option<&str>,
     project_id: Option<&str>,
     clear_project: bool,
+    project_milestone_id: Option<&str>,
+    clear_project_milestone: bool,
 ) -> Result<Issue> {
     api::update_issue(
         &access_token(app, organization_id).await?,
@@ -452,6 +454,8 @@ pub async fn update_issue(
         description,
         project_id,
         clear_project,
+        project_milestone_id,
+        clear_project_milestone,
     )
     .await
 }

@@ -787,6 +787,8 @@ pub async fn linear_update_issue(
     description: Option<String>,
     project_id: Option<String>,
     clear_project: Option<bool>,
+    project_milestone_id: Option<String>,
+    clear_project_milestone: Option<bool>,
 ) -> Result<Issue> {
     if organization_id.trim().is_empty()
         || issue_id.trim().is_empty()
@@ -798,6 +800,11 @@ pub async fn linear_update_issue(
             .as_ref()
             .is_some_and(|value| value.trim().is_empty())
         || (clear_project.unwrap_or(false) && project_id.is_some())
+        || project_milestone_id
+            .as_ref()
+            .is_some_and(|value| value.trim().is_empty())
+        || (clear_project_milestone.unwrap_or(false) && project_milestone_id.is_some())
+        || (clear_project.unwrap_or(false) && project_milestone_id.is_some())
         || assignee_id
             .as_ref()
             .is_some_and(|value| value.trim().is_empty())
@@ -827,6 +834,8 @@ pub async fn linear_update_issue(
         description.as_deref(),
         project_id.as_deref(),
         clear_project.unwrap_or(false),
+        project_milestone_id.as_deref(),
+        clear_project_milestone.unwrap_or(false),
     )
     .await
 }
