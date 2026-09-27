@@ -165,15 +165,24 @@ const PAGE_SIZE = 20;
       gap: var(--space-3);
     }
 
-    .clear,
+    .clear {
+      color: var(--text-subtle);
+      font-size: var(--text-12);
+      padding: var(--space-1) var(--space-2);
+      border-radius: var(--radius-sm);
+      transition:
+        background-color var(--dur-hover) var(--ease-standard),
+        color var(--dur-hover) var(--ease-standard);
+    }
+
+    .clear:hover:not(:disabled) {
+      color: var(--text-body);
+      background: var(--tint-hover);
+    }
+
     .action {
       color: var(--text-subtle);
       font-size: var(--text-12);
-    }
-
-    .clear:hover,
-    .action {
-      color: var(--text-body);
     }
 
     .clear:disabled {
