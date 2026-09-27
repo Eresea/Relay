@@ -67,10 +67,6 @@ impl NotificationTypeRule {
     }
 }
 
-fn default_poll_interval_secs() -> u64 {
-    300
-}
-
 /// One `NotificationTypeRule` per `PrEventKind`, named fields rather than a
 /// map — six known kinds, so a lookup is a `match`, not a runtime `HashMap`
 /// access that needs a "missing key" fallback to reason about.
@@ -125,8 +121,6 @@ impl Default for NotificationSettings {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct GithubConnectorSettings {
-    #[serde(default = "default_poll_interval_secs")]
-    pub poll_interval_secs: u64,
     #[serde(default)]
     pub notifications: NotificationSettings,
     /// Exact-match exceptions, checked before any rule — see `mute_keys`.
@@ -145,7 +139,6 @@ pub struct GithubConnectorSettings {
 impl Default for GithubConnectorSettings {
     fn default() -> Self {
         Self {
-            poll_interval_secs: default_poll_interval_secs(),
             notifications: NotificationSettings::default(),
             muted: Vec::new(),
             client_id: None,
@@ -162,13 +155,6 @@ pub fn effective_client_id(settings: &GithubConnectorSettings) -> Option<&str> {
         .map(str::trim)
         .filter(|id| !id.is_empty())
 }
-
-/// The minimum interval the poll loop will honor, regardless of what
-/// settings.json says. GitHub's search API allows 30 authenticated
-/// requests/minute; one poll cycle costs one search call plus one call per
-/// changed pull request, so anything under a minute risks tripping the
-/// secondary rate limit on an active account.
-pub const MIN_POLL_INTERVAL_SECS: u64 = 60;
 
 /// `"owner/repo"`, `"owner/repo@branch"`, and `"owner/repo#123"` — the three
 /// granularities `settings.muted` can name. All three are checked for a
@@ -235,7 +221,6 @@ mod tests {
         muted: Vec<String>,
     ) -> GithubConnectorSettings {
         GithubConnectorSettings {
-            poll_interval_secs: 300,
             notifications,
             muted,
             client_id: None,

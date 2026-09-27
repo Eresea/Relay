@@ -29,7 +29,6 @@ use tauri::Manager;
 use tauri_plugin_deep_link::DeepLinkExt;
 
 use github::client::HttpGitHubClient;
-use github::GithubState;
 use gmail::GmailState;
 use jobs::JobRegistry;
 use vault::VaultState;
@@ -67,7 +66,6 @@ pub fn run() {
     builder = builder
         .manage(JobRegistry::default())
         .manage(VaultState::default())
-        .manage(GithubState::default())
         .manage(HttpGitHubClient::default())
         .manage(GmailState::default())
         .manage(nexus_auth::NexusAuthState::default())
@@ -305,14 +303,7 @@ pub fn run() {
                 let _ = overlay::show_main(app.handle());
             }
 
-            let github_client = app.state::<HttpGitHubClient>().inner().clone();
-            let job_registry = app.state::<JobRegistry>().inner().clone();
-            let github_app = app.handle().clone();
-            github::events::start(github_app.clone());
-            tauri::async_runtime::spawn(async move {
-                github::resume_polling_if_connected(&github_app, github_client, &job_registry)
-                    .await;
-            });
+            github::events::start(app.handle().clone());
 
             // A connector that stopped polling every time the window closed
             // would be pointless — resume whatever was connected before the
