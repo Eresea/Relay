@@ -236,6 +236,7 @@ jobs:
 
       - name: Build signed Android artifacts
         env:
+          RELAY_LINEAR_CLIENT_ID: ${{ vars.RELAY_LINEAR_CLIENT_ID }}
           ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
           ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
           ANDROID_KEYSTORE_PATH: ${{ runner.temp }}/relay-upload.jks
