@@ -11,6 +11,7 @@ import {
   type LinearInitiative,
   type LinearIssue,
   type LinearIssueDetail,
+  type LinearLabel,
   type LinearMilestone,
   type LinearProject,
   type LinearPerson,
@@ -183,6 +184,19 @@ import { UmbraButtonComponent } from '@umbra/components/umbra-button/umbra-butto
                     <option value="">No cycle</option>
                     @for (cycle of cyclesFor(detail.issue.team.id); track cycle.id) {
                       <option [value]="cycle.id">{{ cycle.name }}</option>
+                    }
+                  </select>
+                </label>
+                <label>
+                  <span>Labels</span>
+                  <select multiple size="4" (change)="updateLabels(detail.issue, $event)">
+                    @for (label of labelsFor(detail.issue.team.id); track label.id) {
+                      <option
+                        [value]="label.id"
+                        [selected]="detail.issue.labels.some((item) => item.id === label.id)"
+                      >
+                        {{ label.name }}
+                      </option>
                     }
                   </select>
                 </label>
@@ -1210,6 +1224,7 @@ export class Linear {
   protected readonly section = signal<'work' | 'projects' | 'cycles' | 'roadmap'>('work');
   protected readonly teams = signal<readonly LinearTeam[]>([]);
   protected readonly users = signal<readonly LinearPerson[]>([]);
+  protected readonly labels = signal<readonly LinearLabel[]>([]);
   protected readonly workflowStates = signal<
     Readonly<Record<string, readonly LinearWorkflowState[]>>
   >({});
@@ -1975,6 +1990,17 @@ export class Linear {
     await this.saveIssueUpdate(issue, cycleId ? { cycleId } : { clearCycle: true });
   }
 
+  protected labelsFor(teamId: string): readonly LinearLabel[] {
+    return this.labels().filter((label) => !label.team?.id || label.team.id === teamId);
+  }
+
+  protected async updateLabels(issue: LinearIssue, event: Event): Promise<void> {
+    const select = event.target as HTMLSelectElement;
+    await this.saveIssueUpdate(issue, {
+      labelIds: Array.from(select.selectedOptions, (option) => option.value),
+    });
+  }
+
   private async saveIssueUpdate(
     issue: LinearIssue,
     update: {
@@ -1984,6 +2010,7 @@ export class Linear {
       cycleId?: string;
       clearCycle?: boolean;
       priority?: number;
+      labelIds?: readonly string[];
     },
   ): Promise<void> {
     const connection = this.selected();
@@ -2077,7 +2104,12 @@ export class Linear {
     try {
       const teams = await this.tauri.linearTeams(connection.organizationId);
       this.teams.set(teams);
-      this.users.set(await this.tauri.linearUsers(connection.organizationId));
+      const [users, labels] = await Promise.all([
+        this.tauri.linearUsers(connection.organizationId),
+        this.tauri.linearIssueLabels(connection.organizationId),
+      ]);
+      this.users.set(users);
+      this.labels.set(labels);
       const teamId = teams[0]?.id ?? '';
       this.createTeamId.set(teamId);
       const entries = await Promise.all(

@@ -29,7 +29,8 @@ use crate::gmail::{self, GmailSettings, GmailState, GmailStatus, HttpGoogleApi, 
 use crate::jobs::{JobId, JobRegistry};
 use crate::linear::{
     self, Initiative, Issue, IssueDetail, IssuePage, LinearCodexContext, LinearComment,
-    LinearConnection, LinearCycle, LinearMilestone, LinearProject, Person, Team, WorkflowState,
+    LinearConnection, LinearCycle, LinearLabel, LinearMilestone, LinearProject, Person, Team,
+    WorkflowState,
 };
 #[cfg(mobile)]
 use crate::mobile_updates;
@@ -341,6 +342,14 @@ pub async fn linear_teams(app: AppHandle, organization_id: String) -> Result<Vec
 #[tauri::command]
 pub async fn linear_users(app: AppHandle, organization_id: String) -> Result<Vec<Person>> {
     linear::users(&app, &organization_id).await
+}
+
+#[tauri::command]
+pub async fn linear_issue_labels(
+    app: AppHandle,
+    organization_id: String,
+) -> Result<Vec<LinearLabel>> {
+    linear::issue_labels(&app, &organization_id).await
 }
 
 #[tauri::command]
@@ -674,6 +683,7 @@ pub async fn linear_update_issue(
     cycle_id: Option<String>,
     clear_cycle: Option<bool>,
     priority: Option<u8>,
+    label_ids: Option<Vec<String>>,
 ) -> Result<Issue> {
     if issue_id.trim().is_empty()
         || priority.is_some_and(|value| value > 4)
@@ -685,6 +695,9 @@ pub async fn linear_update_issue(
             .is_some_and(|value| value.trim().is_empty())
         || (clear_assignee.unwrap_or(false) && assignee_id.is_some())
         || (clear_cycle.unwrap_or(false) && cycle_id.is_some())
+        || label_ids
+            .as_ref()
+            .is_some_and(|labels| labels.iter().any(|label| label.trim().is_empty()))
     {
         return Err(std::io::Error::other("Invalid Linear issue update").into());
     }
@@ -698,6 +711,7 @@ pub async fn linear_update_issue(
         cycle_id.as_deref(),
         clear_cycle.unwrap_or(false),
         priority,
+        label_ids.as_deref(),
     )
     .await
 }

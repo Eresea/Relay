@@ -9,8 +9,8 @@ use tauri_plugin_store::StoreExt;
 use crate::error::{Error, Result};
 
 pub use api::{
-    Initiative, Issue, IssueDetail, IssuePage, LinearComment, LinearCycle, LinearMilestone,
-    LinearProject, Person, Team, Viewer, WorkflowState,
+    Initiative, Issue, IssueDetail, IssuePage, LinearComment, LinearCycle, LinearLabel,
+    LinearMilestone, LinearProject, Person, Team, Viewer, WorkflowState,
 };
 use oauth::TokenBundle;
 pub use oauth::{LinearCodexLink, LinearCodexProjectPolicy};
@@ -157,6 +157,10 @@ pub async fn teams(app: &AppHandle, organization_id: &str) -> Result<Vec<Team>> 
 
 pub async fn users(app: &AppHandle, organization_id: &str) -> Result<Vec<Person>> {
     api::users(&access_token(app, organization_id).await?).await
+}
+
+pub async fn issue_labels(app: &AppHandle, organization_id: &str) -> Result<Vec<LinearLabel>> {
+    api::issue_labels(&access_token(app, organization_id).await?).await
 }
 
 pub async fn projects(app: &AppHandle, organization_id: &str) -> Result<Vec<LinearProject>> {
@@ -356,6 +360,7 @@ pub async fn update_issue(
     cycle_id: Option<&str>,
     clear_cycle: bool,
     priority: Option<u8>,
+    label_ids: Option<&[String]>,
 ) -> Result<Issue> {
     api::update_issue(
         &access_token(app, organization_id).await?,
@@ -366,6 +371,7 @@ pub async fn update_issue(
         cycle_id,
         clear_cycle,
         priority,
+        label_ids,
     )
     .await
 }

@@ -555,6 +555,10 @@ export class TauriBridge {
     return (await this.invoke<LinearPerson[]>('linear_users', { organizationId })) ?? [];
   }
 
+  async linearIssueLabels(organizationId: string): Promise<readonly LinearLabel[]> {
+    return (await this.invoke<LinearLabel[]>('linear_issue_labels', { organizationId })) ?? [];
+  }
+
   async linearProjects(organizationId: string): Promise<readonly LinearProject[]> {
     return (await this.invoke<LinearProject[]>('linear_projects', { organizationId })) ?? [];
   }
@@ -795,6 +799,7 @@ export class TauriBridge {
       cycleId?: string;
       clearCycle?: boolean;
       priority?: number;
+      labelIds?: readonly string[];
     },
   ): Promise<LinearIssue> {
     const issue = await this.invoke<LinearIssue>('linear_update_issue', {
@@ -1223,6 +1228,13 @@ export interface LinearPerson {
   readonly name: string;
 }
 
+export interface LinearLabel {
+  readonly id: string;
+  readonly name: string;
+  readonly color: string | null;
+  readonly team?: { readonly id: string } | null;
+}
+
 export interface LinearProject {
   readonly id: string;
   readonly name: string;
@@ -1276,6 +1288,7 @@ export interface LinearIssue {
   readonly assignee: { readonly id: string; readonly name: string } | null;
   readonly project: { readonly id: string; readonly name: string } | null;
   readonly cycle: { readonly id: string; readonly name: string; readonly number: number } | null;
+  readonly labels: readonly LinearLabel[];
   readonly team: LinearTeam;
 }
 

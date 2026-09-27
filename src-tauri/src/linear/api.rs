@@ -70,6 +70,8 @@ pub struct Issue {
     pub assignee: Option<Person>,
     pub project: Option<ProjectRef>,
     pub cycle: Option<CycleRef>,
+    #[serde(default, with = "label_nodes")]
+    pub labels: Vec<LinearLabel>,
     pub team: Team,
 }
 
@@ -110,6 +112,41 @@ pub struct CycleRef {
     pub id: String,
     pub name: String,
     pub number: i64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LinearLabel {
+    pub id: String,
+    pub name: String,
+    #[serde(default)]
+    pub color: Option<String>,
+    pub team: Option<TeamRef>,
+}
+
+mod label_nodes {
+    use serde::{Deserialize, Deserializer, Serialize, Serializer};
+
+    use super::LinearLabel;
+
+    #[derive(Deserialize)]
+    struct Connection {
+        nodes: Vec<LinearLabel>,
+    }
+
+    pub fn deserialize<'de, D>(deserializer: D) -> Result<Vec<LinearLabel>, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        Connection::deserialize(deserializer).map(|connection| connection.nodes)
+    }
+
+    pub fn serialize<S>(labels: &[LinearLabel], serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        labels.serialize(serializer)
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -221,6 +258,22 @@ pub async fn users(token: &str) -> Result<Vec<Person>> {
     )
     .await?
     .users
+    .nodes)
+}
+
+pub async fn issue_labels(token: &str) -> Result<Vec<LinearLabel>> {
+    #[derive(Deserialize)]
+    struct Data {
+        #[serde(rename = "issueLabels")]
+        labels: Nodes<LinearLabel>,
+    }
+    Ok(query::<Data>(
+        token,
+        "query RelayIssueLabels { issueLabels(first: 250) { nodes { id name color team { id } } } }",
+        json!({}),
+    )
+    .await?
+    .labels
     .nodes)
 }
 
@@ -551,7 +604,7 @@ pub async fn create_issue(
     }
     let data: Data = query(
         token,
-        "mutation RelayIssueCreate($input: IssueCreateInput!) { issueCreate(input: $input) { success issue { id identifier title description url priority updatedAt state { id name type } assignee { id name } project { id name } cycle { id name number } team { id name key } } } }",
+        "mutation RelayIssueCreate($input: IssueCreateInput!) { issueCreate(input: $input) { success issue { id identifier title description url priority updatedAt state { id name type } assignee { id name } project { id name } cycle { id name number } labels { nodes { id name color } } team { id name key } } } }",
         json!({ "input": input }),
     )
     .await?;
@@ -572,7 +625,7 @@ pub async fn issue_detail(token: &str, issue_id: &str) -> Result<IssueDetail> {
     }
     let data: Data = query(
         token,
-        "query RelayIssueDetail($id: String!) { issue(id: $id) { id identifier title description url priority updatedAt state { id name type } assignee { id name } project { id name } cycle { id name number } team { id name key } children(first: 50) { nodes { id identifier title description url priority updatedAt state { id name type } assignee { id name } project { id name } cycle { id name number } team { id name key } } } comments(first: 50) { nodes { id body createdAt user { id name } } } } }",
+        "query RelayIssueDetail($id: String!) { issue(id: $id) { id identifier title description url priority updatedAt state { id name type } assignee { id name } project { id name } cycle { id name number } labels { nodes { id name color } } team { id name key } children(first: 50) { nodes { id identifier title description url priority updatedAt state { id name type } assignee { id name } project { id name } cycle { id name number } labels { nodes { id name color } } team { id name key } } } comments(first: 50) { nodes { id body createdAt user { id name } } } } }",
         json!({ "id": issue_id }),
     )
     .await?;
@@ -607,6 +660,7 @@ pub async fn update_issue(
     cycle_id: Option<&str>,
     clear_cycle: bool,
     priority: Option<u8>,
+    label_ids: Option<&[String]>,
 ) -> Result<Issue> {
     #[derive(Deserialize)]
     struct Data {
@@ -633,9 +687,12 @@ pub async fn update_issue(
     if let Some(priority) = priority {
         input.insert("priority".into(), json!(priority));
     }
+    if let Some(label_ids) = label_ids {
+        input.insert("labelIds".into(), json!(label_ids));
+    }
     let data: Data = query(
         token,
-        "mutation RelayIssueUpdate($id: String!, $input: IssueUpdateInput!) { issueUpdate(id: $id, input: $input) { success issue { id identifier title description url priority updatedAt state { id name type } assignee { id name } project { id name } cycle { id name number } team { id name key } } } }",
+        "mutation RelayIssueUpdate($id: String!, $input: IssueUpdateInput!) { issueUpdate(id: $id, input: $input) { success issue { id identifier title description url priority updatedAt state { id name type } assignee { id name } project { id name } cycle { id name number } labels { nodes { id name color } } team { id name key } } } }",
         json!({
             "id": issue_id,
             "input": input
@@ -748,7 +805,7 @@ async fn issues(token: &str, filter: Value, after: Option<&str>) -> Result<Issue
 
     let data: Data = query(
         token,
-        "query RelayMyIssues($filter: IssueFilter, $after: String) { issues(filter: $filter, first: 50, after: $after) { nodes { id identifier title description url priority updatedAt state { id name type } assignee { id name } project { id name } cycle { id name number } team { id name key } } pageInfo { endCursor hasNextPage } } }",
+        "query RelayMyIssues($filter: IssueFilter, $after: String) { issues(filter: $filter, first: 50, after: $after) { nodes { id identifier title description url priority updatedAt state { id name type } assignee { id name } project { id name } cycle { id name number } labels { nodes { id name color } } team { id name key } } pageInfo { endCursor hasNextPage } } }",
         json!({
             "filter": filter,
             "after": after
@@ -819,6 +876,23 @@ async fn query<T: DeserializeOwned>(token: &str, query: &str, variables: Value) 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[derive(Deserialize, Serialize)]
+    struct LabelResponse {
+        #[serde(with = "label_nodes")]
+        labels: Vec<LinearLabel>,
+    }
+
+    #[test]
+    fn issue_label_connection_round_trips_as_a_flat_list() {
+        let labels: LabelResponse = serde_json::from_value(json!({
+            "labels": { "nodes": [{ "id": "label-1", "name": "Bug", "color": "#ff0000", "team": null }] }
+        }))
+        .unwrap();
+        assert_eq!(labels.labels[0].id, "label-1");
+        let encoded = serde_json::to_value(labels).unwrap();
+        assert_eq!(encoded["labels"][0]["id"], "label-1");
+    }
 
     #[test]
     fn initiative_mutation_accepts_sparse_payload_and_defaults_projects() {
