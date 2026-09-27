@@ -1098,43 +1098,69 @@ interface LinearIssueDraft {
                   <article class="resource-row">
                     <div>
                       <h3>{{ cycle.name || 'Cycle ' + cycle.number }}</h3>
+                      @if (cycle.description) {
+                        <p>{{ cycle.description }}</p>
+                      }
                       <p>
                         {{ cycleDateInTeam(cycle.startsAt, team) }} –
                         {{ cycleDateInTeam(cycle.endsAt, team) }}
                       </p>
                     </div>
+                    <umbra-button size="sm" variant="outline" (click)="editCycle(cycle)">
+                      Edit cycle
+                    </umbra-button>
                     @if (canEditCycle(cycle, team)) {
-                      <umbra-button size="sm" variant="outline" (click)="editCycle(cycle)"
-                        >Edit schedule</umbra-button
-                      >
+                      <span class="muted">{{ cycle.isActive ? 'Current' : 'Upcoming' }}</span>
                     } @else {
-                      <span class="muted">{{ cycle.isActive ? 'Current' : 'Past' }}</span>
+                      <span class="muted">Past</span>
                     }
                   </article>
                   @if (editingCycleId() === cycle.id) {
                     <form class="project-edit" (submit)="saveCycle($event, cycle)">
+                      <label>
+                        <span>Cycle name</span>
+                        <input
+                          maxlength="255"
+                          [value]="editCycleName()"
+                          (input)="editCycleName.set($any($event.target).value)"
+                        />
+                      </label>
+                      <label>
+                        <span>Description</span>
+                        <textarea
+                          rows="2"
+                          [value]="editCycleDescription()"
+                          (input)="editCycleDescription.set($any($event.target).value)"
+                        ></textarea>
+                      </label>
                       @if (!cycle.isActive) {
+                        @if (canEditCycle(cycle, team)) {
+                          <label>
+                            <span>Start date · {{ team.timezone || 'America/Los_Angeles' }}</span>
+                            <input
+                              type="date"
+                              required
+                              [value]="editCycleStartDate()"
+                              [min]="todayForTeam(team)"
+                              (input)="editCycleStartDate.set($any($event.target).value)"
+                            />
+                          </label>
+                        }
+                      }
+                      @if (canEditCycle(cycle, team)) {
                         <label>
-                          <span>Start date · {{ team.timezone || 'America/Los_Angeles' }}</span>
+                          <span>End date · {{ team.timezone || 'America/Los_Angeles' }}</span>
                           <input
                             type="date"
                             required
-                            [value]="editCycleStartDate()"
-                            [min]="todayForTeam(team)"
-                            (input)="editCycleStartDate.set($any($event.target).value)"
+                            [value]="editCycleEndDate()"
+                            [min]="cycle.isActive ? todayForTeam(team) : editCycleStartDate()"
+                            (input)="editCycleEndDate.set($any($event.target).value)"
                           />
                         </label>
+                      } @else {
+                        <p class="hint">Past cycle dates cannot be changed.</p>
                       }
-                      <label>
-                        <span>End date · {{ team.timezone || 'America/Los_Angeles' }}</span>
-                        <input
-                          type="date"
-                          required
-                          [value]="editCycleEndDate()"
-                          [min]="cycle.isActive ? todayForTeam(team) : editCycleStartDate()"
-                          (input)="editCycleEndDate.set($any($event.target).value)"
-                        />
-                      </label>
                       <umbra-button size="sm" [disabled]="savingCycle()">
                         {{ savingCycle() ? 'Saving' : 'Save schedule' }}
                       </umbra-button>
@@ -1625,6 +1651,8 @@ export class Linear {
   protected readonly newCycleEndDate = signal('');
   protected readonly creatingCycle = signal(false);
   protected readonly editingCycleId = signal<string | null>(null);
+  protected readonly editCycleName = signal('');
+  protected readonly editCycleDescription = signal('');
   protected readonly editCycleStartDate = signal('');
   protected readonly editCycleEndDate = signal('');
   protected readonly savingCycle = signal(false);
@@ -2404,6 +2432,8 @@ export class Linear {
   protected editCycle(cycle: LinearCycle): void {
     this.error.set(null);
     this.editingCycleId.set(cycle.id);
+    this.editCycleName.set(cycle.name ?? '');
+    this.editCycleDescription.set(cycle.description ?? '');
     this.editCycleStartDate.set(
       cycle.startsAt ? cycleDateInTimezone(cycle.startsAt, cycle.team.timezone) : '',
     );
@@ -2422,8 +2452,14 @@ export class Linear {
       const updated = await this.tauri.linearUpdateCycle(
         connection.organizationId,
         cycle.id,
-        cycle.isActive ? null : cycleDateToIso(this.editCycleStartDate(), cycle.team.timezone),
-        cycleDateToIso(this.editCycleEndDate(), cycle.team.timezone),
+        this.editCycleName().trim(),
+        this.editCycleDescription(),
+        this.canEditCycle(cycle, cycle.team) && !cycle.isActive
+          ? cycleDateToIso(this.editCycleStartDate(), cycle.team.timezone)
+          : null,
+        this.canEditCycle(cycle, cycle.team)
+          ? cycleDateToIso(this.editCycleEndDate(), cycle.team.timezone)
+          : null,
       );
       this.cycles.update((cycles) => ({
         ...cycles,

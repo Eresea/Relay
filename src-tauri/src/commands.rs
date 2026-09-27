@@ -419,7 +419,6 @@ pub async fn linear_update_project(
     clear_lead: Option<bool>,
 ) -> Result<LinearProject> {
     if project_id.trim().is_empty()
-        || name.trim().is_empty()
         || name.chars().count() > 255
         || status_id.as_ref().is_some_and(|id| id.trim().is_empty())
         || lead_id.as_ref().is_some_and(|id| id.trim().is_empty())
@@ -640,23 +639,28 @@ pub async fn linear_update_cycle(
     app: AppHandle,
     organization_id: String,
     cycle_id: String,
+    name: String,
+    description: String,
     starts_at: Option<String>,
     ends_at: Option<String>,
 ) -> Result<LinearCycle> {
     if organization_id.trim().is_empty()
         || cycle_id.trim().is_empty()
-        || (starts_at.is_none() && ends_at.is_none())
+        || name.chars().count() > 255
+        || description.chars().count() > 10_000
         || starts_at
             .as_ref()
             .is_some_and(|date| date.trim().is_empty())
         || ends_at.as_ref().is_some_and(|date| date.trim().is_empty())
     {
-        return Err(std::io::Error::other("Cycle and schedule dates are required").into());
+        return Err(std::io::Error::other("Cycle details are required").into());
     }
     linear::update_cycle(
         &app,
         &organization_id,
         &cycle_id,
+        name.trim(),
+        &description,
         starts_at.as_deref(),
         ends_at.as_deref(),
     )

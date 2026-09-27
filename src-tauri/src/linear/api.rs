@@ -217,6 +217,8 @@ pub struct LinearCycle {
     pub id: String,
     #[serde(default)]
     pub name: Option<String>,
+    #[serde(default)]
+    pub description: Option<String>,
     pub number: i64,
     #[serde(default)]
     pub starts_at: Option<String>,
@@ -667,7 +669,7 @@ pub async fn cycles(token: &str, team_id: &str) -> Result<Vec<LinearCycle>> {
     }
     Ok(query::<Data>(
         token,
-        "query RelayCycles($teamId: String!) { cycles(filter: { team: { id: { eq: $teamId } } }, first: 100) { nodes { id name number startsAt endsAt isActive team { id name key timezone } } } }",
+        "query RelayCycles($teamId: String!) { cycles(filter: { team: { id: { eq: $teamId } } }, first: 100) { nodes { id name description number startsAt endsAt isActive team { id name key timezone } } } }",
         json!({ "teamId": team_id }),
     )
     .await?
@@ -689,7 +691,7 @@ pub async fn create_cycle(
     }
     let data: Data = query(
         token,
-        "mutation RelayCycleCreate($input: CycleCreateInput!) { cycleCreate(input: $input) { success cycle { id name number startsAt endsAt isActive team { id name key timezone } } } }",
+        "mutation RelayCycleCreate($input: CycleCreateInput!) { cycleCreate(input: $input) { success cycle { id name description number startsAt endsAt isActive team { id name key timezone } } } }",
         json!({ "input": cycle_create_input(team_id, name, starts_at, ends_at) }),
     )
     .await?;
@@ -710,6 +712,8 @@ fn cycle_create_input(team_id: &str, name: Option<&str>, starts_at: &str, ends_a
 pub async fn update_cycle(
     token: &str,
     cycle_id: &str,
+    name: &str,
+    description: &str,
     starts_at: Option<&str>,
     ends_at: Option<&str>,
 ) -> Result<LinearCycle> {
@@ -719,6 +723,15 @@ pub async fn update_cycle(
         result: CycleMutation,
     }
     let mut input = serde_json::Map::new();
+    input.insert(
+        "name".into(),
+        if name.trim().is_empty() {
+            Value::Null
+        } else {
+            json!(name.trim())
+        },
+    );
+    input.insert("description".into(), json!(description));
     if let Some(starts_at) = starts_at {
         input.insert("startsAt".into(), json!(starts_at));
     }
@@ -727,7 +740,7 @@ pub async fn update_cycle(
     }
     let data: Data = query(
         token,
-        "mutation RelayCycleUpdate($id: String!, $input: CycleUpdateInput!) { cycleUpdate(id: $id, input: $input) { success cycle { id name number startsAt endsAt isActive team { id name key timezone } } } }",
+        "mutation RelayCycleUpdate($id: String!, $input: CycleUpdateInput!) { cycleUpdate(id: $id, input: $input) { success cycle { id name description number startsAt endsAt isActive team { id name key timezone } } } }",
         json!({ "id": cycle_id, "input": input }),
     )
     .await?;

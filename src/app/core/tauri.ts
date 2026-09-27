@@ -757,12 +757,16 @@ export class TauriBridge {
   async linearUpdateCycle(
     organizationId: string,
     cycleId: string,
+    name: string,
+    description: string,
     startsAt: string | null,
     endsAt: string | null,
   ): Promise<LinearCycle> {
     const cycle = await this.invoke<LinearCycle>('linear_update_cycle', {
       organizationId,
       cycleId,
+      name,
+      description,
       startsAt,
       endsAt,
     });
@@ -1382,6 +1386,7 @@ export interface LinearInitiativeProject {
 export interface LinearCycle {
   readonly id: string;
   readonly name: string | null;
+  readonly description: string | null;
   readonly number: number;
   readonly startsAt: string | null;
   readonly endsAt: string | null;
