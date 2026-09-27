@@ -1034,6 +1034,10 @@ pub async fn my_issues(token: &str, assignee_id: &str, after: Option<&str>) -> R
     .await
 }
 
+pub async fn team_issues(token: &str, team_id: &str, after: Option<&str>) -> Result<IssuePage> {
+    issues(token, json!({ "team": { "id": { "eq": team_id } } }), after).await
+}
+
 async fn issues(token: &str, filter: Value, after: Option<&str>) -> Result<IssuePage> {
     #[derive(Deserialize)]
     struct Data {
@@ -1042,7 +1046,7 @@ async fn issues(token: &str, filter: Value, after: Option<&str>) -> Result<Issue
 
     let data: Data = query(
         token,
-        "query RelayMyIssues($filter: IssueFilter, $after: String) { issues(filter: $filter, first: 50, after: $after) { nodes { id identifier title description url priority updatedAt state { id name type } assignee { id name } project { id name } cycle { id name number } labels { nodes { id name color } } team { id name key } } pageInfo { endCursor hasNextPage } } }",
+        "query RelayIssues($filter: IssueFilter, $after: String) { issues(filter: $filter, first: 50, after: $after) { nodes { id identifier title description url priority updatedAt state { id name type } assignee { id name } project { id name } cycle { id name number } labels { nodes { id name color } } team { id name key } } pageInfo { endCursor hasNextPage } } }",
         json!({
             "filter": filter,
             "after": after

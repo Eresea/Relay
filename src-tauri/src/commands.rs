@@ -865,6 +865,19 @@ pub async fn linear_my_issues(
 }
 
 #[tauri::command]
+pub async fn linear_team_issues(
+    app: AppHandle,
+    organization_id: String,
+    team_id: String,
+    after: Option<String>,
+) -> Result<IssuePage> {
+    if team_id.trim().is_empty() {
+        return Err(std::io::Error::other("A Linear team is required").into());
+    }
+    linear::team_issues(&app, &organization_id, &team_id, after.as_deref()).await
+}
+
+#[tauri::command]
 pub async fn linear_project_issues(
     app: AppHandle,
     organization_id: String,

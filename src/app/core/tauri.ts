@@ -890,6 +890,20 @@ export class TauriBridge {
     return result;
   }
 
+  async linearTeamIssues(
+    organizationId: string,
+    teamId: string,
+    after: string | null = null,
+  ): Promise<LinearIssuePage> {
+    const result = await this.invoke<LinearIssuePage>('linear_team_issues', {
+      organizationId,
+      teamId,
+      after,
+    });
+    if (!result) throw new Error('Linear returned no team issues.');
+    return result;
+  }
+
   async linearProjectIssues(
     organizationId: string,
     projectId: string,

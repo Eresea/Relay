@@ -485,10 +485,24 @@ interface LinearIssueDraft {
             </section>
           }
           @if (section() === 'work') {
-            <section class="issues" aria-label="My Linear issues">
+            <section class="issues" aria-label="Linear issues">
               <div class="issue-heading">
-                <h2>My work</h2>
+                <h2>{{ issueTeamId() ? teamName(issueTeamId()) + ' issues' : 'My work' }}</h2>
                 <div class="issue-actions">
+                  <label>
+                    <span class="sr-only">Issue scope</span>
+                    <select
+                      aria-label="Issue scope"
+                      [value]="issueTeamId()"
+                      [disabled]="loading()"
+                      (change)="setIssueTeam($any($event.target).value)"
+                    >
+                      <option value="">Assigned to me</option>
+                      @for (team of teams(); track team.id) {
+                        <option [value]="team.id">All {{ team.name }} issues</option>
+                      }
+                    </select>
+                  </label>
                   <umbra-button
                     size="sm"
                     variant="link"
@@ -548,7 +562,11 @@ interface LinearIssueDraft {
                 </p>
               }
               @if (issues().length === 0 && !loading()) {
-                <p class="hint">No assigned issues found.</p>
+                <p class="hint">
+                  {{
+                    issueTeamId() ? 'No issues found for this team.' : 'No assigned issues found.'
+                  }}
+                </p>
               }
               @for (issue of issues(); track issue.id) {
                 <article class="issue">
@@ -1537,6 +1555,7 @@ export class Linear {
     Readonly<Record<string, readonly LinearWorkflowState[]>>
   >({});
   protected readonly createTeamId = signal('');
+  protected readonly issueTeamId = signal('');
   protected readonly newTitle = signal('');
   protected readonly newDescription = signal('');
   protected readonly hasNextPage = signal(false);
@@ -1630,6 +1649,7 @@ export class Linear {
 
   protected select(connection: LinearConnection): void {
     this.selected.set(connection);
+    this.issueTeamId.set('');
     this.restoreIssueDraft(connection);
     this.restorePendingIssueUpdates(connection);
     this.issueCacheStale.set(false);
@@ -1641,6 +1661,19 @@ export class Linear {
     void this.loadTeams(connection);
     void this.loadIssues();
     void this.loadSection(connection);
+  }
+
+  protected teamName(teamId: string): string {
+    return this.teams().find((team) => team.id === teamId)?.name ?? 'Team';
+  }
+
+  protected setIssueTeam(teamId: string): void {
+    if (this.loading() || teamId === this.issueTeamId()) return;
+    this.issueTeamId.set(teamId);
+    this.nextCursor = null;
+    this.hasNextPage.set(false);
+    this.issues.set([]);
+    void this.loadIssues();
   }
 
   protected statesFor(issue: LinearIssue): readonly LinearWorkflowState[] {
@@ -2003,7 +2036,10 @@ export class Linear {
   }
 
   private issueCacheKey(connection: LinearConnection): string {
-    return `relay.linear.issues.${connection.organizationId}.${connection.viewerId}`;
+    const teamId = this.issueTeamId();
+    return teamId
+      ? `relay.linear.issues.${connection.organizationId}.${connection.viewerId}.team.${teamId}`
+      : `relay.linear.issues.${connection.organizationId}.${connection.viewerId}`;
   }
 
   private projectCacheKey(connection: LinearConnection): string {
@@ -2595,8 +2631,10 @@ export class Linear {
       this.newTitle.set('');
       this.newDescription.set('');
       this.writeLocal(this.issueDraftKey(connection.organizationId), null);
-      this.issues.update((issues) => [created, ...issues]);
-      this.saveIssueCache(connection);
+      if (!this.issueTeamId() || this.issueTeamId() === created.team.id) {
+        this.issues.update((issues) => [created, ...issues]);
+        this.saveIssueCache(connection);
+      }
     } catch (error) {
       this.error.set(error instanceof Error ? error.message : String(error));
     } finally {
@@ -2770,7 +2808,7 @@ export class Linear {
     this.loading.set(true);
     this.error.set(null);
     try {
-      const page = await this.tauri.linearMyIssues(connection.organizationId);
+      const page = await this.fetchIssues(connection.organizationId);
       this.issues.set(page.issues);
       this.nextCursor = page.endCursor;
       this.hasNextPage.set(page.hasNextPage);
@@ -2795,7 +2833,7 @@ export class Linear {
     if (!connection || !this.nextCursor || this.loading()) return;
     this.loading.set(true);
     try {
-      const page = await this.tauri.linearMyIssues(connection.organizationId, this.nextCursor);
+      const page = await this.fetchIssues(connection.organizationId, this.nextCursor);
       this.issues.update((issues) => [...issues, ...page.issues]);
       this.nextCursor = page.endCursor;
       this.hasNextPage.set(page.hasNextPage);
@@ -2806,6 +2844,13 @@ export class Linear {
     } finally {
       this.loading.set(false);
     }
+  }
+
+  private fetchIssues(organizationId: string, after: string | null = null) {
+    const teamId = this.issueTeamId();
+    return teamId
+      ? this.tauri.linearTeamIssues(organizationId, teamId, after)
+      : this.tauri.linearMyIssues(organizationId, after);
   }
 
   protected async openIssue(url: string): Promise<void> {

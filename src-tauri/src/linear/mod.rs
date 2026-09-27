@@ -622,6 +622,15 @@ pub async fn my_issues(
     .await
 }
 
+pub async fn team_issues(
+    app: &AppHandle,
+    organization_id: &str,
+    team_id: &str,
+    after: Option<&str>,
+) -> Result<IssuePage> {
+    api::team_issues(&access_token(app, organization_id).await?, team_id, after).await
+}
+
 pub async fn project_issues(
     app: &AppHandle,
     organization_id: &str,
