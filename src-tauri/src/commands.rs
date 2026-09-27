@@ -785,6 +785,8 @@ pub async fn linear_update_issue(
     label_ids: Option<Vec<String>>,
     title: Option<String>,
     description: Option<String>,
+    project_id: Option<String>,
+    clear_project: Option<bool>,
 ) -> Result<Issue> {
     if organization_id.trim().is_empty()
         || issue_id.trim().is_empty()
@@ -792,6 +794,10 @@ pub async fn linear_update_issue(
         || title
             .as_ref()
             .is_some_and(|value| value.trim().is_empty() || value.chars().count() > 255)
+        || project_id
+            .as_ref()
+            .is_some_and(|value| value.trim().is_empty())
+        || (clear_project.unwrap_or(false) && project_id.is_some())
         || assignee_id
             .as_ref()
             .is_some_and(|value| value.trim().is_empty())
@@ -819,6 +825,8 @@ pub async fn linear_update_issue(
         label_ids.as_deref(),
         title.as_deref(),
         description.as_deref(),
+        project_id.as_deref(),
+        clear_project.unwrap_or(false),
     )
     .await
 }

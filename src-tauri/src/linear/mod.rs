@@ -435,6 +435,8 @@ pub async fn update_issue(
     label_ids: Option<&[String]>,
     title: Option<&str>,
     description: Option<&str>,
+    project_id: Option<&str>,
+    clear_project: bool,
 ) -> Result<Issue> {
     api::update_issue(
         &access_token(app, organization_id).await?,
@@ -448,6 +450,8 @@ pub async fn update_issue(
         label_ids,
         title,
         description,
+        project_id,
+        clear_project,
     )
     .await
 }

@@ -23,6 +23,15 @@ describe('Linear issue update drafts', () => {
     });
   });
 
+  it('replaces a pending project move with the latest association change', () => {
+    expect(mergeLinearIssueUpdates({ projectId: 'project-1' }, { clearProject: true })).toEqual({
+      clearProject: true,
+    });
+    expect(mergeLinearIssueUpdates({ clearProject: true }, { projectId: 'project-2' })).toEqual({
+      projectId: 'project-2',
+    });
+  });
+
   it('replaces mutually exclusive assignee and cycle changes', () => {
     expect(mergeLinearIssueUpdates({ clearAssignee: true }, { assigneeId: 'user-1' })).toEqual({
       assigneeId: 'user-1',

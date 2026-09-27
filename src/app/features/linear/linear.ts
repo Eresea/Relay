@@ -281,6 +281,18 @@ interface LinearIssueDraft {
                   </select>
                 </label>
                 <label>
+                  <span>Project</span>
+                  <select
+                    [value]="detail.issue.project?.id ?? ''"
+                    (change)="updateProject(detail.issue, $any($event.target).value)"
+                  >
+                    <option value="">No project</option>
+                    @for (project of projects(); track project.id) {
+                      <option [value]="project.id">{{ project.name }}</option>
+                    }
+                  </select>
+                </label>
+                <label>
                   <span>Labels</span>
                   <select multiple size="4" (change)="updateLabels(detail.issue, $event)">
                     @for (label of labelsFor(detail.issue.team.id); track label.id) {
@@ -1616,6 +1628,7 @@ export class Linear {
   protected async openIssueDetail(issue: LinearIssue): Promise<void> {
     const connection = this.selected();
     if (!connection) return;
+    void this.loadProjects();
     this.issueDetail.set(null);
     this.editingIssueDetailsId.set(null);
     this.codexRequest.set(null);
@@ -2637,6 +2650,10 @@ export class Linear {
   protected async updateCycle(issue: LinearIssue, cycleId: string): Promise<void> {
     if (cycleId === (issue.cycle?.id ?? '')) return;
     await this.saveIssueUpdate(issue, cycleId ? { cycleId } : { clearCycle: true });
+  }
+
+  protected async updateProject(issue: LinearIssue, projectId: string): Promise<void> {
+    await this.saveIssueUpdate(issue, projectId ? { projectId } : { clearProject: true });
   }
 
   protected labelsFor(teamId: string): readonly LinearLabel[] {

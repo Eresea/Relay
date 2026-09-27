@@ -854,6 +854,8 @@ export class TauriBridge {
     update: {
       title?: string;
       description?: string;
+      projectId?: string;
+      clearProject?: boolean;
       stateId?: string;
       assigneeId?: string;
       clearAssignee?: boolean;

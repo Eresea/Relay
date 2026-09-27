@@ -815,6 +815,8 @@ pub async fn update_issue(
     label_ids: Option<&[String]>,
     title: Option<&str>,
     description: Option<&str>,
+    project_id: Option<&str>,
+    clear_project: bool,
 ) -> Result<Issue> {
     #[derive(Deserialize)]
     struct Data {
@@ -849,6 +851,14 @@ pub async fn update_issue(
     }
     if let Some(description) = description {
         input.insert("description".into(), json!(description));
+    }
+    if let Some(project_id) = project_id {
+        input.insert("projectId".into(), json!(project_id));
+        input.insert("projectMilestoneId".into(), Value::Null);
+    }
+    if clear_project {
+        input.insert("projectId".into(), Value::Null);
+        input.insert("projectMilestoneId".into(), Value::Null);
     }
     let data: Data = query(
         token,

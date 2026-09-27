@@ -1,6 +1,8 @@
 export interface LinearIssueUpdate {
   title?: string;
   description?: string;
+  projectId?: string;
+  clearProject?: boolean;
   stateId?: string;
   assigneeId?: string;
   clearAssignee?: boolean;
@@ -36,5 +38,7 @@ export function mergeLinearIssueUpdates(
   if (next.clearAssignee) delete merged.assigneeId;
   if ('cycleId' in next) delete merged.clearCycle;
   if (next.clearCycle) delete merged.cycleId;
+  if ('projectId' in next) delete merged.clearProject;
+  if (next.clearProject) delete merged.projectId;
   return merged;
 }
