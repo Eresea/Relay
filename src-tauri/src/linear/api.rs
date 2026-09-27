@@ -711,6 +711,27 @@ pub async fn update_milestone(
         .into_value("Linear did not update the milestone")
 }
 
+pub async fn delete_milestone(token: &str, milestone_id: &str) -> Result<()> {
+    #[derive(Deserialize)]
+    struct Data {
+        #[serde(rename = "projectMilestoneDelete")]
+        result: DeleteMutation,
+    }
+    let data: Data = query(
+        token,
+        "mutation RelayMilestoneDelete($id: String!) { projectMilestoneDelete(id: $id) { success } }",
+        json!({ "id": milestone_id }),
+    )
+    .await?;
+    if data.result.success {
+        Ok(())
+    } else {
+        Err(Error::LinearApi(
+            "Linear did not delete the milestone".into(),
+        ))
+    }
+}
+
 pub async fn initiatives(
     token: &str,
     include_archived: bool,

@@ -813,6 +813,43 @@ interface LinearIssueDraft {
                       <umbra-button size="sm" variant="link" (click)="editMilestone(milestone)">
                         Edit
                       </umbra-button>
+                      @if (confirmDeleteMilestoneId() === milestone.id) {
+                        <div
+                          class="issue-actions"
+                          role="group"
+                          aria-label="Confirm milestone deletion"
+                        >
+                          <span class="muted">Remove this milestone and its issue grouping?</span>
+                          <umbra-button
+                            size="sm"
+                            variant="destructive"
+                            type="button"
+                            [disabled]="deletingMilestoneId() === milestone.id"
+                            (click)="deleteMilestone(milestone)"
+                          >
+                            {{
+                              deletingMilestoneId() === milestone.id ? 'Deleting' : 'Confirm delete'
+                            }}
+                          </umbra-button>
+                          <umbra-button
+                            size="sm"
+                            variant="link"
+                            type="button"
+                            (click)="confirmDeleteMilestoneId.set(null)"
+                          >
+                            Cancel
+                          </umbra-button>
+                        </div>
+                      } @else {
+                        <umbra-button
+                          size="sm"
+                          variant="link"
+                          type="button"
+                          (click)="confirmDeleteMilestoneId.set(milestone.id)"
+                        >
+                          Delete
+                        </umbra-button>
+                      }
                     </article>
                     @if (editingMilestoneId() === milestone.id) {
                       <form class="project-edit" (submit)="saveMilestone($event, milestone)">
@@ -2121,6 +2158,8 @@ export class Linear {
   protected readonly savingProject = signal(false);
   protected readonly creatingMilestone = signal(false);
   protected readonly savingMilestone = signal(false);
+  protected readonly confirmDeleteMilestoneId = signal<string | null>(null);
+  protected readonly deletingMilestoneId = signal<string | null>(null);
   protected readonly creatingProjectIssue = signal(false);
   protected readonly creatingSubIssue = signal(false);
   protected readonly sendingComment = signal(false);
@@ -3257,6 +3296,7 @@ export class Linear {
   protected async openProject(project: LinearProject): Promise<void> {
     this.closeIssueDetail();
     this.confirmArchiveProjectId.set(null);
+    this.confirmDeleteMilestoneId.set(null);
     this.selectedProject.set(project);
     const connection = this.selected();
     if (connection) this.restoreProjectIssueDraft(connection, project.id);
@@ -3279,6 +3319,7 @@ export class Linear {
   protected closeSelectedProject(): void {
     this.selectedProject.set(null);
     this.confirmArchiveProjectId.set(null);
+    this.confirmDeleteMilestoneId.set(null);
     this.projectUpdates.set([]);
   }
 
@@ -3433,6 +3474,30 @@ export class Linear {
       this.error.set(error instanceof Error ? error.message : String(error));
     } finally {
       this.savingMilestone.set(false);
+    }
+  }
+
+  protected async deleteMilestone(milestone: LinearMilestone): Promise<void> {
+    const connection = this.selected();
+    if (
+      !connection ||
+      !this.selectedProject() ||
+      this.confirmDeleteMilestoneId() !== milestone.id ||
+      this.deletingMilestoneId()
+    ) {
+      return;
+    }
+    this.deletingMilestoneId.set(milestone.id);
+    this.error.set(null);
+    try {
+      await this.tauri.linearDeleteMilestone(connection.organizationId, milestone.id);
+      this.milestones.update((items) => items.filter((item) => item.id !== milestone.id));
+      if (this.editingMilestoneId() === milestone.id) this.editingMilestoneId.set(null);
+      this.confirmDeleteMilestoneId.set(null);
+    } catch (error) {
+      this.error.set(error instanceof Error ? error.message : String(error));
+    } finally {
+      this.deletingMilestoneId.set(null);
     }
   }
 

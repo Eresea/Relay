@@ -623,6 +623,18 @@ pub async fn linear_update_milestone(
 }
 
 #[tauri::command]
+pub async fn linear_delete_milestone(
+    app: AppHandle,
+    organization_id: String,
+    milestone_id: String,
+) -> Result<()> {
+    if organization_id.trim().is_empty() || milestone_id.trim().is_empty() {
+        return Err(std::io::Error::other("Milestone is required").into());
+    }
+    linear::delete_milestone(&app, &organization_id, &milestone_id).await
+}
+
+#[tauri::command]
 pub async fn linear_initiatives(
     app: AppHandle,
     organization_id: String,

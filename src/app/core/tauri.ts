@@ -746,6 +746,10 @@ export class TauriBridge {
     return milestone;
   }
 
+  async linearDeleteMilestone(organizationId: string, milestoneId: string): Promise<void> {
+    await this.invoke('linear_delete_milestone', { organizationId, milestoneId });
+  }
+
   async linearInitiatives(
     organizationId: string,
     includeArchived = false,

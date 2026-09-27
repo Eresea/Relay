@@ -367,6 +367,14 @@ pub async fn update_milestone(
     .await
 }
 
+pub async fn delete_milestone(
+    app: &AppHandle,
+    organization_id: &str,
+    milestone_id: &str,
+) -> Result<()> {
+    api::delete_milestone(&access_token(app, organization_id).await?, milestone_id).await
+}
+
 pub async fn initiatives(
     app: &AppHandle,
     organization_id: &str,
