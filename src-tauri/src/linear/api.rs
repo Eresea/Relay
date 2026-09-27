@@ -162,6 +162,19 @@ pub struct LinearProject {
     pub start_date: Option<String>,
     #[serde(default)]
     pub target_date: Option<String>,
+    #[serde(default)]
+    pub status: Option<LinearProjectStatus>,
+    #[serde(default)]
+    pub lead: Option<Person>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LinearProjectStatus {
+    pub id: String,
+    pub name: String,
+    #[serde(rename = "type")]
+    pub kind: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -284,7 +297,7 @@ pub async fn projects(token: &str) -> Result<Vec<LinearProject>> {
     }
     Ok(query::<Data>(
         token,
-        "query RelayProjects { projects(first: 100) { nodes { id name description url startDate targetDate } } }",
+        "query RelayProjects { projects(first: 100) { nodes { id name description url startDate targetDate status { id name type } lead { id name } } } }",
         json!({}),
     )
     .await?
@@ -299,6 +312,8 @@ pub async fn create_project(
     description: Option<&str>,
     start_date: Option<&str>,
     target_date: Option<&str>,
+    status_id: Option<&str>,
+    lead_id: Option<&str>,
 ) -> Result<LinearProject> {
     #[derive(Deserialize)]
     struct Data {
@@ -318,9 +333,15 @@ pub async fn create_project(
     if let Some(target_date) = target_date {
         input.insert("targetDate".into(), json!(target_date));
     }
+    if let Some(status_id) = status_id {
+        input.insert("statusId".into(), json!(status_id));
+    }
+    if let Some(lead_id) = lead_id {
+        input.insert("leadId".into(), json!(lead_id));
+    }
     let data: Data = query(
         token,
-        "mutation RelayProjectCreate($input: ProjectCreateInput!) { projectCreate(input: $input) { success project { id name description url startDate targetDate } } }",
+        "mutation RelayProjectCreate($input: ProjectCreateInput!) { projectCreate(input: $input) { success project { id name description url startDate targetDate status { id name type } lead { id name } } } }",
         json!({ "input": input }),
     )
     .await?;
@@ -334,22 +355,53 @@ pub async fn update_project(
     description: &str,
     start_date: Option<&str>,
     target_date: Option<&str>,
+    status_id: Option<&str>,
+    lead_id: Option<&str>,
+    clear_lead: bool,
 ) -> Result<LinearProject> {
     #[derive(Deserialize)]
     struct Data {
         #[serde(rename = "projectUpdate")]
         result: ProjectMutation,
     }
+    let mut input = serde_json::Map::from_iter([
+        ("name".into(), json!(name)),
+        ("description".into(), json!(description)),
+        ("startDate".into(), json!(start_date)),
+        ("targetDate".into(), json!(target_date)),
+    ]);
+    if let Some(status_id) = status_id {
+        input.insert("statusId".into(), json!(status_id));
+    }
+    if let Some(lead_id) = lead_id {
+        input.insert("leadId".into(), json!(lead_id));
+    }
+    if clear_lead {
+        input.insert("leadId".into(), Value::Null);
+    }
     let data: Data = query(
         token,
-        "mutation RelayProjectUpdate($id: String!, $input: ProjectUpdateInput!) { projectUpdate(id: $id, input: $input) { success project { id name description url startDate targetDate } } }",
-        json!({
-            "id": project_id,
-            "input": { "name": name, "description": description, "startDate": start_date, "targetDate": target_date }
-        }),
+        "mutation RelayProjectUpdate($id: String!, $input: ProjectUpdateInput!) { projectUpdate(id: $id, input: $input) { success project { id name description url startDate targetDate status { id name type } lead { id name } } } }",
+        json!({ "id": project_id, "input": input }),
     )
     .await?;
     data.result.into_value("Linear did not update the project")
+}
+
+pub async fn project_statuses(token: &str) -> Result<Vec<LinearProjectStatus>> {
+    #[derive(Deserialize)]
+    struct Data {
+        #[serde(rename = "projectStatuses")]
+        statuses: Nodes<LinearProjectStatus>,
+    }
+    Ok(query::<Data>(
+        token,
+        "query RelayProjectStatuses { projectStatuses(first: 100) { nodes { id name type } } }",
+        json!({}),
+    )
+    .await?
+    .statuses
+    .nodes)
 }
 
 pub async fn project_milestones(token: &str, project_id: &str) -> Result<Vec<LinearMilestone>> {
@@ -892,6 +944,19 @@ mod tests {
         assert_eq!(labels.labels[0].id, "label-1");
         let encoded = serde_json::to_value(labels).unwrap();
         assert_eq!(encoded["labels"][0]["id"], "label-1");
+    }
+
+    #[test]
+    fn project_status_and_lead_decode_from_linear_fields() {
+        let project: LinearProject = serde_json::from_value(json!({
+            "id": "project-1",
+            "name": "Launch",
+            "status": { "id": "status-1", "name": "In Progress", "type": "started" },
+            "lead": { "id": "user-1", "name": "Alex" }
+        }))
+        .unwrap();
+        assert_eq!(project.status.as_ref().unwrap().kind, "started");
+        assert_eq!(project.lead.as_ref().unwrap().id, "user-1");
     }
 
     #[test]

@@ -14,6 +14,7 @@ import {
   type LinearLabel,
   type LinearMilestone,
   type LinearProject,
+  type LinearProjectStatus,
   type LinearPerson,
   type LinearTeam,
   type LinearWorkflowState,
@@ -503,6 +504,29 @@ import { UmbraButtonComponent } from '@umbra/components/umbra-button/umbra-butto
                       (input)="editProjectTargetDate.set($any($event.target).value)"
                     />
                   </label>
+                  <label>
+                    <span>Status</span>
+                    <select
+                      [value]="editProjectStatusId()"
+                      (change)="editProjectStatusId.set($any($event.target).value)"
+                    >
+                      @for (status of projectStatuses(); track status.id) {
+                        <option [value]="status.id">{{ status.name }}</option>
+                      }
+                    </select>
+                  </label>
+                  <label>
+                    <span>Project lead</span>
+                    <select
+                      [value]="editProjectLeadId()"
+                      (change)="editProjectLeadId.set($any($event.target).value)"
+                    >
+                      <option value="">No lead</option>
+                      @for (user of users(); track user.id) {
+                        <option [value]="user.id">{{ user.name }}</option>
+                      }
+                    </select>
+                  </label>
                   <umbra-button size="sm" [disabled]="savingProject() || !editProjectName().trim()">
                     {{ savingProject() ? 'Saving' : 'Save project' }}
                   </umbra-button>
@@ -610,6 +634,30 @@ import { UmbraButtonComponent } from '@umbra/components/umbra-button/umbra-butto
                         [value]="newMilestoneDate()"
                         (input)="newMilestoneDate.set($any($event.target).value)"
                       />
+                    </label>
+                    <label>
+                      <span>Status</span>
+                      <select
+                        [value]="newProjectStatusId()"
+                        (change)="newProjectStatusId.set($any($event.target).value)"
+                      >
+                        <option value="">Use workspace default</option>
+                        @for (status of projectStatuses(); track status.id) {
+                          <option [value]="status.id">{{ status.name }}</option>
+                        }
+                      </select>
+                    </label>
+                    <label>
+                      <span>Project lead</span>
+                      <select
+                        [value]="newProjectLeadId()"
+                        (change)="newProjectLeadId.set($any($event.target).value)"
+                      >
+                        <option value="">No lead</option>
+                        @for (user of users(); track user.id) {
+                          <option [value]="user.id">{{ user.name }}</option>
+                        }
+                      </select>
                     </label>
                     <label>
                       <span>Description</span>
@@ -764,6 +812,10 @@ import { UmbraButtonComponent } from '@umbra/components/umbra-button/umbra-butto
                       <span class="muted">{{
                         project.targetDate ? 'Target ' + project.targetDate : 'No target date'
                       }}</span>
+                      <span class="muted">{{ project.status?.name || 'No status' }}</span>
+                      @if (project.lead) {
+                        <span class="muted">Lead {{ project.lead.name }}</span>
+                      }
                     </div>
                     <umbra-button size="sm" variant="outline" (click)="openProject(project)">
                       View project
@@ -1189,6 +1241,7 @@ export class Linear {
   protected readonly projectIssues = signal<readonly LinearIssue[]>([]);
   protected readonly milestones = signal<readonly LinearMilestone[]>([]);
   protected readonly projects = signal<readonly LinearProject[]>([]);
+  protected readonly projectStatuses = signal<readonly LinearProjectStatus[]>([]);
   protected readonly initiatives = signal<readonly LinearInitiative[]>([]);
   protected readonly newInitiativeName = signal('');
   protected readonly newInitiativeDescription = signal('');
@@ -1205,10 +1258,14 @@ export class Linear {
   protected readonly newProjectDescription = signal('');
   protected readonly newProjectStartDate = signal('');
   protected readonly newProjectTargetDate = signal('');
+  protected readonly newProjectStatusId = signal('');
+  protected readonly newProjectLeadId = signal('');
   protected readonly editProjectName = signal('');
   protected readonly editProjectDescription = signal('');
   protected readonly editProjectStartDate = signal('');
   protected readonly editProjectTargetDate = signal('');
+  protected readonly editProjectStatusId = signal('');
+  protected readonly editProjectLeadId = signal('');
   protected readonly newMilestoneName = signal('');
   protected readonly newMilestoneDescription = signal('');
   protected readonly newMilestoneDate = signal('');
@@ -1712,6 +1769,8 @@ export class Linear {
     this.editProjectDescription.set(project.description ?? '');
     this.editProjectStartDate.set(project.startDate ?? '');
     this.editProjectTargetDate.set(project.targetDate ?? '');
+    this.editProjectStatusId.set(project.status?.id ?? '');
+    this.editProjectLeadId.set(project.lead?.id ?? '');
     await Promise.all([
       this.loadProjectIssues(project.id),
       this.loadMilestones(project.id),
@@ -1794,11 +1853,15 @@ export class Linear {
         this.newProjectDescription().trim(),
         this.newProjectStartDate(),
         this.newProjectTargetDate(),
+        this.newProjectStatusId(),
+        this.newProjectLeadId(),
       );
       this.newProjectName.set('');
       this.newProjectDescription.set('');
       this.newProjectStartDate.set('');
       this.newProjectTargetDate.set('');
+      this.newProjectStatusId.set('');
+      this.newProjectLeadId.set('');
       this.createProjectOpen.set(false);
       this.projects.update((projects) => [project, ...projects]);
       await this.openProject(project);
@@ -1825,6 +1888,9 @@ export class Linear {
         this.editProjectDescription(),
         this.editProjectStartDate(),
         this.editProjectTargetDate(),
+        this.editProjectStatusId(),
+        this.editProjectLeadId(),
+        !this.editProjectLeadId(),
       );
       this.selectedProject.set(updated);
       this.projects.update((projects) =>
@@ -2104,12 +2170,14 @@ export class Linear {
     try {
       const teams = await this.tauri.linearTeams(connection.organizationId);
       this.teams.set(teams);
-      const [users, labels] = await Promise.all([
+      const [users, labels, statuses] = await Promise.all([
         this.tauri.linearUsers(connection.organizationId),
         this.tauri.linearIssueLabels(connection.organizationId),
+        this.tauri.linearProjectStatuses(connection.organizationId),
       ]);
       this.users.set(users);
       this.labels.set(labels);
+      this.projectStatuses.set(statuses);
       const teamId = teams[0]?.id ?? '';
       this.createTeamId.set(teamId);
       const entries = await Promise.all(

@@ -29,8 +29,8 @@ use crate::gmail::{self, GmailSettings, GmailState, GmailStatus, HttpGoogleApi, 
 use crate::jobs::{JobId, JobRegistry};
 use crate::linear::{
     self, Initiative, Issue, IssueDetail, IssuePage, LinearCodexContext, LinearComment,
-    LinearConnection, LinearCycle, LinearLabel, LinearMilestone, LinearProject, Person, Team,
-    WorkflowState,
+    LinearConnection, LinearCycle, LinearLabel, LinearMilestone, LinearProject,
+    LinearProjectStatus, Person, Team, WorkflowState,
 };
 #[cfg(mobile)]
 use crate::mobile_updates;
@@ -369,8 +369,15 @@ pub async fn linear_create_project(
     description: Option<String>,
     start_date: Option<String>,
     target_date: Option<String>,
+    status_id: Option<String>,
+    lead_id: Option<String>,
 ) -> Result<LinearProject> {
-    if name.trim().is_empty() || name.chars().count() > 255 || team_id.trim().is_empty() {
+    if name.trim().is_empty()
+        || name.chars().count() > 255
+        || team_id.trim().is_empty()
+        || status_id.as_ref().is_some_and(|id| id.trim().is_empty())
+        || lead_id.as_ref().is_some_and(|id| id.trim().is_empty())
+    {
         return Err(std::io::Error::other("Project name and team are required").into());
     }
     linear::create_project(
@@ -381,6 +388,8 @@ pub async fn linear_create_project(
         description.as_deref(),
         start_date.as_deref(),
         target_date.as_deref(),
+        status_id.as_deref(),
+        lead_id.as_deref(),
     )
     .await
 }
@@ -394,8 +403,17 @@ pub async fn linear_update_project(
     description: String,
     start_date: Option<String>,
     target_date: Option<String>,
+    status_id: Option<String>,
+    lead_id: Option<String>,
+    clear_lead: Option<bool>,
 ) -> Result<LinearProject> {
-    if project_id.trim().is_empty() || name.trim().is_empty() || name.chars().count() > 255 {
+    if project_id.trim().is_empty()
+        || name.trim().is_empty()
+        || name.chars().count() > 255
+        || status_id.as_ref().is_some_and(|id| id.trim().is_empty())
+        || lead_id.as_ref().is_some_and(|id| id.trim().is_empty())
+        || (clear_lead.unwrap_or(false) && lead_id.is_some())
+    {
         return Err(std::io::Error::other("Project name is required").into());
     }
     linear::update_project(
@@ -406,8 +424,22 @@ pub async fn linear_update_project(
         &description,
         start_date.as_deref(),
         target_date.as_deref(),
+        status_id.as_deref(),
+        lead_id.as_deref(),
+        clear_lead.unwrap_or(false),
     )
     .await
+}
+
+#[tauri::command]
+pub async fn linear_project_statuses(
+    app: AppHandle,
+    organization_id: String,
+) -> Result<Vec<LinearProjectStatus>> {
+    if organization_id.trim().is_empty() {
+        return Err(std::io::Error::other("Linear workspace is required").into());
+    }
+    linear::project_statuses(&app, &organization_id).await
 }
 
 #[tauri::command]

@@ -563,6 +563,13 @@ export class TauriBridge {
     return (await this.invoke<LinearProject[]>('linear_projects', { organizationId })) ?? [];
   }
 
+  async linearProjectStatuses(organizationId: string): Promise<readonly LinearProjectStatus[]> {
+    return (
+      (await this.invoke<LinearProjectStatus[]>('linear_project_statuses', { organizationId })) ??
+      []
+    );
+  }
+
   async linearCreateProject(
     organizationId: string,
     teamId: string,
@@ -570,6 +577,8 @@ export class TauriBridge {
     description: string,
     startDate: string,
     targetDate: string,
+    statusId: string,
+    leadId: string,
   ): Promise<LinearProject> {
     const project = await this.invoke<LinearProject>('linear_create_project', {
       organizationId,
@@ -578,6 +587,8 @@ export class TauriBridge {
       description: description || null,
       startDate: startDate || null,
       targetDate: targetDate || null,
+      statusId: statusId || null,
+      leadId: leadId || null,
     });
     if (!project) throw new Error('Linear returned no project.');
     return project;
@@ -590,6 +601,9 @@ export class TauriBridge {
     description: string,
     startDate: string,
     targetDate: string,
+    statusId: string,
+    leadId: string,
+    clearLead: boolean,
   ): Promise<LinearProject> {
     const project = await this.invoke<LinearProject>('linear_update_project', {
       organizationId,
@@ -598,6 +612,9 @@ export class TauriBridge {
       description,
       startDate: startDate || null,
       targetDate: targetDate || null,
+      statusId: statusId || null,
+      leadId: leadId || null,
+      clearLead,
     });
     if (!project) throw new Error('Linear returned no project.');
     return project;
@@ -1242,6 +1259,14 @@ export interface LinearProject {
   readonly url: string;
   readonly startDate: string | null;
   readonly targetDate: string | null;
+  readonly status: LinearProjectStatus | null;
+  readonly lead: LinearPerson | null;
+}
+
+export interface LinearProjectStatus {
+  readonly id: string;
+  readonly name: string;
+  readonly kind: string;
 }
 
 export interface LinearMilestone {

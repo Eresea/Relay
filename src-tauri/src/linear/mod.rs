@@ -10,7 +10,7 @@ use crate::error::{Error, Result};
 
 pub use api::{
     Initiative, Issue, IssueDetail, IssuePage, LinearComment, LinearCycle, LinearLabel,
-    LinearMilestone, LinearProject, Person, Team, Viewer, WorkflowState,
+    LinearMilestone, LinearProject, LinearProjectStatus, Person, Team, Viewer, WorkflowState,
 };
 use oauth::TokenBundle;
 pub use oauth::{LinearCodexLink, LinearCodexProjectPolicy};
@@ -175,6 +175,8 @@ pub async fn create_project(
     description: Option<&str>,
     start_date: Option<&str>,
     target_date: Option<&str>,
+    status_id: Option<&str>,
+    lead_id: Option<&str>,
 ) -> Result<LinearProject> {
     api::create_project(
         &access_token(app, organization_id).await?,
@@ -183,6 +185,8 @@ pub async fn create_project(
         description,
         start_date,
         target_date,
+        status_id,
+        lead_id,
     )
     .await
 }
@@ -195,6 +199,9 @@ pub async fn update_project(
     description: &str,
     start_date: Option<&str>,
     target_date: Option<&str>,
+    status_id: Option<&str>,
+    lead_id: Option<&str>,
+    clear_lead: bool,
 ) -> Result<LinearProject> {
     api::update_project(
         &access_token(app, organization_id).await?,
@@ -203,8 +210,18 @@ pub async fn update_project(
         description,
         start_date,
         target_date,
+        status_id,
+        lead_id,
+        clear_lead,
     )
     .await
+}
+
+pub async fn project_statuses(
+    app: &AppHandle,
+    organization_id: &str,
+) -> Result<Vec<LinearProjectStatus>> {
+    api::project_statuses(&access_token(app, organization_id).await?).await
 }
 
 pub async fn project_milestones(
