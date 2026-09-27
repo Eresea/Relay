@@ -1236,6 +1236,7 @@ pub async fn create_issue(
     description: Option<&str>,
     estimate: Option<u32>,
     assignee_id: Option<&str>,
+    priority: Option<u8>,
     project_id: Option<&str>,
     project_milestone_id: Option<&str>,
     parent_id: Option<&str>,
@@ -1258,6 +1259,9 @@ pub async fn create_issue(
     }
     if let Some(assignee_id) = assignee_id {
         input.insert("assigneeId".into(), json!(assignee_id));
+    }
+    if let Some(priority) = priority {
+        input.insert("priority".into(), json!(priority));
     }
     if let Some(project_id) = project_id {
         input.insert("projectId".into(), json!(project_id));

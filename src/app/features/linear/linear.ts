@@ -50,6 +50,8 @@ interface LinearIssueDraft {
   description: string;
   milestoneId?: string;
   estimate?: string;
+  assigneeId?: string;
+  priority?: string;
 }
 
 @Component({
@@ -810,6 +812,34 @@ interface LinearIssueDraft {
                       </select>
                     </label>
                   }
+                  <details class="issue-create-options">
+                    <summary>More fields</summary>
+                    <label>
+                      <span>Priority</span>
+                      <select
+                        [value]="newPriority()"
+                        (change)="updateIssueDraftPriority($any($event.target).value)"
+                      >
+                        <option value="">No priority</option>
+                        <option value="1">Urgent</option>
+                        <option value="2">High</option>
+                        <option value="3">Normal</option>
+                        <option value="4">Low</option>
+                      </select>
+                    </label>
+                    <label>
+                      <span>Assignee</span>
+                      <select
+                        [value]="newAssigneeId()"
+                        (change)="updateIssueDraftAssignee($any($event.target).value)"
+                      >
+                        <option value="">Me</option>
+                        @for (user of users(); track user.id) {
+                          <option [value]="user.id">{{ user.name }}</option>
+                        }
+                      </select>
+                    </label>
+                  </details>
                   <label>
                     <span>New issue</span>
                     <input
@@ -833,7 +863,13 @@ interface LinearIssueDraft {
                     {{ creating() ? 'Creating' : 'Create issue' }}
                   </umbra-button>
                 </form>
-                @if (newTitle() || newDescription() || newEstimate()) {
+                @if (
+                  newTitle() ||
+                  newDescription() ||
+                  newEstimate() ||
+                  newAssigneeId() ||
+                  newPriority()
+                ) {
                   <p class="hint">Draft saved on this device.</p>
                 }
               }
@@ -1403,6 +1439,34 @@ interface LinearIssueDraft {
                         </select>
                       </label>
                     }
+                    <details class="issue-create-options">
+                      <summary>More fields</summary>
+                      <label>
+                        <span>Priority</span>
+                        <select
+                          [value]="newProjectIssuePriority()"
+                          (change)="updateProjectIssuePriority($any($event.target).value)"
+                        >
+                          <option value="">No priority</option>
+                          <option value="1">Urgent</option>
+                          <option value="2">High</option>
+                          <option value="3">Normal</option>
+                          <option value="4">Low</option>
+                        </select>
+                      </label>
+                      <label>
+                        <span>Assignee</span>
+                        <select
+                          [value]="newProjectIssueAssigneeId()"
+                          (change)="updateProjectIssueAssignee($any($event.target).value)"
+                        >
+                          <option value="">Me</option>
+                          @for (user of users(); track user.id) {
+                            <option [value]="user.id">{{ user.name }}</option>
+                          }
+                        </select>
+                      </label>
+                    </details>
                     <label>
                       <span>New project issue</span>
                       <input
@@ -1443,7 +1507,9 @@ interface LinearIssueDraft {
                   @if (
                     newProjectIssueTitle() ||
                     newProjectIssueDescription() ||
-                    newProjectIssueEstimate()
+                    newProjectIssueEstimate() ||
+                    newProjectIssueAssigneeId() ||
+                    newProjectIssuePriority()
                   ) {
                     <p class="hint">Draft saved on this device.</p>
                   }
@@ -2362,6 +2428,18 @@ interface LinearIssueDraft {
       color: var(--text-muted);
       font-size: var(--text-12);
     }
+    .issue-create-options {
+      grid-column: 1 / -1;
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: var(--space-3);
+    }
+    .issue-create-options summary {
+      grid-column: 1 / -1;
+      color: var(--text-muted);
+      cursor: pointer;
+      font-size: var(--text-12);
+    }
     .project-edit {
       display: grid;
       gap: var(--space-3);
@@ -2492,6 +2570,9 @@ interface LinearIssueDraft {
       .create-form {
         grid-template-columns: 1fr;
       }
+      .issue-create-options {
+        grid-template-columns: 1fr;
+      }
       .issue span:nth-child(2) {
         grid-row: 2;
         grid-column: 1 / -1;
@@ -2606,7 +2687,11 @@ export class Linear {
   protected readonly newProjectIssueDescription = signal('');
   protected readonly newProjectIssueMilestoneId = signal('');
   protected readonly newProjectIssueEstimate = signal('');
+  protected readonly newProjectIssueAssigneeId = signal('');
+  protected readonly newProjectIssuePriority = signal('');
   protected readonly newEstimate = signal('');
+  protected readonly newAssigneeId = signal('');
+  protected readonly newPriority = signal('');
   protected readonly newSubIssueTitle = signal('');
   protected readonly newComment = signal('');
   protected readonly editingCommentId = signal<string | null>(null);
@@ -3370,6 +3455,16 @@ export class Linear {
     this.saveIssueDraft();
   }
 
+  protected updateIssueDraftAssignee(value: string): void {
+    this.newAssigneeId.set(value);
+    this.saveIssueDraft();
+  }
+
+  protected updateIssueDraftPriority(value: string): void {
+    this.newPriority.set(value);
+    this.saveIssueDraft();
+  }
+
   private issueDraftKey(organizationId: string): string {
     return `relay.linear.issueDraft.${organizationId}`;
   }
@@ -3486,6 +3581,8 @@ export class Linear {
       title: this.newTitle(),
       description: this.newDescription(),
       estimate: this.newEstimate(),
+      assigneeId: this.newAssigneeId(),
+      priority: this.newPriority(),
     });
   }
 
@@ -3496,6 +3593,8 @@ export class Linear {
     this.newTitle.set(typeof draft?.title === 'string' ? draft.title : '');
     this.newDescription.set(typeof draft?.description === 'string' ? draft.description : '');
     this.newEstimate.set(typeof draft?.estimate === 'string' ? draft.estimate : '');
+    this.newAssigneeId.set(typeof draft?.assigneeId === 'string' ? draft.assigneeId : '');
+    this.newPriority.set(typeof draft?.priority === 'string' ? draft.priority : '');
     if (typeof draft?.teamId === 'string') this.createTeamId.set(draft.teamId);
   }
 
@@ -3515,6 +3614,16 @@ export class Linear {
     this.saveProjectIssueDraft();
   }
 
+  protected updateProjectIssueAssignee(value: string): void {
+    this.newProjectIssueAssigneeId.set(value);
+    this.saveProjectIssueDraft();
+  }
+
+  protected updateProjectIssuePriority(value: string): void {
+    this.newProjectIssuePriority.set(value);
+    this.saveProjectIssueDraft();
+  }
+
   private saveProjectIssueDraft(): void {
     const connection = this.selected();
     const project = this.selectedProject();
@@ -3525,6 +3634,8 @@ export class Linear {
       description: this.newProjectIssueDescription(),
       milestoneId: this.newProjectIssueMilestoneId(),
       estimate: this.newProjectIssueEstimate(),
+      assigneeId: this.newProjectIssueAssigneeId(),
+      priority: this.newProjectIssuePriority(),
     });
   }
 
@@ -3540,6 +3651,10 @@ export class Linear {
       typeof draft?.milestoneId === 'string' ? draft.milestoneId : '',
     );
     this.newProjectIssueEstimate.set(typeof draft?.estimate === 'string' ? draft.estimate : '');
+    this.newProjectIssueAssigneeId.set(
+      typeof draft?.assigneeId === 'string' ? draft.assigneeId : '',
+    );
+    this.newProjectIssuePriority.set(typeof draft?.priority === 'string' ? draft.priority : '');
     if (typeof draft?.teamId === 'string') this.createTeamId.set(draft.teamId);
   }
 
@@ -4465,10 +4580,14 @@ export class Linear {
         null,
         null,
         this.newEstimate() === '' ? undefined : Number(this.newEstimate()),
+        this.newAssigneeId() || undefined,
+        this.newPriority() === '' ? undefined : Number(this.newPriority()),
       );
       this.newTitle.set('');
       this.newDescription.set('');
       this.newEstimate.set('');
+      this.newAssigneeId.set('');
+      this.newPriority.set('');
       this.writeLocal(this.issueDraftKey(connection.organizationId), null);
       if (!this.issueTeamId() || this.issueTeamId() === created.team.id) {
         this.issues.update((issues) => [created, ...issues]);
@@ -4501,12 +4620,16 @@ export class Linear {
         this.newProjectIssueMilestoneId() || null,
         null,
         this.newProjectIssueEstimate() === '' ? undefined : Number(this.newProjectIssueEstimate()),
+        this.newProjectIssueAssigneeId() || undefined,
+        this.newProjectIssuePriority() === '' ? undefined : Number(this.newProjectIssuePriority()),
       );
       this.projectIssues.update((issues) => [issue, ...issues]);
       this.newProjectIssueTitle.set('');
       this.newProjectIssueDescription.set('');
       this.newProjectIssueMilestoneId.set('');
       this.newProjectIssueEstimate.set('');
+      this.newProjectIssueAssigneeId.set('');
+      this.newProjectIssuePriority.set('');
       this.writeLocal(this.projectIssueDraftKey(connection.organizationId, project.id), null);
     } catch (error) {
       this.error.set(error instanceof Error ? error.message : String(error));

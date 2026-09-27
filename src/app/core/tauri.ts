@@ -963,6 +963,8 @@ export class TauriBridge {
     projectMilestoneId: string | null = null,
     parentId: string | null = null,
     estimate?: number,
+    assigneeId?: string,
+    priority?: number,
   ): Promise<LinearIssue> {
     const issue = await this.invoke<LinearIssue>('linear_create_issue', {
       organizationId,
@@ -973,6 +975,8 @@ export class TauriBridge {
       projectMilestoneId,
       parentId,
       estimate,
+      assigneeId,
+      priority,
     });
     if (!issue) throw new Error('Linear returned no issue.');
     return issue;

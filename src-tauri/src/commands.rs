@@ -965,6 +965,8 @@ pub async fn linear_create_issue(
     title: String,
     description: Option<String>,
     estimate: Option<u32>,
+    assignee_id: Option<String>,
+    priority: Option<u8>,
     project_id: Option<String>,
     project_milestone_id: Option<String>,
     parent_id: Option<String>,
@@ -972,6 +974,10 @@ pub async fn linear_create_issue(
     if title.trim().is_empty()
         || title.chars().count() > 255
         || estimate.is_some_and(|value| value > 64)
+        || priority.is_some_and(|value| value > 4)
+        || assignee_id
+            .as_ref()
+            .is_some_and(|value| value.trim().is_empty())
         || project_id
             .as_ref()
             .is_some_and(|value| value.trim().is_empty())
@@ -991,6 +997,8 @@ pub async fn linear_create_issue(
         title.trim(),
         description.as_deref(),
         estimate,
+        assignee_id.as_deref(),
+        priority,
         project_id.as_deref(),
         project_milestone_id.as_deref(),
         parent_id.as_deref(),
