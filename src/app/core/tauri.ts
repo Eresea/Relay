@@ -746,8 +746,24 @@ export class TauriBridge {
     return milestone;
   }
 
-  async linearInitiatives(organizationId: string): Promise<readonly LinearInitiative[]> {
-    return (await this.invoke<LinearInitiative[]>('linear_initiatives', { organizationId })) ?? [];
+  async linearInitiatives(
+    organizationId: string,
+    includeArchived = false,
+  ): Promise<readonly LinearInitiative[]> {
+    return (
+      (await this.invoke<LinearInitiative[]>('linear_initiatives', {
+        organizationId,
+        includeArchived,
+      })) ?? []
+    );
+  }
+
+  async linearArchiveInitiative(organizationId: string, initiativeId: string): Promise<void> {
+    await this.invoke('linear_archive_initiative', { organizationId, initiativeId });
+  }
+
+  async linearUnarchiveInitiative(organizationId: string, initiativeId: string): Promise<void> {
+    await this.invoke('linear_unarchive_initiative', { organizationId, initiativeId });
   }
 
   async linearCreateInitiative(
@@ -1457,6 +1473,7 @@ export interface LinearInitiative {
   readonly name: string;
   readonly description: string | null;
   readonly targetDate: string | null;
+  readonly archivedAt: string | null;
   readonly projects: readonly LinearInitiativeProject[];
 }
 

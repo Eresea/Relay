@@ -367,8 +367,28 @@ pub async fn update_milestone(
     .await
 }
 
-pub async fn initiatives(app: &AppHandle, organization_id: &str) -> Result<Vec<Initiative>> {
-    api::initiatives(&access_token(app, organization_id).await?).await
+pub async fn initiatives(
+    app: &AppHandle,
+    organization_id: &str,
+    include_archived: bool,
+) -> Result<Vec<Initiative>> {
+    api::initiatives(&access_token(app, organization_id).await?, include_archived).await
+}
+
+pub async fn archive_initiative(
+    app: &AppHandle,
+    organization_id: &str,
+    initiative_id: &str,
+) -> Result<()> {
+    api::archive_initiative(&access_token(app, organization_id).await?, initiative_id).await
+}
+
+pub async fn unarchive_initiative(
+    app: &AppHandle,
+    organization_id: &str,
+    initiative_id: &str,
+) -> Result<()> {
+    api::unarchive_initiative(&access_token(app, organization_id).await?, initiative_id).await
 }
 
 pub async fn create_initiative(

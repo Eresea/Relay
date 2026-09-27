@@ -1358,6 +1358,17 @@ interface LinearIssueDraft {
             </section>
           } @else {
             <section class="issues" aria-label="Linear roadmap initiatives">
+              <div class="issue-actions">
+                <h2>Initiatives</h2>
+                <umbra-button
+                  size="sm"
+                  variant="link"
+                  type="button"
+                  (click)="toggleArchivedInitiatives()"
+                >
+                  {{ includeArchivedInitiatives() ? 'Hide archived' : 'Include archived' }}
+                </umbra-button>
+              </div>
               <form class="create-form" (submit)="createInitiative($event)">
                 <label>
                   <span>Initiative name</span>
@@ -1396,6 +1407,9 @@ interface LinearIssueDraft {
                   <div>
                     <h3>{{ initiative.name }}</h3>
                     <p>{{ initiative.description || 'No description' }}</p>
+                    @if (initiative.archivedAt) {
+                      <span class="muted">Archived</span>
+                    }
                     <span class="muted">{{
                       initiative.targetDate ? 'Target ' + initiative.targetDate : 'No target date'
                     }}</span>
@@ -1410,22 +1424,24 @@ interface LinearIssueDraft {
                             >
                               {{ link.project.name }}
                             </button>
-                            <umbra-button
-                              size="sm"
-                              variant="link"
-                              [disabled]="savingInitiativeProjectId() === initiative.id"
-                              [ariaLabel]="
-                                'Remove ' + link.project.name + ' from ' + initiative.name
-                              "
-                              (click)="removeInitiativeProject(initiative, link.id)"
-                            >
-                              Remove
-                            </umbra-button>
+                            @if (!initiative.archivedAt) {
+                              <umbra-button
+                                size="sm"
+                                variant="link"
+                                [disabled]="savingInitiativeProjectId() === initiative.id"
+                                [ariaLabel]="
+                                  'Remove ' + link.project.name + ' from ' + initiative.name
+                                "
+                                (click)="removeInitiativeProject(initiative, link.id)"
+                              >
+                                Remove
+                              </umbra-button>
+                            }
                           </div>
                         }
                       </div>
                     }
-                    @if (availableInitiativeProjects(initiative).length) {
+                    @if (!initiative.archivedAt && availableInitiativeProjects(initiative).length) {
                       <div class="issue-actions">
                         <label>
                           <span class="sr-only">Project to add to {{ initiative.name }}</span>
@@ -1462,9 +1478,34 @@ interface LinearIssueDraft {
                       </div>
                     }
                   </div>
-                  <umbra-button size="sm" variant="outline" (click)="editInitiative(initiative)">
-                    Edit
-                  </umbra-button>
+                  <div class="issue-actions">
+                    @if (initiative.archivedAt) {
+                      <umbra-button
+                        size="sm"
+                        variant="outline"
+                        [disabled]="busyInitiativeId() === initiative.id"
+                        (click)="setInitiativeArchived(initiative, false)"
+                      >
+                        {{ busyInitiativeId() === initiative.id ? 'Restoring' : 'Restore' }}
+                      </umbra-button>
+                    } @else {
+                      <umbra-button
+                        size="sm"
+                        variant="outline"
+                        (click)="editInitiative(initiative)"
+                      >
+                        Edit
+                      </umbra-button>
+                      <umbra-button
+                        size="sm"
+                        variant="link"
+                        [disabled]="busyInitiativeId() === initiative.id"
+                        (click)="setInitiativeArchived(initiative, true)"
+                      >
+                        {{ busyInitiativeId() === initiative.id ? 'Archiving' : 'Archive' }}
+                      </umbra-button>
+                    }
+                  </div>
                 </article>
                 @if (editingInitiativeId() === initiative.id) {
                   <form class="project-edit" (submit)="saveInitiative($event, initiative)">
@@ -1822,6 +1863,8 @@ export class Linear {
   protected readonly projects = signal<readonly LinearProject[]>([]);
   protected readonly projectStatuses = signal<readonly LinearProjectStatus[]>([]);
   protected readonly initiatives = signal<readonly LinearInitiative[]>([]);
+  protected readonly includeArchivedInitiatives = signal(false);
+  protected readonly busyInitiativeId = signal<string | null>(null);
   protected readonly newInitiativeName = signal('');
   protected readonly newInitiativeDescription = signal('');
   protected readonly newInitiativeTargetDate = signal('');
@@ -2755,6 +2798,49 @@ export class Linear {
     }
   }
 
+  protected toggleArchivedInitiatives(): void {
+    this.includeArchivedInitiatives.update((includeArchived) => !includeArchived);
+    void this.loadInitiatives();
+  }
+
+  protected async setInitiativeArchived(
+    initiative: LinearInitiative,
+    archived: boolean,
+  ): Promise<void> {
+    const connection = this.selected();
+    if (!connection || this.busyInitiativeId()) return;
+    this.busyInitiativeId.set(initiative.id);
+    this.error.set(null);
+    try {
+      if (archived) {
+        await this.tauri.linearArchiveInitiative(connection.organizationId, initiative.id);
+      } else {
+        await this.tauri.linearUnarchiveInitiative(connection.organizationId, initiative.id);
+      }
+      this.editingInitiativeId.set(null);
+      await this.loadInitiatives();
+    } catch (error) {
+      this.error.set(error instanceof Error ? error.message : String(error));
+    } finally {
+      this.busyInitiativeId.set(null);
+    }
+  }
+
+  private async loadInitiatives(): Promise<void> {
+    const connection = this.selected();
+    if (!connection) return;
+    try {
+      this.initiatives.set(
+        await this.tauri.linearInitiatives(
+          connection.organizationId,
+          this.includeArchivedInitiatives(),
+        ),
+      );
+    } catch (error) {
+      this.error.set(error instanceof Error ? error.message : String(error));
+    }
+  }
+
   protected setInitiativeProject(initiativeId: string, projectId: string): void {
     this.initiativeProjectSelection.update((selection) => ({
       ...selection,
@@ -3161,12 +3247,7 @@ export class Linear {
   private async loadSection(connection: LinearConnection): Promise<void> {
     if (this.section() === 'projects') await this.loadProjects();
     if (this.section() === 'roadmap') {
-      try {
-        this.initiatives.set(await this.tauri.linearInitiatives(connection.organizationId));
-        await this.loadProjects();
-      } catch (error) {
-        this.error.set(error instanceof Error ? error.message : String(error));
-      }
+      await Promise.all([this.loadInitiatives(), this.loadProjects()]);
     }
     if (this.section() === 'cycles') {
       try {

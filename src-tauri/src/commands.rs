@@ -626,8 +626,33 @@ pub async fn linear_update_milestone(
 pub async fn linear_initiatives(
     app: AppHandle,
     organization_id: String,
+    include_archived: Option<bool>,
 ) -> Result<Vec<Initiative>> {
-    linear::initiatives(&app, &organization_id).await
+    linear::initiatives(&app, &organization_id, include_archived.unwrap_or(false)).await
+}
+
+#[tauri::command]
+pub async fn linear_archive_initiative(
+    app: AppHandle,
+    organization_id: String,
+    initiative_id: String,
+) -> Result<()> {
+    if initiative_id.trim().is_empty() {
+        return Err(std::io::Error::other("Initiative is required").into());
+    }
+    linear::archive_initiative(&app, &organization_id, &initiative_id).await
+}
+
+#[tauri::command]
+pub async fn linear_unarchive_initiative(
+    app: AppHandle,
+    organization_id: String,
+    initiative_id: String,
+) -> Result<()> {
+    if initiative_id.trim().is_empty() {
+        return Err(std::io::Error::other("Initiative is required").into());
+    }
+    linear::unarchive_initiative(&app, &organization_id, &initiative_id).await
 }
 
 #[tauri::command]
