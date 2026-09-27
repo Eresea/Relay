@@ -21,9 +21,7 @@
           type="checkbox"
           aria-label="Select all rows"
           [checked]="tanstack.getIsAllRowsSelected()"
-          [indeterminate]="
-            tanstack.getIsSomeRowsSelected() && !tanstack.getIsAllRowsSelected()
-          "
+          [indeterminate]="tanstack.getIsSomeRowsSelected() && !tanstack.getIsAllRowsSelected()"
           (change)="toggleAllRows($event)"
         />
       </div>
@@ -68,10 +66,7 @@
       </div>
     }
 
-    @for (
-      virtualColumn of columnVirtualizer.getVirtualItems();
-      track virtualColumn.key
-    ) {
+    @for (virtualColumn of columnVirtualizer.getVirtualItems(); track virtualColumn.key) {
       @if (centerColumns()[virtualColumn.index]; as column) {
         <div
           class="umbra-table__cell umbra-table__header-cell"
@@ -159,10 +154,7 @@
     [style.width.px]="contentWidth()"
     [style.height.px]="rowVirtualizer.getTotalSize()"
   >
-    @for (
-      virtualRow of rowVirtualizer.getVirtualItems();
-      track virtualRow.key
-    ) {
+    @for (virtualRow of rowVirtualizer.getVirtualItems(); track virtualRow.key) {
       @if (tableRows()[virtualRow.index]; as row) {
         <div
           class="umbra-table__row"
@@ -202,17 +194,12 @@
                 [attr.tabindex]="isFocused(row, column) ? 0 : -1"
                 [style.width.px]="columnSize(column)"
                 [style.left.px]="leftOffset(column)"
-                (focus)="
-                  focusedCell.set({ rowId: row.id, columnId: column.id })
-                "
+                (focus)="focusedCell.set({ rowId: row.id, columnId: column.id })"
                 (keydown)="onCellKeydown($event, row, column)"
               >
                 @if (isTemplate(content)) {
                   <ng-container
-                    *ngTemplateOutlet="
-                      content;
-                      context: { $implicit: cellContext(cell) }
-                    "
+                    *ngTemplateOutlet="content; context: { $implicit: cellContext(cell) }"
                   />
                 } @else {
                   {{ content }}
@@ -221,10 +208,7 @@
             }
           }
 
-          @for (
-            virtualColumn of columnVirtualizer.getVirtualItems();
-            track virtualColumn.key
-          ) {
+          @for (virtualColumn of columnVirtualizer.getVirtualItems(); track virtualColumn.key) {
             @if (centerColumns()[virtualColumn.index]; as column) {
               @if (cellFor(row, column.id); as cell) {
                 @let content = cellContent(cell);
@@ -237,17 +221,12 @@
                   [attr.tabindex]="isFocused(row, column) ? 0 : -1"
                   [style.width.px]="virtualColumn.size"
                   [style.left.px]="leftWidth() + virtualColumn.start"
-                  (focus)="
-                    focusedCell.set({ rowId: row.id, columnId: column.id })
-                  "
+                  (focus)="focusedCell.set({ rowId: row.id, columnId: column.id })"
                   (keydown)="onCellKeydown($event, row, column)"
                 >
                   @if (isTemplate(content)) {
                     <ng-container
-                      *ngTemplateOutlet="
-                        content;
-                        context: { $implicit: cellContext(cell) }
-                      "
+                      *ngTemplateOutlet="content; context: { $implicit: cellContext(cell) }"
                     />
                   } @else {
                     {{ content }}
@@ -257,11 +236,7 @@
             }
           }
 
-          @for (
-            column of rightColumns();
-            track column.id;
-            let isFirst = $first
-          ) {
+          @for (column of rightColumns(); track column.id; let isFirst = $first) {
             @if (cellFor(row, column.id); as cell) {
               @let content = cellContent(cell);
               <div
@@ -274,17 +249,12 @@
                 [attr.tabindex]="isFocused(row, column) ? 0 : -1"
                 [style.width.px]="columnSize(column)"
                 [style.right.px]="rightOffset(column)"
-                (focus)="
-                  focusedCell.set({ rowId: row.id, columnId: column.id })
-                "
+                (focus)="focusedCell.set({ rowId: row.id, columnId: column.id })"
                 (keydown)="onCellKeydown($event, row, column)"
               >
                 @if (isTemplate(content)) {
                   <ng-container
-                    *ngTemplateOutlet="
-                      content;
-                      context: { $implicit: cellContext(cell) }
-                    "
+                    *ngTemplateOutlet="content; context: { $implicit: cellContext(cell) }"
                   />
                 } @else {
                   {{ content }}
@@ -307,11 +277,7 @@
               [style.width.px]="selectionColumnWidth()"
               [style.left.px]="0"
             >
-              <umbra-skeleton
-                shape="circle"
-                width="var(--space-7)"
-                height="var(--space-7)"
-              />
+              <umbra-skeleton shape="circle" width="var(--space-7)" height="var(--space-7)" />
             </div>
           }
 
@@ -329,10 +295,7 @@
             </div>
           }
 
-          @for (
-            virtualColumn of columnVirtualizer.getVirtualItems();
-            track virtualColumn.key
-          ) {
+          @for (virtualColumn of columnVirtualizer.getVirtualItems(); track virtualColumn.key) {
             @if (centerColumns()[virtualColumn.index]; as column) {
               <div
                 class="umbra-table__cell umbra-table__data-cell"
@@ -348,11 +311,7 @@
             }
           }
 
-          @for (
-            column of rightColumns();
-            track column.id;
-            let isFirst = $first
-          ) {
+          @for (column of rightColumns(); track column.id; let isFirst = $first) {
             <div
               class="umbra-table__cell umbra-table__cell--pinned umbra-table__data-cell"
               [class.umbra-table__right-start]="isFirst"
@@ -371,11 +330,7 @@
     }
 
     @if (tableRows().length === 0 && !loading()) {
-      <div
-        class="umbra-table__empty"
-        role="row"
-        [style.width.px]="contentWidth()"
-      >
+      <div class="umbra-table__empty" role="row" [style.width.px]="contentWidth()">
         No rows to display.
       </div>
     }

@@ -41,21 +41,11 @@
     />
     <span class="indicator" aria-hidden="true">
       @if (indeterminate()) {
-        <svg
-          viewBox="0 0 12 12"
-          fill="none"
-          stroke="currentColor"
-          stroke-width="2"
-        >
+        <svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="2">
           <path d="M2 6h8" />
         </svg>
       } @else if (value()) {
-        <svg
-          viewBox="0 0 12 12"
-          fill="none"
-          stroke="currentColor"
-          stroke-width="2"
-        >
+        <svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="2">
           <path d="m2.5 6 2.2 2.2L9.5 3.5" />
         </svg>
       }

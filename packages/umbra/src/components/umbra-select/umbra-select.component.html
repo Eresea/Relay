@@ -17,12 +17,21 @@
     (blur)="onTriggerBlur()"
   >
     <span class="select-copy">
-      @if (label()) { <span class="select-label">{{ label() }}</span> }
+      @if (label()) {
+        <span class="select-label">{{ label() }}</span>
+      }
       <span class="select-value" [attr.data-placeholder]="displayLabel() === null ? '' : null">
         {{ displayLabel() ?? placeholder() }}
       </span>
     </span>
-    <svg class="select-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+    <svg
+      class="select-chevron"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      stroke-width="2"
+      aria-hidden="true"
+    >
       <path d="m6 9 6 6 6-6" />
     </svg>
   </button>
@@ -34,7 +43,15 @@
       [attr.aria-label]="resolvedLabels().clear"
       (click)="clear($event)"
     >
-      <svg class="select-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
+      <svg
+        class="select-icon"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="2"
+        stroke-linecap="round"
+        aria-hidden="true"
+      >
         <path d="m18 6-12 12M6 6l12 12" />
       </svg>
     </button>
@@ -60,7 +77,15 @@
       (keydown)="onSearchKeydown($event)"
     />
 
-    <div #listbox class="select-listbox" [id]="listboxId" role="listbox" [attr.aria-label]="ariaLabel()" [attr.aria-busy]="state().loadingInitial || state().loadingMore" (scroll)="onScroll($event)">
+    <div
+      #listbox
+      class="select-listbox"
+      [id]="listboxId"
+      role="listbox"
+      [attr.aria-label]="ariaLabel()"
+      [attr.aria-busy]="state().loadingInitial || state().loadingMore"
+      (scroll)="onScroll($event)"
+    >
       @for (item of visibleItems(); track valueWith()(item); let index = $index) {
         <div
           class="select-option"
@@ -78,7 +103,14 @@
         >
           <span class="select-option-label">{{ displayWith()(item) }}</span>
           @if (isSelected(item)) {
-            <svg class="select-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+            <svg
+              class="select-icon"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              aria-hidden="true"
+            >
               <path d="m5 12 4 4L19 6" />
             </svg>
           }
@@ -94,7 +126,9 @@
         </div>
       } @else if (!visibleItems().length) {
         <div class="select-feedback">
-          {{ state().query ? resolvedLabels().noResults(state().query) : resolvedLabels().noOptions }}
+          {{
+            state().query ? resolvedLabels().noResults(state().query) : resolvedLabels().noOptions
+          }}
         </div>
       }
 

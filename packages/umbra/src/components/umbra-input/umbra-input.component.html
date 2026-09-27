@@ -47,12 +47,7 @@
       <ng-content select="[umbraInputSuffix]" />
     </span>
     @if (showClear() && value() && !disabled() && !readonly()) {
-      <button
-        type="button"
-        class="action"
-        [attr.aria-label]="clearLabel()"
-        (click)="clear()"
-      >
+      <button type="button" class="action" [attr.aria-label]="clearLabel()" (click)="clear()">
         Clear
       </button>
     }
@@ -60,9 +55,7 @@
       <button
         type="button"
         class="action"
-        [attr.aria-label]="
-          passwordVisible() ? 'Hide password' : passwordLabel()
-        "
+        [attr.aria-label]="passwordVisible() ? 'Hide password' : passwordLabel()"
         [attr.aria-pressed]="passwordVisible()"
         (click)="togglePassword()"
       >
