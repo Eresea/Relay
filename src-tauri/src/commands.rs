@@ -29,8 +29,9 @@ use crate::gmail::{self, GmailSettings, GmailState, GmailStatus, HttpGoogleApi, 
 use crate::jobs::{JobId, JobRegistry};
 use crate::linear::{
     self, Initiative, InitiativeProject, InitiativeUpdate, Issue, IssueDetail, IssuePage,
-    LinearCodexContext, LinearComment, LinearConnection, LinearCycle, LinearLabel, LinearMilestone,
-    LinearProject, LinearProjectStatus, LinearProjectUpdate, Person, Team, WorkflowState,
+    IssueRelation, LinearCodexContext, LinearComment, LinearConnection, LinearCycle, LinearLabel,
+    LinearMilestone, LinearProject, LinearProjectStatus, LinearProjectUpdate, Person, Team,
+    WorkflowState,
 };
 #[cfg(mobile)]
 use crate::mobile_updates;
@@ -946,6 +947,49 @@ pub async fn linear_issue_detail(
         return Err(std::io::Error::other("Issue is required").into());
     }
     linear::issue_detail(&app, &organization_id, &issue_id).await
+}
+
+#[tauri::command]
+pub async fn linear_create_issue_relation(
+    app: AppHandle,
+    organization_id: String,
+    issue_id: String,
+    related_issue_id: String,
+    kind: String,
+) -> Result<IssueRelation> {
+    if organization_id.trim().is_empty()
+        || issue_id.trim().is_empty()
+        || related_issue_id.trim().is_empty()
+        || issue_id
+            .trim()
+            .eq_ignore_ascii_case(related_issue_id.trim())
+        || !matches!(
+            kind.as_str(),
+            "blocks" | "duplicate" | "related" | "similar"
+        )
+    {
+        return Err(std::io::Error::other("A valid issue relation is required").into());
+    }
+    linear::create_issue_relation(
+        &app,
+        &organization_id,
+        issue_id.trim(),
+        related_issue_id.trim(),
+        &kind,
+    )
+    .await
+}
+
+#[tauri::command]
+pub async fn linear_delete_issue_relation(
+    app: AppHandle,
+    organization_id: String,
+    relation_id: String,
+) -> Result<()> {
+    if organization_id.trim().is_empty() || relation_id.trim().is_empty() {
+        return Err(std::io::Error::other("Issue relation is required").into());
+    }
+    linear::delete_issue_relation(&app, &organization_id, relation_id.trim()).await
 }
 
 #[tauri::command]

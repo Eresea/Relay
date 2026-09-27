@@ -21,6 +21,7 @@ import {
   type LinearIssue,
   type LinearIssueDetail,
   type LinearIssuePage,
+  type LinearIssueRelationType,
   type LinearLabel,
   type LinearMilestone,
   type LinearProject,
@@ -495,6 +496,81 @@ interface LinearIssueDraft {
                   }
                 </section>
               }
+              <section class="detail-section" aria-label="Issue dependencies and links">
+                <h3>Dependencies and links</h3>
+                @for (relation of issueRelations(detail); track relation.id) {
+                  <article class="issue">
+                    <span>{{ relationLabel(relation.type, relation.inverse) }}</span>
+                    <button
+                      type="button"
+                      class="issue-link"
+                      (click)="openIssueDetail(relation.target)"
+                    >
+                      {{ relation.target.identifier }} · {{ relation.target.title }}
+                    </button>
+                    @if (confirmDeleteIssueRelationId() === relation.id) {
+                      <div class="issue-actions">
+                        <umbra-button
+                          size="sm"
+                          variant="destructive"
+                          [disabled]="deletingIssueRelationId() === relation.id"
+                          (click)="deleteIssueRelation(detail.issue, relation.id)"
+                        >
+                          {{ deletingIssueRelationId() === relation.id ? 'Removing' : 'Confirm' }}
+                        </umbra-button>
+                        <umbra-button
+                          size="sm"
+                          variant="link"
+                          (click)="confirmDeleteIssueRelationId.set(null)"
+                        >
+                          Cancel
+                        </umbra-button>
+                      </div>
+                    } @else {
+                      <umbra-button
+                        size="sm"
+                        variant="link"
+                        (click)="confirmDeleteIssueRelationId.set(relation.id)"
+                      >
+                        Remove
+                      </umbra-button>
+                    }
+                  </article>
+                }
+                @if (!detail.relations.length && !detail.inverseRelations.length) {
+                  <p class="hint">No linked issues.</p>
+                }
+                <form class="detail-form" (submit)="createIssueRelation($event, detail.issue)">
+                  <label>
+                    <span>Link issue by identifier</span>
+                    <input
+                      required
+                      maxlength="32"
+                      [value]="relatedIssueIdentifier()"
+                      (input)="relatedIssueIdentifier.set($any($event.target).value)"
+                      placeholder="ENG-123"
+                    />
+                  </label>
+                  <label>
+                    <span>Relationship</span>
+                    <select
+                      [value]="newIssueRelationType()"
+                      (change)="newIssueRelationType.set($any($event.target).value)"
+                    >
+                      <option value="blocks">This issue blocks</option>
+                      <option value="related">Related to</option>
+                      <option value="duplicate">Duplicate of</option>
+                      <option value="similar">Similar to</option>
+                    </select>
+                  </label>
+                  <umbra-button
+                    size="sm"
+                    [disabled]="creatingIssueRelation() || !relatedIssueIdentifier().trim()"
+                  >
+                    {{ creatingIssueRelation() ? 'Linking' : 'Link issue' }}
+                  </umbra-button>
+                </form>
+              </section>
               <form class="detail-form" (submit)="createSubIssue($event, detail.issue)">
                 <label>
                   <span>Add sub-issue</span>
@@ -2277,6 +2353,11 @@ export class Linear {
   protected readonly confirmArchiveIssueDetailId = signal<string | null>(null);
   protected readonly archivingIssueId = signal<string | null>(null);
   protected readonly issueDetail = signal<LinearIssueDetail | null>(null);
+  protected readonly creatingIssueRelation = signal(false);
+  protected readonly relatedIssueIdentifier = signal('');
+  protected readonly newIssueRelationType = signal<LinearIssueRelationType>('blocks');
+  protected readonly confirmDeleteIssueRelationId = signal<string | null>(null);
+  protected readonly deletingIssueRelationId = signal<string | null>(null);
   protected readonly editingIssueDetailsId = signal<string | null>(null);
   protected readonly editIssueTitle = signal('');
   protected readonly editIssueDescription = signal('');
@@ -2498,6 +2579,7 @@ export class Linear {
     this.issueDetail.set(null);
     this.confirmArchiveIssueId.set(null);
     this.confirmArchiveIssueDetailId.set(null);
+    this.confirmDeleteIssueRelationId.set(null);
     this.codexContext.set(null);
     this.nextCursor = null;
     void this.loadTeams(connection);
@@ -2588,13 +2670,14 @@ export class Linear {
     );
   }
 
-  protected async openIssueDetail(issue: LinearIssue): Promise<void> {
+  protected async openIssueDetail(issue: Pick<LinearIssue, 'id'>): Promise<void> {
     const connection = this.selected();
     if (!connection) return;
     void this.loadProjects();
     this.issueDetail.set(null);
     this.confirmArchiveIssueId.set(null);
     this.confirmArchiveIssueDetailId.set(null);
+    this.confirmDeleteIssueRelationId.set(null);
     this.editingIssueDetailsId.set(null);
     this.codexRequest.set(null);
     this.error.set(null);
@@ -2615,6 +2698,85 @@ export class Linear {
       }
     } catch (error) {
       this.error.set(error instanceof Error ? error.message : String(error));
+    }
+  }
+
+  protected issueRelations(detail: LinearIssueDetail) {
+    return [
+      ...detail.relations.flatMap((relation) =>
+        relation.relatedIssue
+          ? [
+              {
+                id: relation.id,
+                type: relation.type,
+                target: relation.relatedIssue,
+                inverse: false,
+              },
+            ]
+          : [],
+      ),
+      ...detail.inverseRelations.flatMap((relation) =>
+        relation.issue
+          ? [{ id: relation.id, type: relation.type, target: relation.issue, inverse: true }]
+          : [],
+      ),
+    ];
+  }
+
+  protected relationLabel(type: LinearIssueRelationType, inverse: boolean): string {
+    if (type === 'blocks') return inverse ? 'is blocked by' : 'blocks';
+    if (type === 'duplicate') return inverse ? 'is duplicated by' : 'duplicates';
+    return type === 'similar' ? 'is similar to' : 'is related to';
+  }
+
+  protected async createIssueRelation(event: Event, issue: LinearIssue): Promise<void> {
+    event.preventDefault();
+    const connection = this.selected();
+    const relatedIssueId = this.relatedIssueIdentifier().trim();
+    if (!connection || !relatedIssueId || this.creatingIssueRelation()) return;
+    if (issue.identifier.toLocaleLowerCase() === relatedIssueId.toLocaleLowerCase()) {
+      this.error.set('An issue cannot be linked to itself.');
+      return;
+    }
+    this.creatingIssueRelation.set(true);
+    this.error.set(null);
+    try {
+      await this.tauri.linearCreateIssueRelation(
+        connection.organizationId,
+        issue.id,
+        relatedIssueId,
+        this.newIssueRelationType(),
+      );
+      const detail = await this.tauri.linearIssueDetail(connection.organizationId, issue.id);
+      if (this.issueDetail()?.issue.id === issue.id) this.issueDetail.set(detail);
+      this.relatedIssueIdentifier.set('');
+    } catch (error) {
+      this.error.set(error instanceof Error ? error.message : String(error));
+    } finally {
+      this.creatingIssueRelation.set(false);
+    }
+  }
+
+  protected async deleteIssueRelation(issue: LinearIssue, relationId: string): Promise<void> {
+    const connection = this.selected();
+    if (
+      !connection ||
+      this.confirmDeleteIssueRelationId() !== relationId ||
+      this.deletingIssueRelationId()
+    ) {
+      return;
+    }
+    this.deletingIssueRelationId.set(relationId);
+    this.error.set(null);
+    try {
+      await this.tauri.linearDeleteIssueRelation(connection.organizationId, relationId);
+      this.confirmDeleteIssueRelationId.set(null);
+      const detail = await this.tauri.linearIssueDetail(connection.organizationId, issue.id);
+      if (this.issueDetail()?.issue.id === issue.id) this.issueDetail.set(detail);
+    } catch (error) {
+      this.error.set(error instanceof Error ? error.message : String(error));
+    } finally {
+      this.deletingIssueRelationId.set(null);
     }
   }
 

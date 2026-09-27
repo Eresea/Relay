@@ -105,6 +105,8 @@ describe('Linear to Codex context', () => {
     const prompt = linearCodexPrompt(issue, {
       issue,
       children: [{ ...issue, id: 'child-1', identifier: 'ENG-43', title: 'Add the callback' }],
+      relations: [],
+      inverseRelations: [],
       comments: [
         {
           id: 'comment-1',

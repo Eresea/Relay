@@ -9,9 +9,9 @@ use tauri_plugin_store::StoreExt;
 use crate::error::{Error, Result};
 
 pub use api::{
-    Initiative, InitiativeProject, InitiativeUpdate, Issue, IssueDetail, IssuePage, LinearComment,
-    LinearCycle, LinearLabel, LinearMilestone, LinearProject, LinearProjectStatus,
-    LinearProjectUpdate, Person, Team, Viewer, WorkflowState,
+    Initiative, InitiativeProject, InitiativeUpdate, Issue, IssueDetail, IssuePage, IssueRelation,
+    LinearComment, LinearCycle, LinearLabel, LinearMilestone, LinearProject,
+    LinearProjectStatus, LinearProjectUpdate, Person, Team, Viewer, WorkflowState,
 };
 use oauth::TokenBundle;
 pub use oauth::{LinearCodexLink, LinearCodexProjectPolicy};
@@ -599,6 +599,30 @@ pub async fn issue_detail(
     issue_id: &str,
 ) -> Result<IssueDetail> {
     api::issue_detail(&access_token(app, organization_id).await?, issue_id).await
+}
+
+pub async fn create_issue_relation(
+    app: &AppHandle,
+    organization_id: &str,
+    issue_id: &str,
+    related_issue_id: &str,
+    kind: &str,
+) -> Result<IssueRelation> {
+    api::create_issue_relation(
+        &access_token(app, organization_id).await?,
+        issue_id,
+        related_issue_id,
+        kind,
+    )
+    .await
+}
+
+pub async fn delete_issue_relation(
+    app: &AppHandle,
+    organization_id: &str,
+    relation_id: &str,
+) -> Result<()> {
+    api::delete_issue_relation(&access_token(app, organization_id).await?, relation_id).await
 }
 
 pub async fn create_comment(

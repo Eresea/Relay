@@ -109,6 +109,29 @@ pub struct IssueDetail {
     pub issue: Issue,
     pub children: Vec<Issue>,
     pub comments: Vec<LinearComment>,
+    pub relations: Vec<IssueRelation>,
+    pub inverse_relations: Vec<IssueRelation>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct IssueRelation {
+    pub id: String,
+    #[serde(rename = "type")]
+    pub kind: String,
+    #[serde(default)]
+    pub issue: Option<IssueRelationRef>,
+    #[serde(default)]
+    pub related_issue: Option<IssueRelationRef>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct IssueRelationRef {
+    pub id: String,
+    pub identifier: String,
+    pub title: String,
+    pub url: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -1197,6 +1220,8 @@ pub async fn issue_detail(token: &str, issue_id: &str) -> Result<IssueDetail> {
         issue: Issue,
         children: Nodes<Issue>,
         comments: Nodes<LinearComment>,
+        relations: Nodes<IssueRelation>,
+        inverse_relations: Nodes<IssueRelation>,
     }
     #[derive(Deserialize)]
     struct Data {
@@ -1204,7 +1229,7 @@ pub async fn issue_detail(token: &str, issue_id: &str) -> Result<IssueDetail> {
     }
     let data: Data = query(
         token,
-        "query RelayIssueDetail($id: String!) { issue(id: $id) { id identifier title description url priority estimate dueDate updatedAt archivedAt state { id name type } assignee { id name } project { id name } projectMilestone { id name } cycle { id name number } labels { nodes { id name color } } team { id name key } children(first: 50) { nodes { id identifier title description url priority updatedAt archivedAt state { id name type } assignee { id name } project { id name } cycle { id name number } labels { nodes { id name color } } team { id name key } } } comments(first: 50) { nodes { id body createdAt editedAt user { id name } } } } }",
+        "query RelayIssueDetail($id: String!) { issue(id: $id) { id identifier title description url priority estimate dueDate updatedAt archivedAt state { id name type } assignee { id name } project { id name } projectMilestone { id name } cycle { id name number } labels { nodes { id name color } } team { id name key } children(first: 50) { nodes { id identifier title description url priority updatedAt archivedAt state { id name type } assignee { id name } project { id name } cycle { id name number } labels { nodes { id name color } } team { id name key } } } relations(first: 50) { nodes { id type relatedIssue { id identifier title url } } } inverseRelations(first: 50) { nodes { id type issue { id identifier title url } } } comments(first: 50) { nodes { id body createdAt editedAt user { id name } } } } }",
         json!({ "id": issue_id }),
     )
     .await?;
@@ -1212,7 +1237,51 @@ pub async fn issue_detail(token: &str, issue_id: &str) -> Result<IssueDetail> {
         issue: data.issue.issue,
         children: data.issue.children.nodes,
         comments: data.issue.comments.nodes,
+        relations: data.issue.relations.nodes,
+        inverse_relations: data.issue.inverse_relations.nodes,
     })
+}
+
+pub async fn create_issue_relation(
+    token: &str,
+    issue_id: &str,
+    related_issue_id: &str,
+    kind: &str,
+) -> Result<IssueRelation> {
+    #[derive(Deserialize)]
+    struct Data {
+        #[serde(rename = "issueRelationCreate")]
+        result: IssueRelationMutation,
+    }
+    let data: Data = query(
+        token,
+        "mutation RelayIssueRelationCreate($input: IssueRelationCreateInput!) { issueRelationCreate(input: $input) { success issueRelation { id type issue { id identifier title url } relatedIssue { id identifier title url } } } }",
+        json!({ "input": { "issueId": issue_id, "relatedIssueId": related_issue_id, "type": kind } }),
+    )
+    .await?;
+    data.result
+        .into_value("Linear did not create the issue relation")
+}
+
+pub async fn delete_issue_relation(token: &str, relation_id: &str) -> Result<()> {
+    #[derive(Deserialize)]
+    struct Data {
+        #[serde(rename = "issueRelationDelete")]
+        result: DeleteMutation,
+    }
+    let data: Data = query(
+        token,
+        "mutation RelayIssueRelationDelete($id: String!) { issueRelationDelete(id: $id) { success } }",
+        json!({ "id": relation_id }),
+    )
+    .await?;
+    if data.result.success {
+        Ok(())
+    } else {
+        Err(Error::LinearApi(
+            "Linear did not remove the issue relation".into(),
+        ))
+    }
 }
 
 pub async fn create_comment(token: &str, issue_id: &str, body: &str) -> Result<LinearComment> {
@@ -1413,6 +1482,23 @@ struct InitiativeProjectMutation {
 #[derive(Deserialize)]
 struct DeleteMutation {
     success: bool,
+}
+
+#[derive(Deserialize)]
+struct IssueRelationMutation {
+    success: bool,
+    #[serde(rename = "issueRelation")]
+    issue_relation: Option<IssueRelation>,
+}
+
+impl IssueRelationMutation {
+    fn into_value(self, message: &str) -> Result<IssueRelation> {
+        if !self.success {
+            return Err(Error::LinearApi(message.into()));
+        }
+        self.issue_relation
+            .ok_or_else(|| Error::LinearApi("Linear returned no issue relation".into()))
+    }
 }
 
 impl InitiativeMutation {

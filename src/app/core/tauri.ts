@@ -951,6 +951,26 @@ export class TauriBridge {
     return detail;
   }
 
+  async linearCreateIssueRelation(
+    organizationId: string,
+    issueId: string,
+    relatedIssueId: string,
+    type: LinearIssueRelationType,
+  ): Promise<LinearIssueRelation> {
+    const relation = await this.invoke<LinearIssueRelation>('linear_create_issue_relation', {
+      organizationId,
+      issueId,
+      relatedIssueId,
+      kind: type,
+    });
+    if (!relation) throw new Error('Linear returned no issue relation.');
+    return relation;
+  }
+
+  async linearDeleteIssueRelation(organizationId: string, relationId: string): Promise<void> {
+    await this.invoke('linear_delete_issue_relation', { organizationId, relationId });
+  }
+
   async linearCreateComment(
     organizationId: string,
     issueId: string,
@@ -1644,6 +1664,24 @@ export interface LinearIssueDetail {
   readonly issue: LinearIssue;
   readonly children: readonly LinearIssue[];
   readonly comments: readonly LinearComment[];
+  readonly relations: readonly LinearIssueRelation[];
+  readonly inverseRelations: readonly LinearIssueRelation[];
+}
+
+export type LinearIssueRelationType = 'blocks' | 'duplicate' | 'related' | 'similar';
+
+export interface LinearIssueRelation {
+  readonly id: string;
+  readonly type: LinearIssueRelationType;
+  readonly issue: LinearIssueRelationRef | null;
+  readonly relatedIssue: LinearIssueRelationRef | null;
+}
+
+export interface LinearIssueRelationRef {
+  readonly id: string;
+  readonly identifier: string;
+  readonly title: string;
+  readonly url: string;
 }
 
 export interface LinearAuthEvent {
