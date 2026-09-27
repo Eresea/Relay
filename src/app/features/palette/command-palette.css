@@ -119,6 +119,17 @@
   margin-inline-end: var(--space-2);
 }
 
+.retry {
+  color: var(--text-body);
+  cursor: pointer;
+}
+
+.retry:hover {
+  color: var(--text-strong);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
 .run-status:empty {
   display: none;
 }

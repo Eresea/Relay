@@ -19,9 +19,10 @@ Relay uses the lower-level App Server because it is a Rust/Tauri app and does no
 
 ## What Relay does
 
-- The desktop Codex page lists local threads newest by recent activity, pages through older threads, opens a thread with its full turn and item history, and can hand it off to Codex desktop. New work can start a thread or resume the selected thread.
-- Thread history comes from App Server `thread/list` and `thread/read`; when the server returns paginated history, Relay reads every turn page in full before displaying it. User and agent Markdown is sanitized before rendering; tool calls, command output, file changes, and other stored items remain available in expandable detail blocks.
-- Relay launches a local `codex app-server --stdio` process per send, so Codex CLI must be installed and signed in on the same machine.
+- The desktop Codex page combines thread browsing and local work. The command palette opens IDs directly, including threads outside the first list page. Threads use their saved names and are listed newest by recent activity, with pagination for older threads.
+- Listing and read-only history use one shared App Server connection. Opening uses `thread/read`, without resuming the thread, then loads the latest 12 full turns for paginated history. Earlier turns load on demand in chronological order. User and agent Markdown is sanitized before rendering; tool calls, command output, file changes, and other stored items remain available in expandable detail blocks.
+- Relay launches a local `codex app-server --stdio` process per send. On Windows it looks for `codex.exe` on PATH, then the newest executable bundled under `%LOCALAPPDATA%/OpenAI/Codex/bin`. This desktop layout fallback is based on the installed app and is not a documented distribution contract. Codex must be installed and signed in on the same machine.
+- Authentication determines billing: signing in with ChatGPT uses subscription access; signing in with an API key uses API usage billing. Using the CLI or App Server does not itself require API billing. [OpenAI authentication](https://learn.chatgpt.com/docs/auth)
 - Turns can read and write within the selected workspace plus platform defaults, with network access disabled. Relay sets `approvalPolicy: "never"`; pressing Send therefore authorizes Codex to run commands and edit files inside that workspace without further approval. Requests for extra access are declined; the UI states this before the send action.
 - The App Server thread ID can be passed to the documented `codex://threads/<thread-id>` desktop deep link. Whether an App Server-created thread always opens with shared history in the desktop UI still needs a real end-to-end check.
 
@@ -33,4 +34,4 @@ Relay uses the lower-level App Server because it is a Rust/Tauri app and does no
 
 ## Remaining proof
 
-Run a signed-in local end-to-end check: create a thread from Relay, send a prompt, resume it with a second prompt, and verify `codex://threads/<thread-id>` opens that same history in the Codex desktop app. No model request or desktop handoff was run during implementation.
+The read-only Rust integration check lists existing threads and opens a real local transcript. Frontend tests cover direct ID opening, list pagination, earlier history, stale read responses, and the desktop deep-link request. Creating, sending, resuming work, and actual desktop handoff still need a signed-in end-to-end check; no model request was made during this change.

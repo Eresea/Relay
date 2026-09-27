@@ -50,18 +50,6 @@ export class TauriBridge {
     return (await this.invoke<CoreCommandMeta[]>('core_commands')) ?? [];
   }
 
-  async codexThreads(): Promise<readonly CodexThread[]> {
-    return (await this.invoke<CodexThread[]>('codex_threads')) ?? [];
-  }
-
-  async codexOpenThread(threadId: string): Promise<CodexThreadDetails | null> {
-    return this.invoke<CodexThreadDetails>('codex_open_thread', { threadId });
-  }
-
-  async codexOlderMessages(threadId: string, cursor: string): Promise<CodexMessagePage | null> {
-    return this.invoke<CodexMessagePage>('codex_older_messages', { threadId, cursor });
-  }
-
   /** Minimizes the current window to the taskbar/dock. */
   async minimizeWindow(): Promise<void> {
     if (!this.available) return;
@@ -214,9 +202,15 @@ export class TauriBridge {
     return result;
   }
 
-  async codexReadThread(threadId: string): Promise<CodexThread> {
-    const result = await this.invoke<CodexThread>('codex_read_thread', { threadId });
+  async codexReadThread(threadId: string): Promise<CodexThreadDetails> {
+    const result = await this.invoke<CodexThreadDetails>('codex_read_thread', { threadId });
     if (!result) throw new Error('Codex returned no thread.');
+    return result;
+  }
+
+  async codexOlderTurns(threadId: string, cursor: string): Promise<CodexTurnPage> {
+    const result = await this.invoke<CodexTurnPage>('codex_older_turns', { threadId, cursor });
+    if (!result) throw new Error('Codex returned no earlier turns.');
     return result;
   }
 
@@ -236,8 +230,11 @@ export class TauriBridge {
     await this.invoke('github_unregister_webhook', { repository });
   }
 
-  async githubPullRequests(): Promise<readonly GithubPullRequestSummary[]> {
-    return (await this.invoke<GithubPullRequestSummary[]>('github_pull_requests')) ?? [];
+  async githubPullRequests(includeClosed = false): Promise<readonly GithubPullRequestSummary[]> {
+    return (
+      (await this.invoke<GithubPullRequestSummary[]>('github_pull_requests', { includeClosed })) ??
+      []
+    );
   }
 
   async runtimeGrafanaSettings(): Promise<RuntimeGrafanaSettings> {
@@ -625,27 +622,14 @@ export type CoreCommand =
   | { readonly id: 'open_agent_thread'; readonly args: { readonly threadId: string } }
   | { readonly id: 'quit' };
 
-export interface CodexThread {
-  readonly id: string;
-  readonly title: string;
-  readonly cwd: string;
-  readonly updatedAt: number;
-}
-
 export interface CodexThreadDetails {
   readonly thread: CodexThread;
-  readonly messages: readonly CodexMessage[];
   readonly olderCursor: string | null;
 }
 
-export interface CodexMessagePage {
-  readonly messages: readonly CodexMessage[];
+export interface CodexTurnPage {
+  readonly turns: readonly CodexTurn[];
   readonly nextCursor: string | null;
-}
-
-export interface CodexMessage {
-  readonly role: 'You' | 'Codex';
-  readonly text: string;
 }
 
 /** Non-secret Grafana connection details. The API token lives in the OS keychain. */
@@ -772,6 +756,11 @@ export interface CodexThreadSummary {
   readonly updatedAt: number;
   readonly recencyAt: number | null;
   readonly model: string | null;
+  readonly gitInfo?: { readonly branch: string | null; readonly originUrl: string | null } | null;
+  readonly status?: {
+    readonly type: 'notLoaded' | 'idle' | 'active' | 'systemError';
+    readonly activeFlags?: readonly ('waitingOnApproval' | 'waitingOnUserInput')[];
+  };
 }
 
 export interface CodexThreadPage {
@@ -779,14 +768,36 @@ export interface CodexThreadPage {
   readonly nextCursor: string | null;
 }
 
-export interface CodexThread {
-  readonly id: string;
-  readonly name: string | null;
-  readonly preview: string;
-  readonly cwd: string;
-  readonly createdAt: number;
-  readonly updatedAt: number;
+export interface CodexThread extends CodexThreadSummary {
   readonly turns: readonly CodexTurn[];
+}
+
+export function codexThreadTitle(thread: Pick<CodexThreadSummary, 'name' | 'preview'>): string {
+  return (
+    (thread.name ? stripThreadMarkup(thread.name).trim() : '') ||
+    codexThreadPreview(thread.preview) ||
+    'Untitled Codex thread'
+  );
+}
+
+export function codexThreadPreview(preview: string): string {
+  return stripThreadMarkup(preview)
+    .split(/## My request:\s*/i)
+    .at(-1)!
+    .replace(/\[([^\]]+)\]\([^)]*\)/g, '$1')
+    .replace(/[#*`]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function stripThreadMarkup(value: string): string {
+  return value
+    .replace(
+      /<(in-app-browser-context|environment_context|app-context|skills_instructions|heartbeat)\b[^>]*>[\s\S]*?(<\/\1\s*>|$)/gi,
+      '',
+    )
+    .replace(/&lt;\/?[a-z][^&]*?&gt;/gi, '')
+    .replace(/<\/?[a-z][^>]*>/gi, '');
 }
 
 export interface CodexTurn {
@@ -829,6 +840,8 @@ export interface GithubPullRequestSummary {
   readonly reviewRequested: boolean;
   readonly ciState: 'pending' | 'success' | 'failure' | null;
   readonly lastSeen: number;
+  readonly headBranch?: string | null;
+  readonly merged?: boolean;
 }
 
 /** Mirrors `vault::VaultEntrySummary` — every field but the password. */

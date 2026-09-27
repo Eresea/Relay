@@ -23,7 +23,6 @@ import { Icon } from '@shared/icon';
 import { NotificationPopover } from '@shared/notification-popover';
 import { Projects } from '@features/projects/projects';
 import { Runtime } from '@features/runtime/runtime';
-import { AgentThreads } from '@features/agents/agent-threads';
 import { Codex } from '@features/codex/codex';
 
 const RAIL_EXPANDED_SETTING_KEY = 'rail.expanded';
@@ -49,7 +48,6 @@ const RAIL_EXPANDED_SETTING_KEY = 'rail.expanded';
     NotificationPopover,
     Projects,
     Runtime,
-    AgentThreads,
     Settings,
     UpdateStatusBar,
     Vault,
@@ -110,16 +108,6 @@ const RAIL_EXPANDED_SETTING_KEY = 'rail.expanded';
           >
             <span class="rail-icon"><rl-icon name="library" [size]="16" /></span>
             <span class="rail-label">Projects</span>
-          </button>
-          <button
-            type="button"
-            class="rail-item"
-            [class.active]="view() === 'agents'"
-            (click)="view.set('agents')"
-            aria-label="Agent threads"
-          >
-            <span class="rail-icon"><rl-icon name="bot" [size]="16" /></span>
-            <span class="rail-label">Agent threads</span>
           </button>
           <button
             type="button"
@@ -458,20 +446,17 @@ const RAIL_EXPANDED_SETTING_KEY = 'rail.expanded';
               </div>
             }
           </section>
-        }
-        @if (view() === 'settings') {
+        } @else if (view() === 'settings') {
           <rl-settings [initialTab]="settingsTab()" />
         } @else if (view() === 'codex') {
-          <rl-codex />
+          <rl-codex
+            [openThreadId]="requestedAgentThreadId()"
+            (threadHandled)="requestedAgentThreadId.set(null)"
+          />
         } @else if (view() === 'vault') {
           <rl-vault />
         } @else if (view() === 'runtime') {
           <rl-runtime />
-        } @else if (view() === 'agents') {
-          <rl-agent-threads
-            [openThreadId]="requestedAgentThreadId()"
-            (threadHandled)="requestedAgentThreadId.set(null)"
-          />
         } @else {
           <rl-projects />
         }
@@ -1118,12 +1103,18 @@ export class Home {
   protected readonly recoveryCode = signal('');
   protected readonly authDialogTitle = computed(() => {
     switch (this.authView()) {
-      case 'social': return 'Connect through Nexus';
-      case 'email': return 'Sign in with email';
-      case 'create': return 'Create your account';
-      case 'verify-email': return 'Verify your email';
-      case 'mfa': return 'Verify it’s you';
-      default: return 'Connect through Nexus';
+      case 'social':
+        return 'Connect through Nexus';
+      case 'email':
+        return 'Sign in with email';
+      case 'create':
+        return 'Create your account';
+      case 'verify-email':
+        return 'Verify your email';
+      case 'mfa':
+        return 'Verify it’s you';
+      default:
+        return 'Connect through Nexus';
     }
   });
   protected readonly accountName = computed(
@@ -1133,9 +1124,7 @@ export class Home {
     this.account.status().connected ? this.accountName().trim().charAt(0).toLocaleUpperCase() : 'N',
   );
   protected readonly theme = inject(ThemeService);
-  protected readonly view = signal<'home' | 'settings' | 'vault' | 'runtime' | 'agents' | 'codex' | 'account'>(
-    'home',
-  );
+  protected readonly view = signal<'home' | 'settings' | 'vault' | 'runtime' | 'codex' | 'account'>('home');
   protected readonly requestedAgentThreadId = signal<string | null>(null);
   /** Starts collapsed — the safe default while the persisted value (below) is
    * still loading — then reconciles with whatever the user last left it as. */
@@ -1260,10 +1249,10 @@ export class Home {
         }
         if (event.type === 'openVaultRequested') this.view.set('vault');
         if (event.type === 'openRuntimeRequested') this.view.set('runtime');
-        if (event.type === 'openAgentsRequested') this.view.set('agents');
+        if (event.type === 'openAgentsRequested') this.view.set('codex');
         if (event.type === 'openAgentThreadRequested') {
           this.requestedAgentThreadId.set(event.threadId);
-          this.view.set('agents');
+          this.view.set('codex');
         }
         if (event.type === 'openGithubRequested') {
           this.view.set('settings');

@@ -108,23 +108,53 @@ export function search(commands: readonly Command[], query: string): CommandMatc
     }));
   }
 
+  const terms = trimmed.split(/\s+/);
   const matches: CommandMatch[] = [];
 
   for (const command of commands) {
-    const onTitle = scoreOne(command.title, trimmed);
-    if (onTitle) {
-      matches.push({ command, kind: 'title', score: onTitle.score, ranges: onTitle.ranges });
+    const titleScores = terms.map((term) => scoreOne(command.title, term));
+    const completeTitleScores = titleScores.filter((score): score is Scored => score !== null);
+    if (completeTitleScores.length === terms.length) {
+      const ranges = completeTitleScores
+        .flatMap((score) => score.ranges)
+        .sort(([a], [b]) => a - b)
+        .reduce<[number, number][]>((merged, [start, end]) => {
+          const previous = merged.at(-1);
+          if (previous && start <= previous[1]) {
+            previous[1] = Math.max(previous[1], end);
+          } else {
+            merged.push([start, end]);
+          }
+          return merged;
+        }, []);
+      matches.push({
+        command,
+        kind: 'title',
+        score: completeTitleScores.reduce((total, match) => total + match.score, 0),
+        ranges,
+      });
       continue;
     }
 
     // The group and any keywords are searchable, but the user cannot see them
     // on the row, so they never outrank a visible title match.
-    const best = [command.group, ...(command.keywords ?? [])]
-      .map((text) => scoreOne(text, trimmed))
-      .filter((scored): scored is Scored => scored !== null)
-      .sort((a, b) => b.score - a.score)[0];
-
-    if (best) matches.push({ command, kind: 'keyword', score: best.score, ranges: [] });
+    const fields = [command.group, ...(command.keywords ?? [])];
+    const keywordScores = titleScores.map((titleScore, index) =>
+      fields
+        .map((text) => scoreOne(text, terms[index]))
+        .reduce<Scored | undefined>(
+          (best, score) => (score && (!best || score.score > best.score) ? score : best),
+          titleScore ?? undefined,
+        ),
+    );
+    if (keywordScores.every((score): score is Scored => score !== undefined)) {
+      matches.push({
+        command,
+        kind: 'keyword',
+        score: keywordScores.reduce((total, match) => total + match.score, 0),
+        ranges: [],
+      });
+    }
   }
 
   return matches.sort(

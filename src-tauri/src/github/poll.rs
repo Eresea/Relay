@@ -49,6 +49,10 @@ pub struct PullRequestSnapshot {
     pub review_requested: bool,
     pub ci_state: Option<CiState>,
     pub last_seen: u64,
+    #[serde(default)]
+    pub head_branch: Option<String>,
+    #[serde(default)]
+    pub merged: bool,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -348,6 +352,8 @@ pub async fn run_poll_cycle<C: GitHubClient, S: EventSink>(
                 review_requested: current.review_requested,
                 ci_state: current.ci_state,
                 last_seen: now_millis(),
+                head_branch: Some(detail.head.git_ref),
+                merged: detail.merged,
             },
         );
     }
@@ -413,11 +419,11 @@ fn read_cache(path: &Path) -> PollCache {
         .unwrap_or_default()
 }
 
-pub fn recent_pull_requests(path: &Path) -> Vec<PullRequestSnapshot> {
+pub fn recent_pull_requests(path: &Path, include_closed: bool) -> Vec<PullRequestSnapshot> {
     let mut pull_requests: Vec<_> = load_cache(path)
         .details
         .into_values()
-        .filter(|pull_request| pull_request.state == "open")
+        .filter(|pull_request| include_closed || pull_request.state == "open")
         .collect();
     pull_requests.sort_by_key(|pull_request| std::cmp::Reverse(pull_request.last_seen));
     pull_requests
@@ -456,6 +462,8 @@ pub async fn refresh_from_webhook<C: GitHubClient>(
         review_requested: current.review_requested,
         ci_state: current.ci_state,
         last_seen: now_millis(),
+        head_branch: Some(detail.head.git_ref),
+        merged: detail.merged,
     };
     let path = super::poll_cache_path(app);
     let mut cache = load_cache(&path);
@@ -679,6 +687,8 @@ mod tests {
                 review_requested: false,
                 ci_state: None,
                 last_seen: 100,
+                head_branch: None,
+                merged: false,
             },
         );
         cache.details.insert(
@@ -692,6 +702,8 @@ mod tests {
                 review_requested: false,
                 ci_state: None,
                 last_seen: 300,
+                head_branch: None,
+                merged: true,
             },
         );
         cache.details.insert(
@@ -705,6 +717,8 @@ mod tests {
                 review_requested: false,
                 ci_state: None,
                 last_seen: 200,
+                head_branch: None,
+                merged: false,
             },
         );
         cache.prs = cache
@@ -714,7 +728,7 @@ mod tests {
             .collect();
         save_cache(&path, &cache);
 
-        let result = recent_pull_requests(&path);
+        let result = recent_pull_requests(&path, false);
         let numbers: Vec<_> = result
             .into_iter()
             .map(|pull_request| pull_request.number)

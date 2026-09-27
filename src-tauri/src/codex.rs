@@ -6,7 +6,6 @@ use std::{
 
 use serde::Serialize;
 use serde_json::{json, Value};
-use tauri::State;
 use tokio::sync::Mutex;
 use tokio::{
     io::{AsyncBufReadExt, AsyncWriteExt, BufReader},
@@ -29,33 +28,16 @@ pub struct CodexRun {
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct CodexThread {
-    id: String,
-    title: String,
-    cwd: String,
-    updated_at: u64,
-}
-
-#[derive(Debug, Serialize)]
-#[serde(rename_all = "camelCase")]
 pub struct CodexThreadDetails {
-    pub thread: CodexThread,
-    pub messages: Vec<CodexMessage>,
+    pub thread: Value,
     pub older_cursor: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct CodexMessagePage {
-    pub messages: Vec<CodexMessage>,
+pub struct CodexTurnPage {
+    pub turns: Vec<Value>,
     pub next_cursor: Option<String>,
-}
-
-#[derive(Debug, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct CodexMessage {
-    pub role: &'static str,
-    pub text: String,
 }
 
 #[derive(Default)]
@@ -76,7 +58,15 @@ impl CodexState {
             .request(method, params)
             .await
         {
-            Ok(result) => Ok(result),
+            Ok(result) => {
+                // Read-only clients have no turn waiting for these notifications.
+                client
+                    .as_mut()
+                    .expect("Codex client was started")
+                    .pending
+                    .clear();
+                Ok(result)
+            }
             Err(error) => {
                 client.take();
                 Err(error)
@@ -93,9 +83,41 @@ struct CodexClient {
     pending: VecDeque<Value>,
 }
 
+fn codex_executable() -> PathBuf {
+    #[cfg(windows)]
+    {
+        if let Some(binary) = std::env::var_os("PATH")
+            .into_iter()
+            .flat_map(|path| std::env::split_paths(&path).collect::<Vec<_>>())
+            .map(|directory| directory.join("codex.exe"))
+            .find(|binary| binary.is_file())
+        {
+            return binary;
+        }
+        // ponytail: desktop layout is a fallback; standalone CLI on PATH takes precedence.
+        if let Some(binary) = std::env::var_os("LOCALAPPDATA")
+            .and_then(|root| std::fs::read_dir(PathBuf::from(root).join("OpenAI/Codex/bin")).ok())
+            .into_iter()
+            .flatten()
+            .filter_map(|entry| entry.ok())
+            .map(|entry| entry.path().join("codex.exe"))
+            .filter(|binary| binary.is_file())
+            .max_by_key(|binary| {
+                binary
+                    .metadata()
+                    .and_then(|metadata| metadata.modified())
+                    .ok()
+            })
+        {
+            return binary;
+        }
+    }
+    PathBuf::from("codex")
+}
+
 impl CodexClient {
     async fn start(working_directory: &Path) -> Result<Self> {
-        let mut child = Command::new("codex")
+        let mut child = Command::new(codex_executable())
             .args(["app-server", "--stdio"])
             .current_dir(working_directory)
             .stdin(std::process::Stdio::piped())
@@ -105,7 +127,7 @@ impl CodexClient {
             .spawn()
             .map_err(|error| {
                 protocol_error(format!(
-                    "Could not start Codex app-server. Install Codex CLI, sign in, and ensure codex is on PATH: {error}"
+                    "Could not start Codex app-server. Install Codex desktop or put the Codex CLI executable on PATH, then sign in with ChatGPT to use your Codex plan: {error}"
                 ))
             })?;
         let input = child
@@ -300,74 +322,6 @@ impl CodexClient {
 
         Ok(response)
     }
-
-    async fn read_thread(&mut self, thread_id: &str) -> Result<Value> {
-        if thread_id.trim().is_empty() {
-            return Err(protocol_error("Thread ID cannot be empty"));
-        }
-        let response = self
-            .request(
-                "thread/read",
-                json!({ "threadId": thread_id, "includeTurns": true }),
-            )
-            .await;
-        let mut thread = match response {
-            Ok(response) => response
-                .get("thread")
-                .cloned()
-                .ok_or_else(|| protocol_error("Codex app-server returned no thread"))?,
-            Err(_) => self
-                .request("thread/read", json!({ "threadId": thread_id }))
-                .await?
-                .get("thread")
-                .cloned()
-                .ok_or_else(|| protocol_error("Codex app-server returned no thread"))?,
-        };
-
-        let needs_full_history =
-            thread
-                .get("turns")
-                .and_then(Value::as_array)
-                .is_none_or(|turns| {
-                    thread.get("historyMode").and_then(Value::as_str) == Some("paginated")
-                        || turns.iter().any(|turn| {
-                            turn.get("itemsView")
-                                .and_then(Value::as_str)
-                                .is_some_and(|view| view != "full")
-                        })
-                });
-        if needs_full_history {
-            let mut turns = Vec::new();
-            let mut cursor: Option<String> = None;
-            loop {
-                let mut params = json!({
-                    "threadId": thread_id,
-                    "limit": THREAD_PAGE_SIZE,
-                    "sortDirection": "desc",
-                    "itemsView": "full"
-                });
-                if let Some(cursor) = cursor.as_ref() {
-                    params["cursor"] = json!(cursor);
-                }
-                let page = self.request("thread/turns/list", params).await?;
-                let page_turns = page.get("data").and_then(Value::as_array).ok_or_else(|| {
-                    protocol_error("Codex app-server returned invalid thread turns")
-                })?;
-                turns.extend(page_turns.iter().cloned());
-                cursor = page
-                    .get("nextCursor")
-                    .and_then(Value::as_str)
-                    .map(str::to_owned);
-                if cursor.is_none() {
-                    break;
-                }
-            }
-            turns.reverse();
-            thread["turns"] = Value::Array(turns);
-        }
-
-        Ok(thread)
-    }
 }
 
 #[derive(Debug, Serialize)]
@@ -377,26 +331,24 @@ pub struct CodexThreadPage {
     pub next_cursor: Option<String>,
 }
 
-pub async fn list_threads(cursor: Option<String>) -> Result<CodexThreadPage> {
-    let cwd = appserver_working_directory()?;
-    let mut client = CodexClient::start(&cwd).await?;
-    let mut params = json!({
-        "limit": THREAD_PAGE_SIZE,
-        "sortKey": "recency_at",
-        "sortDirection": "desc",
-        "sourceKinds": ["cli", "vscode", "appServer", "exec"]
-    });
-    if let Some(cursor) = cursor.filter(|cursor| !cursor.is_empty()) {
-        params["cursor"] = json!(cursor);
-    }
-    let page = client.request("thread/list", params).await?;
-    let threads = page
-        .get("data")
-        .and_then(Value::as_array)
-        .cloned()
-        .ok_or_else(|| protocol_error("Codex app-server returned an invalid thread list"))?;
+pub async fn list_threads(state: &CodexState, cursor: Option<String>) -> Result<CodexThreadPage> {
+    let page = state
+        .request(
+            "thread/list",
+            json!({
+                "limit": THREAD_PAGE_SIZE,
+                "cursor": cursor,
+                "sortKey": "recency_at",
+                "sortDirection": "desc"
+            }),
+        )
+        .await?;
     Ok(CodexThreadPage {
-        threads,
+        threads: page
+            .get("data")
+            .and_then(Value::as_array)
+            .cloned()
+            .ok_or_else(|| protocol_error("Codex app-server returned an invalid thread list"))?,
         next_cursor: page
             .get("nextCursor")
             .and_then(Value::as_str)
@@ -404,158 +356,46 @@ pub async fn list_threads(cursor: Option<String>) -> Result<CodexThreadPage> {
     })
 }
 
-pub async fn read_thread(thread_id: String) -> Result<Value> {
-    let cwd = appserver_working_directory()?;
-    CodexClient::start(&cwd)
-        .await?
-        .read_thread(&thread_id)
-        .await
-}
-
-fn appserver_working_directory() -> Result<PathBuf> {
-    let cwd = std::env::var_os("USERPROFILE")
-        .or_else(|| std::env::var_os("HOME"))
-        .map(PathBuf::from)
-        .unwrap_or(std::env::current_dir()?);
-    Ok(std::fs::canonicalize(cwd)?)
-}
-
-fn parse_threads(result: Value) -> Result<Vec<CodexThread>> {
-    let threads = result
-        .get("data")
-        .and_then(Value::as_array)
-        .ok_or_else(|| protocol_error("Codex app-server returned an invalid thread list"))?;
-    Ok(threads
-        .iter()
-        .filter_map(|thread| {
-            Some(CodexThread {
-                id: thread.get("id")?.as_str()?.to_owned(),
-                title: thread
-                    .get("title")
-                    .and_then(Value::as_str)
-                    .or_else(|| thread.get("preview").and_then(Value::as_str))
-                    .unwrap_or("Untitled thread")
-                    .lines()
-                    .next()
-                    .unwrap_or("Untitled thread")
-                    .to_owned(),
-                cwd: thread.get("cwd")?.as_str()?.to_owned(),
-                updated_at: thread.get("updatedAt").and_then(Value::as_u64).unwrap_or(0),
-            })
-        })
-        .collect())
-}
-
-fn parse_thread_details(result: Value) -> Result<CodexThreadDetails> {
-    let thread = result
-        .get("thread")
-        .ok_or_else(|| protocol_error("Codex app-server returned no thread"))?;
-    let summary = CodexThread {
-        id: thread
-            .get("id")
-            .and_then(Value::as_str)
-            .ok_or_else(|| protocol_error("Codex app-server returned an invalid thread"))?
-            .to_owned(),
-        title: thread
-            .get("title")
-            .and_then(Value::as_str)
-            .or_else(|| thread.get("preview").and_then(Value::as_str))
-            .unwrap_or("Untitled thread")
-            .lines()
-            .next()
-            .unwrap_or("Untitled thread")
-            .to_owned(),
-        cwd: result
-            .get("cwd")
-            .and_then(Value::as_str)
-            .or_else(|| thread.get("cwd").and_then(Value::as_str))
-            .ok_or_else(|| protocol_error("Codex app-server returned an invalid workspace"))?
-            .to_owned(),
-        updated_at: thread.get("updatedAt").and_then(Value::as_u64).unwrap_or(0),
-    };
-    let initial_page = result.get("initialTurnsPage");
-    let turns = initial_page
-        .and_then(|page| page.get("data"))
-        .or_else(|| thread.get("turns"));
-    let mut messages = parse_turn_messages(turns);
-    if initial_page.is_some() {
-        messages.reverse();
+pub async fn read_thread(state: &CodexState, thread_id: String) -> Result<CodexThreadDetails> {
+    if thread_id.trim().is_empty() {
+        return Err(protocol_error("Thread ID cannot be empty"));
     }
-    Ok(CodexThreadDetails {
-        thread: summary,
-        messages,
-        older_cursor: initial_page
-            .and_then(|page| page.get("nextCursor"))
-            .and_then(Value::as_str)
-            .map(str::to_owned),
-    })
-}
-
-fn parse_turn_messages(turns: Option<&Value>) -> Vec<CodexMessage> {
-    turns
-        .and_then(Value::as_array)
-        .into_iter()
-        .flatten()
-        .flat_map(|turn| {
-            turn.get("items")
-                .and_then(Value::as_array)
-                .into_iter()
-                .flatten()
-        })
-        .filter_map(message_from_item)
-        .collect()
-}
-
-fn parse_message_page(result: Value) -> Result<CodexMessagePage> {
-    let data = result
-        .get("data")
-        .ok_or_else(|| protocol_error("Codex app-server returned an invalid message page"))?;
-    let mut messages = parse_turn_messages(Some(data));
-    messages.reverse();
-    Ok(CodexMessagePage {
-        messages,
-        next_cursor: result
-            .get("nextCursor")
-            .and_then(Value::as_str)
-            .map(str::to_owned),
-    })
-}
-
-#[tauri::command]
-pub async fn codex_threads(state: State<'_, CodexState>) -> Result<Vec<CodexThread>> {
-    parse_threads(state.request("thread/list", json!({ "limit": 50 })).await?)
-}
-
-#[tauri::command]
-pub async fn codex_open_thread(
-    state: State<'_, CodexState>,
-    thread_id: String,
-) -> Result<CodexThreadDetails> {
-    parse_thread_details(
-        state
+    let result = state
+        .request("thread/read", json!({ "threadId": thread_id }))
+        .await?;
+    let mut thread = result
+        .get("thread")
+        .cloned()
+        .ok_or_else(|| protocol_error("Codex app-server returned no thread"))?;
+    let older_cursor = if thread.get("historyMode").and_then(Value::as_str) == Some("paginated") {
+        let page = older_turns(state, thread_id, None).await?;
+        thread["turns"] = json!(page.turns);
+        page.next_cursor
+    } else {
+        let result = state
             .request(
-                "thread/resume",
-                json!({
-                    "threadId": thread_id,
-                    "excludeTurns": true,
-                    "initialTurnsPage": {
-                        "limit": 12,
-                        "sortDirection": "desc",
-                        "itemsView": "summary"
-                    }
-                }),
+                "thread/read",
+                json!({ "threadId": thread_id, "includeTurns": true }),
             )
-            .await?,
-    )
+            .await?;
+        thread = result
+            .get("thread")
+            .cloned()
+            .ok_or_else(|| protocol_error("Codex app-server returned no thread"))?;
+        None
+    };
+    Ok(CodexThreadDetails {
+        thread,
+        older_cursor,
+    })
 }
 
-#[tauri::command]
-pub async fn codex_older_messages(
-    state: State<'_, CodexState>,
+pub async fn older_turns(
+    state: &CodexState,
     thread_id: String,
-    cursor: String,
-) -> Result<CodexMessagePage> {
-    parse_message_page(
+    cursor: Option<String>,
+) -> Result<CodexTurnPage> {
+    parse_turn_page(
         state
             .request(
                 "thread/turns/list",
@@ -564,37 +404,36 @@ pub async fn codex_older_messages(
                     "cursor": cursor,
                     "limit": 12,
                     "sortDirection": "desc",
-                    "itemsView": "summary"
+                    "itemsView": "full"
                 }),
             )
             .await?,
     )
 }
 
-fn message_from_item(item: &Value) -> Option<CodexMessage> {
-    let kind = item.get("type")?.as_str()?;
-    let role = match kind {
-        "userMessage" => "You",
-        "agentMessage" => "Codex",
-        _ => return None,
-    };
-    let text = item
-        .get("text")
-        .and_then(Value::as_str)
-        .map(str::to_owned)
-        .or_else(|| {
-            item.get("content")
-                .and_then(Value::as_array)
-                .map(|content| {
-                    content
-                        .iter()
-                        .filter_map(|part| part.get("text").and_then(Value::as_str))
-                        .collect::<Vec<_>>()
-                        .join("\n")
-                })
-        })
-        .filter(|text| !text.trim().is_empty())?;
-    Some(CodexMessage { role, text })
+fn parse_turn_page(page: Value) -> Result<CodexTurnPage> {
+    let mut turns = page
+        .get("data")
+        .and_then(Value::as_array)
+        .cloned()
+        .ok_or_else(|| protocol_error("Codex app-server returned invalid thread turns"))?;
+    // The server pages newest-first; reverse turns, preserving each turn's item order.
+    turns.reverse();
+    Ok(CodexTurnPage {
+        turns,
+        next_cursor: page
+            .get("nextCursor")
+            .and_then(Value::as_str)
+            .map(str::to_owned),
+    })
+}
+
+fn appserver_working_directory() -> Result<PathBuf> {
+    let cwd = std::env::var_os("USERPROFILE")
+        .or_else(|| std::env::var_os("HOME"))
+        .map(PathBuf::from)
+        .unwrap_or(std::env::current_dir()?);
+    Ok(std::fs::canonicalize(cwd)?)
 }
 
 pub async fn send(
@@ -672,4 +511,47 @@ fn final_agent_message(turn: &Value) -> String {
 
 fn protocol_error(message: impl std::fmt::Display) -> Error {
     std::io::Error::other(message.to_string()).into()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn turn_pages_reverse_turns_without_reversing_messages() {
+        let page = parse_turn_page(json!({
+            "data": [
+                {"id": "newer", "items": [{"type": "userMessage"}, {"type": "agentMessage"}]},
+                {"id": "older", "items": [{"type": "userMessage"}, {"type": "agentMessage"}]}
+            ],
+            "nextCursor": "earlier"
+        }))
+        .unwrap();
+        assert_eq!(page.turns[0]["id"], "older");
+        assert_eq!(page.turns[1]["id"], "newer");
+        assert_eq!(page.turns[0]["items"][0]["type"], "userMessage");
+        assert_eq!(page.next_cursor.as_deref(), Some("earlier"));
+        assert!(parse_turn_page(json!({"data": null})).is_err());
+    }
+
+    #[tokio::test]
+    #[ignore = "requires a signed-in local Codex profile"]
+    async fn local_threads_list_and_read() {
+        let state = CodexState::default();
+        let page = list_threads(&state, None).await.unwrap();
+        assert!(
+            !page.threads.is_empty(),
+            "Expected existing local Codex threads"
+        );
+        let id = page.threads[0]["id"].as_str().unwrap();
+        let details = read_thread(&state, id.to_owned()).await.unwrap();
+        assert_eq!(details.thread["id"], id);
+        let turns = details.thread["turns"].as_array().unwrap();
+        assert!(!turns.is_empty(), "Expected a readable existing transcript");
+        println!(
+            "Listed {} threads; opened {} recent turns",
+            page.threads.len(),
+            turns.len()
+        );
+    }
 }

@@ -33,10 +33,10 @@ export function registerDefaultCommands(): () => void {
     },
     {
       id: 'relay.agents.open',
-      title: 'Agent threads',
-      group: 'Agents',
-      icon: 'bot',
-      keywords: ['codex', 'conversation', 'session'],
+      title: 'Codex threads',
+      group: 'Codex',
+      icon: 'command',
+      keywords: ['agent', 'codex', 'conversation', 'session'],
       run: () => tauri.runCoreCommand({ id: 'open_agents' }),
     },
     {

@@ -94,8 +94,11 @@ pub async fn repositories(
     client.list_repositories(&token.access_token).await
 }
 
-pub fn pull_requests(app: &AppHandle) -> Result<Vec<PullRequestSnapshot>> {
-    Ok(poll::recent_pull_requests(&poll_cache_path(app)))
+pub fn pull_requests(app: &AppHandle, include_closed: bool) -> Result<Vec<PullRequestSnapshot>> {
+    Ok(poll::recent_pull_requests(
+        &poll_cache_path(app),
+        include_closed,
+    ))
 }
 
 /// Starts a Device Flow login: requests a code from GitHub (one blocking

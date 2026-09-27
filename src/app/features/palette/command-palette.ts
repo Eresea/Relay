@@ -15,7 +15,7 @@ import type { Command, CommandMatch } from '@core/command';
 import { CommandRegistry } from '@core/command-registry';
 import { hueVar } from '@core/entity-hue';
 import { search } from '@core/fuzzy';
-import { TauriBridge } from '@core/tauri';
+import { TauriBridge, codexThreadTitle } from '@core/tauri';
 import { RECENT_COMMANDS_KEY, recentCommands, updateRecentCommandIds } from '@core/recent-commands';
 import { Icon } from '@shared/icon';
 import { Kbd } from '@shared/kbd';
@@ -47,6 +47,7 @@ export class CommandPalette {
   private paletteBlurred = false;
 
   private readonly field = viewChild.required<ElementRef<HTMLInputElement>>('field');
+  private readonly retryButton = viewChild<ElementRef<HTMLButtonElement>>('retryButton');
   /** DOM order matches `flat()`'s order, since both are driven by the same
    * `sections()` computed — so `rows()[activeIndex()]` is always the row
    * currently selected. */
@@ -61,6 +62,7 @@ export class CommandPalette {
   protected readonly threadLoadFailed = signal(false);
   private readonly threadCommands = signal<readonly Command[]>([]);
   private threadLoad: Promise<void> | null = null;
+  private threadLoadAt = 0;
 
   protected readonly matches = computed(() => {
     const query = this.query();
@@ -113,6 +115,13 @@ export class CommandPalette {
     void this.tauri
       .onWindowFocusChanged((focused) => {
         if (focused) {
+          if (this.threadLoadFailed()) {
+            if (this.query().trim()) this.retryAgentThreads();
+            else {
+              this.threadLoad = null;
+              this.threadLoadFailed.set(false);
+            }
+          }
           if (this.paletteBlurred) {
             this.focusGeneration++;
             this.paletteBlurred = false;
@@ -135,8 +144,10 @@ export class CommandPalette {
     this.query.set(value);
     this.activeIndex.set(0);
     this.runError.set(false);
-    if (/\b(?:agent|agents|thread|threads|codex|session|conversation)\b/i.test(value)) {
-      void this.loadAgentThreads();
+    if (value.trim()) void this.loadAgentThreads();
+    else if (this.threadLoadFailed()) {
+      this.threadLoad = null;
+      this.threadLoadFailed.set(false);
     }
   }
 
@@ -171,19 +182,26 @@ export class CommandPalette {
         break;
       case 'Enter':
         event.preventDefault();
-        void this.runActive();
+        if (!this.active() && this.threadLoadFailed()) this.retryAgentThreads();
+        else void this.runActive();
         break;
-      case 'Tab':
-        if (this.query().trim()) {
+      case 'Tab': {
+        if (this.threadLoadFailed() && this.retryButton()) {
           event.preventDefault();
-          const active = this.active();
+          this.retryButton()?.nativeElement.focus();
+          break;
+        }
+        const active = this.active();
+        if (active) {
+          event.preventDefault();
           const input = this.field().nativeElement;
-          if (active) {
-            input.value = active.title;
-            this.onQuery(input.value);
-          }
+          input.value = active.title;
+          this.onQuery(input.value);
+        } else {
+          event.preventDefault();
         }
         break;
+      }
       case 'Escape':
         event.preventDefault();
         void this.dismiss();
@@ -220,19 +238,33 @@ export class CommandPalette {
     if (command) await this.run(command);
   }
 
+  protected retryAgentThreads(): void {
+    if (this.loadingThreads()) return;
+    this.threadLoad = null;
+    this.threadLoadFailed.set(false);
+    this.field().nativeElement.focus();
+    void this.loadAgentThreads();
+  }
+
   private loadAgentThreads(): Promise<void> {
-    if (!this.tauri.available || this.threadLoad) return this.threadLoad ?? Promise.resolve();
+    if (!this.tauri.available) return Promise.resolve();
+    if (this.threadLoad) {
+      if (this.loadingThreads() || Date.now() - this.threadLoadAt < 60_000) return this.threadLoad;
+      this.threadLoad = null;
+    }
+    this.threadLoadFailed.set(false);
+    this.threadLoadAt = Date.now();
     this.loadingThreads.set(true);
     this.threadLoad = this.tauri
-      .codexThreads()
-      .then((threads) => {
+      .codexListThreads()
+      .then(({ threads }) => {
         const activeId = this.active()?.id;
         this.threadCommands.set(
           threads.map((thread) => ({
             id: `relay.agents.thread.${thread.id}`,
-            title: `Open ${thread.title}`,
-            group: 'Agent threads',
-            icon: 'message-square',
+            title: `Open ${codexThreadTitle(thread)}`,
+            group: 'Codex',
+            icon: 'file-text',
             keywords: ['thread', 'agent', 'codex', 'conversation', 'session', thread.cwd],
             run: () =>
               this.tauri.runCoreCommand({
@@ -246,7 +278,10 @@ export class CommandPalette {
           if (activeIndex >= 0) this.activeIndex.set(activeIndex);
         }
       })
-      .catch(() => this.threadLoadFailed.set(true))
+      .catch(() => {
+        if (this.query().trim()) this.threadLoadFailed.set(true);
+        else this.threadLoad = null;
+      })
       .finally(() => this.loadingThreads.set(false));
     return this.threadLoad;
   }

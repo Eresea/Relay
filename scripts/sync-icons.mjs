@@ -30,6 +30,8 @@ const ICONS = [
   'eye-off',
   'file-text',
   'folder',
+  'git-branch',
+  'git-pull-request',
   'house',
   'inbox',
   'info',

@@ -278,8 +278,11 @@ pub async fn github_unregister_webhook(app: AppHandle, repository: String) -> Re
 }
 
 #[tauri::command]
-pub fn github_pull_requests(app: AppHandle) -> Result<Vec<PullRequestSnapshot>> {
-    github::pull_requests(&app)
+pub fn github_pull_requests(
+    app: AppHandle,
+    include_closed: Option<bool>,
+) -> Result<Vec<PullRequestSnapshot>> {
+    github::pull_requests(&app, include_closed.unwrap_or(false))
 }
 
 /// Starts a Device Flow login and returns the code to show the user. The
@@ -467,14 +470,30 @@ pub async fn codex_send(
 
 #[cfg(desktop)]
 #[tauri::command]
-pub async fn codex_list_threads(cursor: Option<String>) -> Result<crate::codex::CodexThreadPage> {
-    crate::codex::list_threads(cursor).await
+pub async fn codex_list_threads(
+    state: tauri::State<'_, crate::codex::CodexState>,
+    cursor: Option<String>,
+) -> Result<crate::codex::CodexThreadPage> {
+    crate::codex::list_threads(&state, cursor).await
 }
 
 #[cfg(desktop)]
 #[tauri::command]
-pub async fn codex_read_thread(thread_id: String) -> Result<serde_json::Value> {
-    crate::codex::read_thread(thread_id).await
+pub async fn codex_read_thread(
+    state: tauri::State<'_, crate::codex::CodexState>,
+    thread_id: String,
+) -> Result<crate::codex::CodexThreadDetails> {
+    crate::codex::read_thread(&state, thread_id).await
+}
+
+#[cfg(desktop)]
+#[tauri::command]
+pub async fn codex_older_turns(
+    state: tauri::State<'_, crate::codex::CodexState>,
+    thread_id: String,
+    cursor: String,
+) -> Result<crate::codex::CodexTurnPage> {
+    crate::codex::older_turns(&state, thread_id, Some(cursor)).await
 }
 
 /// Opens a local Git clone in the platform terminal.

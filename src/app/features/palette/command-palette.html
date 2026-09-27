@@ -31,6 +31,7 @@
       type="button"
       class="row"
       role="option"
+      tabindex="-1"
       [id]="'cmd-' + command.id"
       [attr.aria-label]="command.title"
       [class.is-active]="index === activeIndex()"
@@ -61,20 +62,20 @@
         <rl-kbd [keys]="command.shortcut" />
       }
     </button>
-  } @empty {
-    <div class="empty">
-      @if (loadingThreads()) {
-        <p class="title">Searching agent threads…</p>
-      } @else if (threadLoadFailed()) {
-        <p class="title">Could not load agent threads</p>
-        <p class="body">Open Agent Threads to retry.</p>
-      } @else {
-        <p class="title">No matching command</p>
-        <p class="body">Try a shorter word, or press Escape to close.</p>
-      }
-    </div>
   }
 </div>
+@if (flat().length === 0) {
+  <div class="empty" role="status" aria-live="polite">
+    @if (loadingThreads()) {
+      <p class="title">Searching agent threads…</p>
+    } @else if (threadLoadFailed()) {
+      <p class="title">Could not load agent threads</p>
+    } @else {
+      <p class="title">No matching command</p>
+      <p class="body">Try a shorter word, or press Escape to close.</p>
+    }
+  </div>
+}
 
 <div
   class="run-status"
@@ -87,12 +88,26 @@
   } @else if (runError()) {
     <span>Could not complete that action.</span><span>Retry</span><rl-kbd [keys]="['Enter']" />
     <span>Close</span><rl-kbd [keys]="['Esc']" />
+  } @else if (threadLoadFailed()) {
+    <span>Thread search failed</span>
+    <button
+      #retryButton
+      type="button"
+      class="retry"
+      (click)="retryAgentThreads()"
+      (keydown)="$event.stopPropagation()"
+    >
+      Retry
+    </button>
+    <span>Close</span><rl-kbd [keys]="['Esc']" />
   } @else {
-    @if (loadingThreads()) {
+    @if (loadingThreads() && flat().length > 0) {
       <span>Finding threads…</span>
     }
-    <span>Navigate</span><rl-kbd [keys]="['↑', '↓']" /> <span>Complete</span
-    ><rl-kbd [keys]="['Tab']" /> <span>Open</span><rl-kbd [keys]="['Enter']" /> <span>Close</span
-    ><rl-kbd [keys]="['Esc']" />
+    <span>Navigate</span><rl-kbd [keys]="['↑', '↓']" />
+    @if (active()) {
+      <span>Complete</span><rl-kbd [keys]="['Tab']" />
+    }
+    <span>Open</span><rl-kbd [keys]="['Enter']" /> <span>Close</span><rl-kbd [keys]="['Esc']" />
   }
 </div>
