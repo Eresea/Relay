@@ -962,6 +962,35 @@ pub async fn linear_create_comment(
 }
 
 #[tauri::command]
+pub async fn linear_update_comment(
+    app: AppHandle,
+    organization_id: String,
+    comment_id: String,
+    body: String,
+) -> Result<LinearComment> {
+    if organization_id.trim().is_empty()
+        || comment_id.trim().is_empty()
+        || body.trim().is_empty()
+        || body.chars().count() > 10_000
+    {
+        return Err(std::io::Error::other("Comment must be 1–10,000 characters").into());
+    }
+    linear::update_comment(&app, &organization_id, &comment_id, body.trim()).await
+}
+
+#[tauri::command]
+pub async fn linear_delete_comment(
+    app: AppHandle,
+    organization_id: String,
+    comment_id: String,
+) -> Result<()> {
+    if organization_id.trim().is_empty() || comment_id.trim().is_empty() {
+        return Err(std::io::Error::other("Comment is required").into());
+    }
+    linear::delete_comment(&app, &organization_id, &comment_id).await
+}
+
+#[tauri::command]
 pub fn linear_codex_context(
     app: AppHandle,
     organization_id: String,

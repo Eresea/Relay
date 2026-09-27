@@ -12,6 +12,7 @@ import { currentSurface } from '@core/surface';
 import {
   type LinearCodexContext,
   type LinearCodexLink,
+  type LinearComment,
   TauriBridge,
   type LinearConnection,
   type LinearCycle,
@@ -479,8 +480,94 @@ interface LinearIssueDraft {
                 <h3>Comments</h3>
                 @for (comment of detail.comments; track comment.id) {
                   <article class="comment">
-                    <p>{{ comment.body }}</p>
-                    <span class="muted">{{ comment.user?.name ?? 'Linear integration' }}</span>
+                    @if (editingCommentId() === comment.id) {
+                      <form class="detail-form" (submit)="saveComment($event, comment)">
+                        <label>
+                          <span>Edit comment</span>
+                          <textarea
+                            required
+                            maxlength="10000"
+                            rows="3"
+                            [value]="editCommentBody()"
+                            (input)="editCommentBody.set($any($event.target).value)"
+                          ></textarea>
+                        </label>
+                        <div class="issue-actions">
+                          <umbra-button
+                            size="sm"
+                            [disabled]="savingComment() || !editCommentBody().trim()"
+                          >
+                            {{ savingComment() ? 'Saving' : 'Save comment' }}
+                          </umbra-button>
+                          <umbra-button
+                            size="sm"
+                            variant="link"
+                            type="button"
+                            (click)="editingCommentId.set(null)"
+                          >
+                            Cancel
+                          </umbra-button>
+                        </div>
+                      </form>
+                    } @else {
+                      <p>{{ comment.body }}</p>
+                      <span class="muted">
+                        {{ comment.user?.name ?? 'Linear integration' }} ·
+                        {{ projectUpdateDate(comment.createdAt) }}
+                        @if (comment.editedAt) {
+                          · edited
+                        }
+                      </span>
+                      @if (comment.user?.id === selected()?.viewerId) {
+                        @if (confirmDeleteCommentId() === comment.id) {
+                          <div
+                            class="issue-actions"
+                            role="group"
+                            aria-label="Confirm comment deletion"
+                          >
+                            <span class="muted">Delete this comment? This cannot be undone.</span>
+                            <umbra-button
+                              size="sm"
+                              variant="destructive"
+                              type="button"
+                              [disabled]="deletingCommentId() === comment.id"
+                              (click)="deleteComment(comment)"
+                            >
+                              {{
+                                deletingCommentId() === comment.id ? 'Deleting' : 'Confirm delete'
+                              }}
+                            </umbra-button>
+                            <umbra-button
+                              size="sm"
+                              variant="link"
+                              type="button"
+                              (click)="confirmDeleteCommentId.set(null)"
+                            >
+                              Cancel
+                            </umbra-button>
+                          </div>
+                        } @else {
+                          <div class="issue-actions">
+                            <umbra-button
+                              size="sm"
+                              variant="link"
+                              type="button"
+                              (click)="editComment(comment)"
+                            >
+                              Edit
+                            </umbra-button>
+                            <umbra-button
+                              size="sm"
+                              variant="link"
+                              type="button"
+                              (click)="confirmDeleteCommentId.set(comment.id)"
+                            >
+                              Delete
+                            </umbra-button>
+                          </div>
+                        }
+                      }
+                    }
                   </article>
                 } @empty {
                   <p class="hint">No comments yet.</p>
@@ -2128,6 +2215,11 @@ export class Linear {
   protected readonly newEstimate = signal('');
   protected readonly newSubIssueTitle = signal('');
   protected readonly newComment = signal('');
+  protected readonly editingCommentId = signal<string | null>(null);
+  protected readonly editCommentBody = signal('');
+  protected readonly savingComment = signal(false);
+  protected readonly deletingCommentId = signal<string | null>(null);
+  protected readonly confirmDeleteCommentId = signal<string | null>(null);
   protected readonly editingMilestoneId = signal<string | null>(null);
   protected readonly editMilestoneName = signal('');
   protected readonly editMilestoneDescription = signal('');
@@ -2552,7 +2644,73 @@ export class Linear {
     this.editingIssueDetailsId.set(null);
     this.codexContext.set(null);
     this.newComment.set('');
+    this.editingCommentId.set(null);
+    this.confirmDeleteCommentId.set(null);
     this.newSubIssueTitle.set('');
+  }
+
+  protected editComment(comment: LinearComment): void {
+    this.editingCommentId.set(comment.id);
+    this.editCommentBody.set(comment.body);
+    this.confirmDeleteCommentId.set(null);
+  }
+
+  protected async saveComment(event: Event, current: LinearComment): Promise<void> {
+    event.preventDefault();
+    const connection = this.selected();
+    const detail = this.issueDetail();
+    const body = this.editCommentBody().trim();
+    if (!connection || !detail || !body || this.savingComment()) return;
+    this.savingComment.set(true);
+    this.error.set(null);
+    try {
+      const comment = await this.tauri.linearUpdateComment(
+        connection.organizationId,
+        current.id,
+        body,
+      );
+      this.issueDetail.update((item) =>
+        item?.issue.id === detail.issue.id
+          ? {
+              ...item,
+              comments: item.comments.map((entry) => (entry.id === comment.id ? comment : entry)),
+            }
+          : item,
+      );
+      this.editingCommentId.set(null);
+    } catch (error) {
+      this.error.set(error instanceof Error ? error.message : String(error));
+    } finally {
+      this.savingComment.set(false);
+    }
+  }
+
+  protected async deleteComment(comment: LinearComment): Promise<void> {
+    const connection = this.selected();
+    const detail = this.issueDetail();
+    if (
+      !connection ||
+      !detail ||
+      this.confirmDeleteCommentId() !== comment.id ||
+      this.deletingCommentId()
+    ) {
+      return;
+    }
+    this.deletingCommentId.set(comment.id);
+    this.error.set(null);
+    try {
+      await this.tauri.linearDeleteComment(connection.organizationId, comment.id);
+      this.issueDetail.update((item) =>
+        item?.issue.id === detail.issue.id
+          ? { ...item, comments: item.comments.filter((entry) => entry.id !== comment.id) }
+          : item,
+      );
+      this.confirmDeleteCommentId.set(null);
+    } catch (error) {
+      this.error.set(error instanceof Error ? error.message : String(error));
+    } finally {
+      this.deletingCommentId.set(null);
+    }
   }
 
   protected async createComment(event: Event, issue: LinearIssue): Promise<void> {

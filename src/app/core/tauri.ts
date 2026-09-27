@@ -965,6 +965,24 @@ export class TauriBridge {
     return comment;
   }
 
+  async linearUpdateComment(
+    organizationId: string,
+    commentId: string,
+    body: string,
+  ): Promise<LinearComment> {
+    const comment = await this.invoke<LinearComment>('linear_update_comment', {
+      organizationId,
+      commentId,
+      body,
+    });
+    if (!comment) throw new Error('Linear returned no updated comment.');
+    return comment;
+  }
+
+  async linearDeleteComment(organizationId: string, commentId: string): Promise<void> {
+    await this.invoke('linear_delete_comment', { organizationId, commentId });
+  }
+
   async linearCodexContext(organizationId: string, issueId = ''): Promise<LinearCodexContext> {
     const context = await this.invoke<LinearCodexContext>('linear_codex_context', {
       organizationId,
@@ -1582,6 +1600,7 @@ export interface LinearComment {
   readonly id: string;
   readonly body: string;
   readonly createdAt: string;
+  readonly editedAt: string | null;
   readonly user: { readonly id: string; readonly name: string } | null;
 }
 

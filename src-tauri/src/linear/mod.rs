@@ -610,6 +610,23 @@ pub async fn create_comment(
     api::create_comment(&access_token(app, organization_id).await?, issue_id, body).await
 }
 
+pub async fn update_comment(
+    app: &AppHandle,
+    organization_id: &str,
+    comment_id: &str,
+    body: &str,
+) -> Result<LinearComment> {
+    api::update_comment(&access_token(app, organization_id).await?, comment_id, body).await
+}
+
+pub async fn delete_comment(
+    app: &AppHandle,
+    organization_id: &str,
+    comment_id: &str,
+) -> Result<()> {
+    api::delete_comment(&access_token(app, organization_id).await?, comment_id).await
+}
+
 pub async fn update_issue(
     app: &AppHandle,
     organization_id: &str,

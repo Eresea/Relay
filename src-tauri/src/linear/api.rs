@@ -96,6 +96,8 @@ pub struct LinearComment {
     pub id: String,
     pub body: String,
     pub created_at: String,
+    #[serde(default)]
+    pub edited_at: Option<String>,
     pub user: Option<Person>,
 }
 
@@ -1198,7 +1200,7 @@ pub async fn issue_detail(token: &str, issue_id: &str) -> Result<IssueDetail> {
     }
     let data: Data = query(
         token,
-        "query RelayIssueDetail($id: String!) { issue(id: $id) { id identifier title description url priority estimate dueDate updatedAt state { id name type } assignee { id name } project { id name } projectMilestone { id name } cycle { id name number } labels { nodes { id name color } } team { id name key } children(first: 50) { nodes { id identifier title description url priority updatedAt state { id name type } assignee { id name } project { id name } cycle { id name number } labels { nodes { id name color } } team { id name key } } } comments(first: 50) { nodes { id body createdAt user { id name } } } } }",
+        "query RelayIssueDetail($id: String!) { issue(id: $id) { id identifier title description url priority estimate dueDate updatedAt state { id name type } assignee { id name } project { id name } projectMilestone { id name } cycle { id name number } labels { nodes { id name color } } team { id name key } children(first: 50) { nodes { id identifier title description url priority updatedAt state { id name type } assignee { id name } project { id name } cycle { id name number } labels { nodes { id name color } } team { id name key } } } comments(first: 50) { nodes { id body createdAt editedAt user { id name } } } } }",
         json!({ "id": issue_id }),
     )
     .await?;
@@ -1217,11 +1219,45 @@ pub async fn create_comment(token: &str, issue_id: &str, body: &str) -> Result<L
     }
     let data: Data = query(
         token,
-        "mutation RelayCommentCreate($input: CommentCreateInput!) { commentCreate(input: $input) { success comment { id body createdAt user { id name } } } }",
+        "mutation RelayCommentCreate($input: CommentCreateInput!) { commentCreate(input: $input) { success comment { id body createdAt editedAt user { id name } } } }",
         json!({ "input": { "issueId": issue_id, "body": body } }),
     )
     .await?;
     data.result.into_value("Linear did not create the comment")
+}
+
+pub async fn update_comment(token: &str, comment_id: &str, body: &str) -> Result<LinearComment> {
+    #[derive(Deserialize)]
+    struct Data {
+        #[serde(rename = "commentUpdate")]
+        result: CommentMutation,
+    }
+    let data: Data = query(
+        token,
+        "mutation RelayCommentUpdate($id: String!, $input: CommentUpdateInput!) { commentUpdate(id: $id, input: $input) { success comment { id body createdAt editedAt user { id name } } } }",
+        json!({ "id": comment_id, "input": { "body": body } }),
+    )
+    .await?;
+    data.result.into_value("Linear did not update the comment")
+}
+
+pub async fn delete_comment(token: &str, comment_id: &str) -> Result<()> {
+    #[derive(Deserialize)]
+    struct Data {
+        #[serde(rename = "commentDelete")]
+        result: DeleteMutation,
+    }
+    let data: Data = query(
+        token,
+        "mutation RelayCommentDelete($id: String!) { commentDelete(id: $id) { success } }",
+        json!({ "id": comment_id }),
+    )
+    .await?;
+    if data.result.success {
+        Ok(())
+    } else {
+        Err(Error::LinearApi("Linear did not delete the comment".into()))
+    }
 }
 
 pub async fn update_issue(
@@ -1661,6 +1697,27 @@ mod tests {
         assert_eq!(update.id, "update-1");
         assert_eq!(update.health, "onTrack");
         assert_eq!(update.user.name, "Alex");
+    }
+
+    #[test]
+    fn comment_mutation_decodes_edit_time_and_author() {
+        let mutation: CommentMutation = serde_json::from_value(json!({
+            "success": true,
+            "comment": {
+                "id": "comment-1",
+                "body": "Updated details.",
+                "createdAt": "2026-09-27T20:00:00.000Z",
+                "editedAt": "2026-09-27T20:05:00.000Z",
+                "user": { "id": "user-1", "name": "Alex" }
+            }
+        }))
+        .unwrap();
+        let comment = mutation.into_value("failed").unwrap();
+        assert_eq!(
+            comment.edited_at.as_deref(),
+            Some("2026-09-27T20:05:00.000Z")
+        );
+        assert_eq!(comment.user.unwrap().id, "user-1");
     }
 
     #[test]
