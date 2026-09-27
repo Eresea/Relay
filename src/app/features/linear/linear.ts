@@ -197,6 +197,35 @@ import { UmbraButtonComponent } from '@umbra/components/umbra-button/umbra-butto
                 <section class="detail-section" aria-label="Codex work">
                   <h3>Codex</h3>
                   @if (detail.issue.project && isCodexAllowed(detail.issue)) {
+                    @if (codexRequest()?.issue.id === detail.issue.id) {
+                      <div class="codex-confirm" role="group" aria-label="Confirm Codex handoff">
+                        <p>
+                          {{ codexRequest()?.continueThread ? 'Continue' : 'Start' }} a Codex thread
+                          for {{ detail.issue.identifier }} in {{ selectedCodexWorkspace()?.name }}?
+                        </p>
+                        <p class="hint">
+                          Codex can change files in this local repository. Relay will post its final
+                          report as an issue comment and leave the issue in review.
+                        </p>
+                        <div class="issue-actions">
+                          <umbra-button
+                            size="sm"
+                            [disabled]="codexPending()"
+                            (click)="confirmCodexRequest()"
+                          >
+                            {{ codexPending() ? 'Working in Codex' : 'Confirm and run' }}
+                          </umbra-button>
+                          <umbra-button
+                            size="sm"
+                            variant="outline"
+                            [disabled]="codexPending()"
+                            (click)="codexRequest.set(null)"
+                          >
+                            Cancel
+                          </umbra-button>
+                        </div>
+                      </div>
+                    }
                     <label>
                       <span>Local code workspace</span>
                       <select
@@ -219,7 +248,7 @@ import { UmbraButtonComponent } from '@umbra/components/umbra-button/umbra-butto
                       <umbra-button
                         size="sm"
                         [disabled]="codexPending() || !selectedCodexWorkspacePath()"
-                        (click)="runIssueInCodex(detail.issue, false)"
+                        (click)="requestCodex(detail.issue, false)"
                       >
                         {{ codexPending() ? 'Working in Codex' : 'Start new Codex thread' }}
                       </umbra-button>
@@ -228,7 +257,7 @@ import { UmbraButtonComponent } from '@umbra/components/umbra-button/umbra-butto
                           size="sm"
                           variant="outline"
                           [disabled]="codexPending() || !selectedCodexWorkspacePath()"
-                          (click)="runIssueInCodex(detail.issue, true)"
+                          (click)="requestCodex(detail.issue, true)"
                         >
                           Continue Codex
                         </umbra-button>
@@ -1136,6 +1165,10 @@ export class Linear {
   protected readonly issues = signal<readonly LinearIssue[]>([]);
   protected readonly issueDetail = signal<LinearIssueDetail | null>(null);
   protected readonly codexContext = signal<LinearCodexContext | null>(null);
+  protected readonly codexRequest = signal<{
+    readonly issue: LinearIssue;
+    readonly continueThread: boolean;
+  } | null>(null);
   protected readonly codexWorkspaces = signal<readonly WorkspaceSummary[]>([]);
   protected readonly selectedCodexWorkspacePath = signal('');
   protected readonly selectedCodexProjectRepo = signal('');
@@ -1265,6 +1298,7 @@ export class Linear {
     const connection = this.selected();
     if (!connection) return;
     this.issueDetail.set(null);
+    this.codexRequest.set(null);
     this.error.set(null);
     try {
       const detail = await this.tauri.linearIssueDetail(connection.organizationId, issue.id);
@@ -1315,6 +1349,25 @@ export class Linear {
 
   protected selectCodexWorkspace(path: string): void {
     this.selectedCodexWorkspacePath.set(path);
+  }
+
+  protected selectedCodexWorkspace(): WorkspaceSummary | null {
+    return (
+      this.codexWorkspaces().find(
+        (workspace) => workspace.path === this.selectedCodexWorkspacePath(),
+      ) ?? null
+    );
+  }
+
+  protected requestCodex(issue: LinearIssue, continueThread: boolean): void {
+    this.codexRequest.set({ issue, continueThread });
+  }
+
+  protected async confirmCodexRequest(): Promise<void> {
+    const request = this.codexRequest();
+    if (!request || this.codexPending()) return;
+    this.codexRequest.set(null);
+    await this.runIssueInCodex(request.issue, request.continueThread);
   }
 
   protected async setCodexProjectAllowed(projectId: string, allowed: boolean): Promise<void> {
