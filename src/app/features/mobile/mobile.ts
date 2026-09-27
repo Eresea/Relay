@@ -101,6 +101,7 @@ const MOBILE_MODULES: readonly MobileModule[] = [
     >
       <header class="mobile-header">
         <button
+          #railToggleButton
           type="button"
           class="header-button"
           (click)="toggleRail()"
@@ -151,18 +152,23 @@ const MOBILE_MODULES: readonly MobileModule[] = [
         aria-label="Close navigation"
       ></button>
       <aside
+        #rail
         id="mobile-rail"
         class="mobile-rail"
         [class.open]="railOpen()"
         [class.dragging]="railGestureActive()"
         [style.transform]="'translate3d(' + (railProgress() - 1) * 100 + '%, 0, 0)'"
         [attr.aria-hidden]="!railOpen()"
+        [attr.aria-modal]="railOpen() ? 'true' : null"
         [attr.inert]="railOpen() ? null : ''"
+        (transitionend)="onRailTransitionEnd($event)"
+        role="dialog"
         aria-label="Relay navigation"
       >
         <div class="rail-heading">
           <span class="eyebrow">Go to</span>
           <button
+            #railCloseButton
             type="button"
             class="rail-close"
             (click)="closeRail()"
@@ -220,10 +226,11 @@ const MOBILE_MODULES: readonly MobileModule[] = [
                 <span class="rail-badge">{{ unreadCount() }}</span>
               }
             </button>
-          } @empty {
-            <p class="module-empty">No matching module</p>
           }
         </div>
+        @if (moduleMatches().length === 0) {
+          <p class="module-empty" role="status" aria-live="polite">No matching module</p>
+        }
       </aside>
 
       <main class="mobile-content">
@@ -906,6 +913,9 @@ export class Mobile {
   protected readonly theme = inject(ThemeService);
   private readonly destroyRef = inject(DestroyRef);
   private readonly moduleSearch = viewChild<ElementRef<HTMLInputElement>>('moduleSearch');
+  private readonly rail = viewChild<ElementRef<HTMLElement>>('rail');
+  private readonly railToggleButton = viewChild<ElementRef<HTMLButtonElement>>('railToggleButton');
+  private readonly railCloseButton = viewChild<ElementRef<HTMLButtonElement>>('railCloseButton');
   private readonly pageTitle = viewChild<ElementRef<HTMLHeadingElement>>('pageTitle');
 
   private railGesture: {
@@ -926,7 +936,6 @@ export class Mobile {
   private suppressClickFor: string | null = null;
 
   protected readonly tab = signal<MobileTab>('dashboard');
-  protected readonly focusModuleSearch = signal(false);
   protected readonly focusModuleHeading = signal(false);
   protected readonly moduleQuery = signal('');
   protected readonly activeModuleIndex = signal(0);
@@ -973,7 +982,7 @@ export class Mobile {
       if (this.focusModuleHeading()) {
         this.pageTitle()?.nativeElement.focus();
         this.focusModuleHeading.set(false);
-      } else if (this.railOpen() && this.focusModuleSearch()) {
+      } else if (this.railOpen()) {
         this.moduleSearch()?.nativeElement.focus();
       }
     });
@@ -1059,6 +1068,12 @@ export class Mobile {
     this.setRailOpen(false);
   }
 
+  protected onRailTransitionEnd(event: TransitionEvent): void {
+    if (event.propertyName === 'transform' && this.railOpen()) {
+      this.moduleSearch()?.nativeElement.focus();
+    }
+  }
+
   protected selectTab(tab: MobileTab): void {
     this.tab.set(tab);
     this.closeRail();
@@ -1072,7 +1087,6 @@ export class Mobile {
         MOBILE_MODULES.findIndex((module) => module.tab === this.tab()),
       ),
     );
-    this.focusModuleSearch.set(true);
     this.setRailOpen(true);
   }
 
@@ -1114,8 +1128,29 @@ export class Mobile {
       return;
     }
 
+    if (event.key === 'Escape') {
+      event.preventDefault();
+      this.closeRail();
+      return;
+    }
+
+    const input = this.moduleSearch()?.nativeElement;
+    if (event.key === 'Tab' && event.target !== input) {
+      const panel = this.rail()?.nativeElement;
+      const focusable = panel?.querySelectorAll<HTMLElement>(
+        'button:not([disabled]), input:not([disabled])',
+      );
+      const first = focusable?.[0] ?? input;
+      const last = focusable?.[focusable.length - 1] ?? input;
+      const outsidePanel = !panel?.contains(event.target as Node);
+      if (outsidePanel || (event.shiftKey ? event.target === first : event.target === last)) {
+        event.preventDefault();
+        (event.shiftKey ? last : first)?.focus();
+      }
+      return;
+    }
+
     if (event.target !== this.moduleSearch()?.nativeElement) {
-      if (event.key === 'Escape') this.closeRail();
       return;
     }
 
@@ -1137,18 +1172,17 @@ export class Mobile {
         break;
       case 'Tab':
         if (this.moduleQuery().trim()) {
-          event.preventDefault();
           const active = this.activeModule();
           const input = this.moduleSearch()?.nativeElement;
           if (active && input) {
+            event.preventDefault();
             input.value = active.title;
             this.onModuleQuery(input.value);
+          } else {
+            event.preventDefault();
+            this.railCloseButton()?.nativeElement.focus();
           }
         }
-        break;
-      case 'Escape':
-        event.preventDefault();
-        this.closeRail();
         break;
     }
   }
@@ -1227,14 +1261,17 @@ export class Mobile {
   }
 
   private setRailOpen(open: boolean): void {
+    const wasOpen = this.railOpen();
     this.railGesture = null;
     this.railGestureActive.set(false);
     this.railOpen.set(open);
     this.railProgress.set(open ? 1 : 0);
-    if (!open) {
-      this.focusModuleSearch.set(false);
-      this.moduleQuery.set('');
-      this.activeModuleIndex.set(0);
+    if (open) return;
+
+    this.moduleQuery.set('');
+    this.activeModuleIndex.set(0);
+    if (wasOpen) {
+      this.railToggleButton()?.nativeElement.focus();
     }
   }
 
