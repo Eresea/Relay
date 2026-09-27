@@ -1,4 +1,11 @@
-import { ChangeDetectionStrategy, Component, DestroyRef, inject, signal } from '@angular/core';
+import {
+  ChangeDetectionStrategy,
+  Component,
+  DestroyRef,
+  effect,
+  inject,
+  signal,
+} from '@angular/core';
 
 import { NexusAccount } from '@core/nexus-account';
 import { TauriBridge, type LinearConnection } from '@core/tauri';
@@ -106,7 +113,10 @@ export class LinearSettings {
 
   constructor() {
     void this.tauri.linearOauthConfigured().then((value) => this.oauthConfigured.set(value));
-    void this.refresh();
+    effect(() => {
+      this.nexus.status();
+      void this.refresh();
+    });
     void this.tauri
       .onLinearAuth((event) => {
         this.pending.set(false);
