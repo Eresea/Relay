@@ -371,8 +371,14 @@ pub async fn initiatives(
     app: &AppHandle,
     organization_id: &str,
     include_archived: bool,
+    include_archived_updates: bool,
 ) -> Result<Vec<Initiative>> {
-    api::initiatives(&access_token(app, organization_id).await?, include_archived).await
+    api::initiatives(
+        &access_token(app, organization_id).await?,
+        include_archived,
+        include_archived_updates,
+    )
+    .await
 }
 
 pub async fn create_initiative_update(
@@ -389,6 +395,38 @@ pub async fn create_initiative_update(
         health,
     )
     .await
+}
+
+pub async fn update_initiative_update(
+    app: &AppHandle,
+    organization_id: &str,
+    update_id: &str,
+    body: &str,
+    health: &str,
+) -> Result<InitiativeUpdate> {
+    api::update_initiative_update(
+        &access_token(app, organization_id).await?,
+        update_id,
+        body,
+        health,
+    )
+    .await
+}
+
+pub async fn archive_initiative_update(
+    app: &AppHandle,
+    organization_id: &str,
+    update_id: &str,
+) -> Result<()> {
+    api::archive_initiative_update(&access_token(app, organization_id).await?, update_id).await
+}
+
+pub async fn unarchive_initiative_update(
+    app: &AppHandle,
+    organization_id: &str,
+    update_id: &str,
+) -> Result<()> {
+    api::unarchive_initiative_update(&access_token(app, organization_id).await?, update_id).await
 }
 
 pub async fn archive_initiative(

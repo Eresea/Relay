@@ -1369,6 +1369,18 @@ interface LinearIssueDraft {
                 >
                   {{ includeArchivedInitiatives() ? 'Hide archived' : 'Include archived' }}
                 </umbra-button>
+                <umbra-button
+                  size="sm"
+                  variant="link"
+                  type="button"
+                  (click)="toggleArchivedInitiativeUpdates()"
+                >
+                  {{
+                    includeArchivedInitiativeUpdates()
+                      ? 'Hide archived updates'
+                      : 'Include archived updates'
+                  }}
+                </umbra-button>
               </div>
               <form class="create-form" (submit)="createInitiative($event)">
                 <label>
@@ -1445,7 +1457,7 @@ interface LinearIssueDraft {
                     @if (initiative.updates.length) {
                       <div class="project-updates" aria-label="Initiative status updates">
                         @for (update of initiative.updates; track update.id) {
-                          @if (!update.archivedAt) {
+                          @if (includeArchivedInitiativeUpdates() || !update.archivedAt) {
                             <article class="project-update">
                               <div>
                                 <strong>{{ projectHealthLabel(update.health) }}</strong>
@@ -1455,7 +1467,99 @@ interface LinearIssueDraft {
                                 >
                               </div>
                               <p>{{ update.body }}</p>
+                              @if (update.archivedAt) {
+                                <span class="muted">Archived</span>
+                              }
+                              @if (!initiative.archivedAt) {
+                                @if (update.archivedAt) {
+                                  <umbra-button
+                                    size="sm"
+                                    variant="link"
+                                    type="button"
+                                    [disabled]="busyInitiativeUpdateId() === update.id"
+                                    (click)="setInitiativeUpdateArchived(update, false)"
+                                  >
+                                    {{
+                                      busyInitiativeUpdateId() === update.id
+                                        ? 'Restoring'
+                                        : 'Restore'
+                                    }}
+                                  </umbra-button>
+                                } @else {
+                                  <umbra-button
+                                    size="sm"
+                                    variant="link"
+                                    type="button"
+                                    (click)="editInitiativeUpdate(update)"
+                                  >
+                                    Edit update
+                                  </umbra-button>
+                                  <umbra-button
+                                    size="sm"
+                                    variant="link"
+                                    type="button"
+                                    [disabled]="busyInitiativeUpdateId() === update.id"
+                                    (click)="setInitiativeUpdateArchived(update, true)"
+                                  >
+                                    {{
+                                      busyInitiativeUpdateId() === update.id
+                                        ? 'Archiving'
+                                        : 'Archive'
+                                    }}
+                                  </umbra-button>
+                                }
+                              }
                             </article>
+                            @if (editingInitiativeUpdateId() === update.id) {
+                              <form
+                                class="project-edit"
+                                (submit)="saveInitiativeUpdate($event, update)"
+                              >
+                                <label>
+                                  <span>Health</span>
+                                  <select
+                                    [value]="editInitiativeUpdateHealth()"
+                                    (change)="
+                                      editInitiativeUpdateHealth.set($any($event.target).value)
+                                    "
+                                  >
+                                    <option value="onTrack">On track</option>
+                                    <option value="atRisk">At risk</option>
+                                    <option value="offTrack">Off track</option>
+                                  </select>
+                                </label>
+                                <label>
+                                  <span>Update</span>
+                                  <textarea
+                                    required
+                                    maxlength="10000"
+                                    rows="3"
+                                    [value]="editInitiativeUpdateBody()"
+                                    (input)="
+                                      editInitiativeUpdateBody.set($any($event.target).value)
+                                    "
+                                  ></textarea>
+                                </label>
+                                <div class="issue-actions">
+                                  <umbra-button
+                                    size="sm"
+                                    [disabled]="
+                                      savingInitiativeUpdate() || !editInitiativeUpdateBody().trim()
+                                    "
+                                  >
+                                    {{ savingInitiativeUpdate() ? 'Saving' : 'Save update' }}
+                                  </umbra-button>
+                                  <umbra-button
+                                    size="sm"
+                                    variant="link"
+                                    type="button"
+                                    (click)="editingInitiativeUpdateId.set(null)"
+                                  >
+                                    Cancel
+                                  </umbra-button>
+                                </div>
+                              </form>
+                            }
                           }
                         }
                       </div>
@@ -1930,6 +2034,12 @@ export class Linear {
   protected readonly initiativeUpdateBody = signal('');
   protected readonly initiativeUpdateHealth = signal<LinearProjectHealth>('onTrack');
   protected readonly creatingInitiativeUpdate = signal(false);
+  protected readonly editingInitiativeUpdateId = signal<string | null>(null);
+  protected readonly editInitiativeUpdateBody = signal('');
+  protected readonly editInitiativeUpdateHealth = signal<LinearProjectHealth>('onTrack');
+  protected readonly savingInitiativeUpdate = signal(false);
+  protected readonly busyInitiativeUpdateId = signal<string | null>(null);
+  protected readonly includeArchivedInitiativeUpdates = signal(false);
   protected readonly includeArchivedInitiatives = signal(false);
   protected readonly busyInitiativeId = signal<string | null>(null);
   protected readonly newInitiativeName = signal('');
@@ -2901,6 +3011,7 @@ export class Linear {
         await this.tauri.linearInitiatives(
           connection.organizationId,
           this.includeArchivedInitiatives(),
+          this.includeArchivedInitiativeUpdates(),
         ),
       );
     } catch (error) {
@@ -2917,6 +3028,71 @@ export class Linear {
     this.initiativeUpdateId.set(initiative.id);
     this.initiativeUpdateBody.set('');
     this.initiativeUpdateHealth.set('onTrack');
+  }
+
+  protected toggleArchivedInitiativeUpdates(): void {
+    this.includeArchivedInitiativeUpdates.update((includeArchived) => !includeArchived);
+    void this.loadInitiatives();
+  }
+
+  protected editInitiativeUpdate(update: LinearInitiativeUpdate): void {
+    this.editingInitiativeUpdateId.set(update.id);
+    this.editInitiativeUpdateBody.set(update.body);
+    this.editInitiativeUpdateHealth.set(update.health);
+  }
+
+  protected async setInitiativeUpdateArchived(
+    update: LinearInitiativeUpdate,
+    archived: boolean,
+  ): Promise<void> {
+    const connection = this.selected();
+    if (!connection || this.busyInitiativeUpdateId()) return;
+    this.busyInitiativeUpdateId.set(update.id);
+    this.error.set(null);
+    try {
+      if (archived) {
+        await this.tauri.linearArchiveInitiativeUpdate(connection.organizationId, update.id);
+      } else {
+        await this.tauri.linearUnarchiveInitiativeUpdate(connection.organizationId, update.id);
+      }
+      this.editingInitiativeUpdateId.set(null);
+      await this.loadInitiatives();
+    } catch (error) {
+      this.error.set(error instanceof Error ? error.message : String(error));
+    } finally {
+      this.busyInitiativeUpdateId.set(null);
+    }
+  }
+
+  protected async saveInitiativeUpdate(
+    event: Event,
+    current: LinearInitiativeUpdate,
+  ): Promise<void> {
+    event.preventDefault();
+    const connection = this.selected();
+    const body = this.editInitiativeUpdateBody().trim();
+    if (!connection || !body || this.savingInitiativeUpdate()) return;
+    this.savingInitiativeUpdate.set(true);
+    this.error.set(null);
+    try {
+      const update = await this.tauri.linearUpdateInitiativeUpdate(
+        connection.organizationId,
+        current.id,
+        body,
+        this.editInitiativeUpdateHealth(),
+      );
+      this.initiatives.update((items) =>
+        items.map((initiative) => ({
+          ...initiative,
+          updates: initiative.updates.map((item) => (item.id === update.id ? update : item)),
+        })),
+      );
+      this.editingInitiativeUpdateId.set(null);
+    } catch (error) {
+      this.error.set(error instanceof Error ? error.message : String(error));
+    } finally {
+      this.savingInitiativeUpdate.set(false);
+    }
   }
 
   protected async createInitiativeUpdate(

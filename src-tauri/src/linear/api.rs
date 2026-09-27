@@ -711,7 +711,11 @@ pub async fn update_milestone(
         .into_value("Linear did not update the milestone")
 }
 
-pub async fn initiatives(token: &str, include_archived: bool) -> Result<Vec<Initiative>> {
+pub async fn initiatives(
+    token: &str,
+    include_archived: bool,
+    include_archived_updates: bool,
+) -> Result<Vec<Initiative>> {
     #[derive(Deserialize)]
     struct InitiativeNode {
         id: String,
@@ -742,8 +746,8 @@ pub async fn initiatives(token: &str, include_archived: bool) -> Result<Vec<Init
     }
     let data = query::<Data>(
         token,
-        "query RelayInitiatives($includeArchived: Boolean!) { initiatives(first: 100, includeArchived: $includeArchived) { nodes { id name description targetDate archivedAt initiativeUpdates(first: 50, includeArchived: $includeArchived) { nodes { id body health createdAt archivedAt user { id name } } } } } initiativeToProjects(first: 100, includeArchived: $includeArchived) { nodes { id initiative { id } project { id name } } } }",
-        json!({ "includeArchived": include_archived }),
+        "query RelayInitiatives($includeArchived: Boolean!, $includeArchivedUpdates: Boolean!) { initiatives(first: 100, includeArchived: $includeArchived) { nodes { id name description targetDate archivedAt initiativeUpdates(first: 50, includeArchived: $includeArchivedUpdates) { nodes { id body health createdAt archivedAt user { id name } } } } } initiativeToProjects(first: 100, includeArchived: $includeArchived) { nodes { id initiative { id } project { id name } } } }",
+        json!({ "includeArchived": include_archived, "includeArchivedUpdates": include_archived_updates }),
     )
     .await?;
     let mut projects = HashMap::<String, Vec<InitiativeProject>>::new();
@@ -791,6 +795,69 @@ pub async fn create_initiative_update(
     .await?;
     data.result
         .into_value("Linear did not create the initiative update")
+}
+
+pub async fn update_initiative_update(
+    token: &str,
+    update_id: &str,
+    body: &str,
+    health: &str,
+) -> Result<InitiativeUpdate> {
+    #[derive(Deserialize)]
+    struct Data {
+        #[serde(rename = "initiativeUpdateUpdate")]
+        result: InitiativeUpdateMutation,
+    }
+    let data: Data = query(
+        token,
+        "mutation RelayInitiativeUpdateEdit($id: String!, $input: InitiativeUpdateUpdateInput!) { initiativeUpdateUpdate(id: $id, input: $input) { success initiativeUpdate { id body health createdAt archivedAt user { id name } } } }",
+        json!({ "id": update_id, "input": { "body": body, "health": health } }),
+    )
+    .await?;
+    data.result
+        .into_value("Linear did not update the initiative update")
+}
+
+pub async fn archive_initiative_update(token: &str, update_id: &str) -> Result<()> {
+    #[derive(Deserialize)]
+    struct Data {
+        #[serde(rename = "initiativeUpdateArchive")]
+        result: DeleteMutation,
+    }
+    let data: Data = query(
+        token,
+        "mutation RelayInitiativeUpdateArchive($id: String!) { initiativeUpdateArchive(id: $id) { success } }",
+        json!({ "id": update_id }),
+    )
+    .await?;
+    if data.result.success {
+        Ok(())
+    } else {
+        Err(Error::LinearApi(
+            "Linear did not archive the initiative update".into(),
+        ))
+    }
+}
+
+pub async fn unarchive_initiative_update(token: &str, update_id: &str) -> Result<()> {
+    #[derive(Deserialize)]
+    struct Data {
+        #[serde(rename = "initiativeUpdateUnarchive")]
+        result: DeleteMutation,
+    }
+    let data: Data = query(
+        token,
+        "mutation RelayInitiativeUpdateUnarchive($id: String!) { initiativeUpdateUnarchive(id: $id) { success } }",
+        json!({ "id": update_id }),
+    )
+    .await?;
+    if data.result.success {
+        Ok(())
+    } else {
+        Err(Error::LinearApi(
+            "Linear did not restore the initiative update".into(),
+        ))
+    }
 }
 
 pub async fn archive_initiative(token: &str, initiative_id: &str) -> Result<()> {

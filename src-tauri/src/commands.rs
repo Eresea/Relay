@@ -627,8 +627,15 @@ pub async fn linear_initiatives(
     app: AppHandle,
     organization_id: String,
     include_archived: Option<bool>,
+    include_archived_updates: Option<bool>,
 ) -> Result<Vec<Initiative>> {
-    linear::initiatives(&app, &organization_id, include_archived.unwrap_or(false)).await
+    linear::initiatives(
+        &app,
+        &organization_id,
+        include_archived.unwrap_or(false),
+        include_archived_updates.unwrap_or(false),
+    )
+    .await
 }
 
 #[tauri::command]
@@ -694,6 +701,49 @@ pub async fn linear_create_initiative(
         target_date.as_deref(),
     )
     .await
+}
+
+#[tauri::command]
+pub async fn linear_update_initiative_update(
+    app: AppHandle,
+    organization_id: String,
+    update_id: String,
+    body: String,
+    health: String,
+) -> Result<InitiativeUpdate> {
+    if organization_id.trim().is_empty()
+        || update_id.trim().is_empty()
+        || body.trim().is_empty()
+        || body.chars().count() > 10_000
+        || !matches!(health.as_str(), "onTrack" | "atRisk" | "offTrack")
+    {
+        return Err(std::io::Error::other("A valid initiative update is required").into());
+    }
+    linear::update_initiative_update(&app, &organization_id, &update_id, body.trim(), &health).await
+}
+
+#[tauri::command]
+pub async fn linear_archive_initiative_update(
+    app: AppHandle,
+    organization_id: String,
+    update_id: String,
+) -> Result<()> {
+    if organization_id.trim().is_empty() || update_id.trim().is_empty() {
+        return Err(std::io::Error::other("Initiative update is required").into());
+    }
+    linear::archive_initiative_update(&app, &organization_id, &update_id).await
+}
+
+#[tauri::command]
+pub async fn linear_unarchive_initiative_update(
+    app: AppHandle,
+    organization_id: String,
+    update_id: String,
+) -> Result<()> {
+    if organization_id.trim().is_empty() || update_id.trim().is_empty() {
+        return Err(std::io::Error::other("Initiative update is required").into());
+    }
+    linear::unarchive_initiative_update(&app, &organization_id, &update_id).await
 }
 
 #[tauri::command]

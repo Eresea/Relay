@@ -749,11 +749,13 @@ export class TauriBridge {
   async linearInitiatives(
     organizationId: string,
     includeArchived = false,
+    includeArchivedUpdates = false,
   ): Promise<readonly LinearInitiative[]> {
     return (
       (await this.invoke<LinearInitiative[]>('linear_initiatives', {
         organizationId,
         includeArchived,
+        includeArchivedUpdates,
       })) ?? []
     );
   }
@@ -772,6 +774,30 @@ export class TauriBridge {
     });
     if (!update) throw new Error('Linear returned no initiative update.');
     return update;
+  }
+
+  async linearUpdateInitiativeUpdate(
+    organizationId: string,
+    updateId: string,
+    body: string,
+    health: LinearProjectHealth,
+  ): Promise<LinearInitiativeUpdate> {
+    const update = await this.invoke<LinearInitiativeUpdate>('linear_update_initiative_update', {
+      organizationId,
+      updateId,
+      body,
+      health,
+    });
+    if (!update) throw new Error('Linear returned no initiative update.');
+    return update;
+  }
+
+  async linearArchiveInitiativeUpdate(organizationId: string, updateId: string): Promise<void> {
+    await this.invoke('linear_archive_initiative_update', { organizationId, updateId });
+  }
+
+  async linearUnarchiveInitiativeUpdate(organizationId: string, updateId: string): Promise<void> {
+    await this.invoke('linear_unarchive_initiative_update', { organizationId, updateId });
   }
 
   async linearArchiveInitiative(organizationId: string, initiativeId: string): Promise<void> {
