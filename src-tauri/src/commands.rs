@@ -648,12 +648,14 @@ pub async fn linear_create_issue(
     team_id: String,
     title: String,
     description: Option<String>,
+    estimate: Option<u32>,
     project_id: Option<String>,
     project_milestone_id: Option<String>,
     parent_id: Option<String>,
 ) -> Result<Issue> {
     if title.trim().is_empty()
         || title.chars().count() > 255
+        || estimate.is_some_and(|value| value > 64)
         || project_id
             .as_ref()
             .is_some_and(|value| value.trim().is_empty())
@@ -672,6 +674,7 @@ pub async fn linear_create_issue(
         &team_id,
         title.trim(),
         description.as_deref(),
+        estimate,
         project_id.as_deref(),
         project_milestone_id.as_deref(),
         parent_id.as_deref(),
@@ -791,6 +794,8 @@ pub async fn linear_update_issue(
     clear_project_milestone: Option<bool>,
     due_date: Option<String>,
     clear_due_date: Option<bool>,
+    estimate: Option<u32>,
+    clear_estimate: Option<bool>,
 ) -> Result<Issue> {
     if organization_id.trim().is_empty()
         || issue_id.trim().is_empty()
@@ -818,6 +823,8 @@ pub async fn linear_update_issue(
                     .any(|(index, byte)| index != 4 && index != 7 && !byte.is_ascii_digit())
         })
         || (clear_due_date.unwrap_or(false) && due_date.is_some())
+        || estimate.is_some_and(|value| value > 64)
+        || (clear_estimate.unwrap_or(false) && estimate.is_some())
         || assignee_id
             .as_ref()
             .is_some_and(|value| value.trim().is_empty())
@@ -851,6 +858,8 @@ pub async fn linear_update_issue(
         clear_project_milestone.unwrap_or(false),
         due_date.as_deref(),
         clear_due_date.unwrap_or(false),
+        estimate,
+        clear_estimate.unwrap_or(false),
     )
     .await
 }

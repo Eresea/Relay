@@ -31,6 +31,7 @@ import {
 import { UmbraButtonComponent } from '@umbra/components/umbra-button/umbra-button.component';
 import {
   isPendingLinearIssueUpdate,
+  linearEstimateOptions,
   mergeLinearIssueUpdates,
   type LinearIssueUpdate,
   type PendingLinearIssueUpdate,
@@ -42,6 +43,7 @@ interface LinearIssueDraft {
   title: string;
   description: string;
   milestoneId?: string;
+  estimate?: string;
 }
 
 @Component({
@@ -254,6 +256,20 @@ interface LinearIssueDraft {
                     <option [value]="4">Low</option>
                   </select>
                 </label>
+                @if (estimateOptions(detail.issue.team.id).length) {
+                  <label>
+                    <span>Estimate</span>
+                    <select
+                      [value]="detail.issue.estimate ?? ''"
+                      (change)="updateEstimate(detail.issue, $any($event.target).value)"
+                    >
+                      <option value="">No estimate</option>
+                      @for (option of estimateOptions(detail.issue.team.id); track option.value) {
+                        <option [value]="option.value">{{ option.label }}</option>
+                      }
+                    </select>
+                  </label>
+                }
                 <label>
                   <span>Due date</span>
                   <input
@@ -529,6 +545,20 @@ interface LinearIssueDraft {
                       }
                     </select>
                   </label>
+                  @if (estimateOptions(createTeamId()).length) {
+                    <label>
+                      <span>Estimate</span>
+                      <select
+                        [value]="newEstimate()"
+                        (change)="updateIssueDraftEstimate($any($event.target).value)"
+                      >
+                        <option value="">No estimate</option>
+                        @for (option of estimateOptions(createTeamId()); track option.value) {
+                          <option [value]="option.value">{{ option.label }}</option>
+                        }
+                      </select>
+                    </label>
+                  }
                   <label>
                     <span>New issue</span>
                     <input
@@ -552,7 +582,7 @@ interface LinearIssueDraft {
                     {{ creating() ? 'Creating' : 'Create issue' }}
                   </umbra-button>
                 </form>
-                @if (newTitle() || newDescription()) {
+                @if (newTitle() || newDescription() || newEstimate()) {
                   <p class="hint">Draft saved on this device.</p>
                 }
               }
@@ -847,6 +877,20 @@ interface LinearIssueDraft {
                         }
                       </select>
                     </label>
+                    @if (estimateOptions(createTeamId()).length) {
+                      <label>
+                        <span>Estimate</span>
+                        <select
+                          [value]="newProjectIssueEstimate()"
+                          (change)="updateProjectIssueEstimate($any($event.target).value)"
+                        >
+                          <option value="">No estimate</option>
+                          @for (option of estimateOptions(createTeamId()); track option.value) {
+                            <option [value]="option.value">{{ option.label }}</option>
+                          }
+                        </select>
+                      </label>
+                    }
                     <label>
                       <span>New project issue</span>
                       <input
@@ -884,7 +928,11 @@ interface LinearIssueDraft {
                       {{ creatingProjectIssue() ? 'Creating' : 'Add issue' }}
                     </umbra-button>
                   </form>
-                  @if (newProjectIssueTitle() || newProjectIssueDescription()) {
+                  @if (
+                    newProjectIssueTitle() ||
+                    newProjectIssueDescription() ||
+                    newProjectIssueEstimate()
+                  ) {
                     <p class="hint">Draft saved on this device.</p>
                   }
                 }
@@ -1541,6 +1589,8 @@ export class Linear {
   protected readonly newProjectIssueTitle = signal('');
   protected readonly newProjectIssueDescription = signal('');
   protected readonly newProjectIssueMilestoneId = signal('');
+  protected readonly newProjectIssueEstimate = signal('');
+  protected readonly newEstimate = signal('');
   protected readonly newSubIssueTitle = signal('');
   protected readonly newComment = signal('');
   protected readonly editingMilestoneId = signal<string | null>(null);
@@ -1678,6 +1728,15 @@ export class Linear {
 
   protected statesFor(issue: LinearIssue): readonly LinearWorkflowState[] {
     return this.workflowStates()[issue.team.id] ?? [];
+  }
+
+  protected estimateOptions(teamId: string) {
+    const team = this.teams().find((item) => item.id === teamId);
+    return linearEstimateOptions(
+      team?.issueEstimationType ?? 'notUsed',
+      team?.issueEstimationExtended ?? false,
+      team?.issueEstimationAllowZero ?? false,
+    );
   }
 
   protected async openIssueDetail(issue: LinearIssue): Promise<void> {
@@ -2016,6 +2075,10 @@ export class Linear {
   }
 
   protected setCreateTeam(teamId: string): void {
+    if (teamId !== this.createTeamId()) {
+      this.newEstimate.set('');
+      this.newProjectIssueEstimate.set('');
+    }
     this.createTeamId.set(teamId);
     this.saveIssueDraft();
     this.saveProjectIssueDraft();
@@ -2024,6 +2087,11 @@ export class Linear {
   protected updateIssueDraft(field: 'title' | 'description', value: string): void {
     if (field === 'title') this.newTitle.set(value);
     else this.newDescription.set(value);
+    this.saveIssueDraft();
+  }
+
+  protected updateIssueDraftEstimate(value: string): void {
+    this.newEstimate.set(value);
     this.saveIssueDraft();
   }
 
@@ -2138,6 +2206,7 @@ export class Linear {
       teamId: this.createTeamId(),
       title: this.newTitle(),
       description: this.newDescription(),
+      estimate: this.newEstimate(),
     });
   }
 
@@ -2147,6 +2216,7 @@ export class Linear {
     );
     this.newTitle.set(typeof draft?.title === 'string' ? draft.title : '');
     this.newDescription.set(typeof draft?.description === 'string' ? draft.description : '');
+    this.newEstimate.set(typeof draft?.estimate === 'string' ? draft.estimate : '');
     if (typeof draft?.teamId === 'string') this.createTeamId.set(draft.teamId);
   }
 
@@ -2161,6 +2231,11 @@ export class Linear {
     this.saveProjectIssueDraft();
   }
 
+  protected updateProjectIssueEstimate(value: string): void {
+    this.newProjectIssueEstimate.set(value);
+    this.saveProjectIssueDraft();
+  }
+
   private saveProjectIssueDraft(): void {
     const connection = this.selected();
     const project = this.selectedProject();
@@ -2170,6 +2245,7 @@ export class Linear {
       title: this.newProjectIssueTitle(),
       description: this.newProjectIssueDescription(),
       milestoneId: this.newProjectIssueMilestoneId(),
+      estimate: this.newProjectIssueEstimate(),
     });
   }
 
@@ -2184,6 +2260,7 @@ export class Linear {
     this.newProjectIssueMilestoneId.set(
       typeof draft?.milestoneId === 'string' ? draft.milestoneId : '',
     );
+    this.newProjectIssueEstimate.set(typeof draft?.estimate === 'string' ? draft.estimate : '');
     if (typeof draft?.teamId === 'string') this.createTeamId.set(draft.teamId);
   }
 
@@ -2627,9 +2704,14 @@ export class Linear {
         this.createTeamId(),
         title,
         this.newDescription().trim(),
+        null,
+        null,
+        null,
+        this.newEstimate() === '' ? undefined : Number(this.newEstimate()),
       );
       this.newTitle.set('');
       this.newDescription.set('');
+      this.newEstimate.set('');
       this.writeLocal(this.issueDraftKey(connection.organizationId), null);
       if (!this.issueTeamId() || this.issueTeamId() === created.team.id) {
         this.issues.update((issues) => [created, ...issues]);
@@ -2660,11 +2742,14 @@ export class Linear {
         this.newProjectIssueDescription().trim(),
         project.id,
         this.newProjectIssueMilestoneId() || null,
+        null,
+        this.newProjectIssueEstimate() === '' ? undefined : Number(this.newProjectIssueEstimate()),
       );
       this.projectIssues.update((issues) => [issue, ...issues]);
       this.newProjectIssueTitle.set('');
       this.newProjectIssueDescription.set('');
       this.newProjectIssueMilestoneId.set('');
+      this.newProjectIssueEstimate.set('');
       this.writeLocal(this.projectIssueDraftKey(connection.organizationId, project.id), null);
     } catch (error) {
       this.error.set(error instanceof Error ? error.message : String(error));
@@ -2706,6 +2791,17 @@ export class Linear {
   protected async updateDueDate(issue: LinearIssue, dueDate: string): Promise<void> {
     if (dueDate === (issue.dueDate ?? '')) return;
     await this.saveIssueUpdate(issue, dueDate ? { dueDate } : { clearDueDate: true });
+  }
+
+  protected async updateEstimate(issue: LinearIssue, estimate: string): Promise<void> {
+    if (estimate === '') {
+      if (issue.estimate == null) return;
+      await this.saveIssueUpdate(issue, { clearEstimate: true });
+      return;
+    }
+    const value = Number(estimate);
+    if (!Number.isInteger(value) || value === issue.estimate) return;
+    await this.saveIssueUpdate(issue, { estimate: value });
   }
 
   protected async updateAssignee(issue: LinearIssue, assigneeId: string): Promise<void> {

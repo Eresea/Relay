@@ -383,6 +383,7 @@ pub async fn create_issue(
     team_id: &str,
     title: &str,
     description: Option<&str>,
+    estimate: Option<u32>,
     project_id: Option<&str>,
     project_milestone_id: Option<&str>,
     parent_id: Option<&str>,
@@ -397,6 +398,7 @@ pub async fn create_issue(
         team_id,
         title,
         description,
+        estimate,
         Some(&viewer_id),
         project_id,
         project_milestone_id,
@@ -441,6 +443,8 @@ pub async fn update_issue(
     clear_project_milestone: bool,
     due_date: Option<&str>,
     clear_due_date: bool,
+    estimate: Option<u32>,
+    clear_estimate: bool,
 ) -> Result<Issue> {
     api::update_issue(
         &access_token(app, organization_id).await?,
@@ -460,6 +464,8 @@ pub async fn update_issue(
         clear_project_milestone,
         due_date,
         clear_due_date,
+        estimate,
+        clear_estimate,
     )
     .await
 }

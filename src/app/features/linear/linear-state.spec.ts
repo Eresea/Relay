@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { mergeLinearIssueUpdates } from './linear-state';
+import { linearEstimateOptions, mergeLinearIssueUpdates } from './linear-state';
 
 describe('Linear issue update drafts', () => {
   it('keeps changes to different fields together', () => {
@@ -47,6 +47,29 @@ describe('Linear issue update drafts', () => {
     expect(mergeLinearIssueUpdates({ clearDueDate: true }, { dueDate: '2026-10-15' })).toEqual({
       dueDate: '2026-10-15',
     });
+  });
+
+  it('keeps only the latest estimate change in an offline draft', () => {
+    expect(mergeLinearIssueUpdates({ estimate: 5 }, { clearEstimate: true })).toEqual({
+      clearEstimate: true,
+    });
+    expect(mergeLinearIssueUpdates({ clearEstimate: true }, { estimate: 8 })).toEqual({
+      estimate: 8,
+    });
+  });
+
+  it('uses each teams configured estimate scale', () => {
+    expect(linearEstimateOptions('tShirt', true, true)).toEqual([
+      { value: 0, label: '0' },
+      { value: 1, label: 'XS' },
+      { value: 2, label: 'S' },
+      { value: 3, label: 'M' },
+      { value: 5, label: 'L' },
+      { value: 8, label: 'XL' },
+      { value: 13, label: 'XXL' },
+      { value: 21, label: 'XXXL' },
+    ]);
+    expect(linearEstimateOptions('notUsed', false, false)).toEqual([]);
   });
 
   it('replaces mutually exclusive assignee and cycle changes', () => {

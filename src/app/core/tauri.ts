@@ -772,6 +772,7 @@ export class TauriBridge {
     projectId: string | null = null,
     projectMilestoneId: string | null = null,
     parentId: string | null = null,
+    estimate?: number,
   ): Promise<LinearIssue> {
     const issue = await this.invoke<LinearIssue>('linear_create_issue', {
       organizationId,
@@ -781,6 +782,7 @@ export class TauriBridge {
       projectId,
       projectMilestoneId,
       parentId,
+      estimate,
     });
     if (!issue) throw new Error('Linear returned no issue.');
     return issue;
@@ -860,6 +862,8 @@ export class TauriBridge {
       clearProjectMilestone?: boolean;
       dueDate?: string;
       clearDueDate?: boolean;
+      estimate?: number;
+      clearEstimate?: boolean;
       stateId?: string;
       assigneeId?: string;
       clearAssignee?: boolean;
@@ -1303,6 +1307,9 @@ export interface LinearTeam {
   readonly name: string;
   readonly key: string;
   readonly timezone?: string | null;
+  readonly issueEstimationType?: string;
+  readonly issueEstimationExtended?: boolean;
+  readonly issueEstimationAllowZero?: boolean;
 }
 
 export interface LinearPerson {
@@ -1378,6 +1385,7 @@ export interface LinearIssue {
   readonly description: string | null;
   readonly url: string;
   readonly priority: number;
+  readonly estimate?: number | null;
   readonly dueDate?: string | null;
   readonly updatedAt: string;
   readonly state: { readonly id: string; readonly name: string; readonly kind: string } | null;

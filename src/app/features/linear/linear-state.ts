@@ -7,6 +7,8 @@ export interface LinearIssueUpdate {
   clearProjectMilestone?: boolean;
   dueDate?: string;
   clearDueDate?: boolean;
+  estimate?: number;
+  clearEstimate?: boolean;
   stateId?: string;
   assigneeId?: string;
   clearAssignee?: boolean;
@@ -19,6 +21,64 @@ export interface LinearIssueUpdate {
 export interface PendingLinearIssueUpdate {
   issueId: string;
   update: LinearIssueUpdate;
+}
+
+export function linearEstimateOptions(type: string, extended: boolean, allowZero: boolean) {
+  const scales: Record<string, [number, string][]> = {
+    linear: [
+      [1, '1'],
+      [2, '2'],
+      [3, '3'],
+      [4, '4'],
+      [5, '5'],
+    ],
+    fibonacci: [
+      [1, '1'],
+      [2, '2'],
+      [3, '3'],
+      [5, '5'],
+      [8, '8'],
+    ],
+    exponential: [
+      [1, '1'],
+      [2, '2'],
+      [4, '4'],
+      [8, '8'],
+      [16, '16'],
+    ],
+    tShirt: [
+      [1, 'XS'],
+      [2, 'S'],
+      [3, 'M'],
+      [5, 'L'],
+      [8, 'XL'],
+    ],
+  };
+  const extras: Record<string, [number, string][]> = {
+    linear: [
+      [6, '6'],
+      [7, '7'],
+    ],
+    fibonacci: [
+      [13, '13'],
+      [21, '21'],
+    ],
+    exponential: [
+      [32, '32'],
+      [64, '64'],
+    ],
+    tShirt: [
+      [13, 'XXL'],
+      [21, 'XXXL'],
+    ],
+  };
+  const values = scales[type];
+  if (!values) return [];
+  return [
+    ...(allowZero ? [[0, '0'] as [number, string]] : []),
+    ...values,
+    ...(extended ? extras[type] : []),
+  ].map(([value, label]) => ({ value, label }));
 }
 
 export function isPendingLinearIssueUpdate(value: unknown): value is PendingLinearIssueUpdate {
@@ -48,6 +108,8 @@ export function mergeLinearIssueUpdates(
   if (next.clearProjectMilestone) delete merged.projectMilestoneId;
   if ('dueDate' in next) delete merged.clearDueDate;
   if (next.clearDueDate) delete merged.dueDate;
+  if ('estimate' in next) delete merged.clearEstimate;
+  if (next.clearEstimate) delete merged.estimate;
   if ('projectId' in next || next.clearProject) {
     delete merged.projectMilestoneId;
     merged.clearProjectMilestone = true;
