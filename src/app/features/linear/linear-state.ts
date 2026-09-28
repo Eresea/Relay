@@ -1,4 +1,9 @@
-import type { LinearIssue, LinearIssueDetail, LinearProjectHealth } from '@core/tauri';
+import type {
+  LinearIssue,
+  LinearIssueDetail,
+  LinearIssueRelationType,
+  LinearProjectHealth,
+} from '@core/tauri';
 
 export interface LinearProjectIssueFilters {
   includeArchived: boolean;
@@ -33,6 +38,20 @@ export interface LinearProjectDocumentCreateDraft {
 export interface LinearProjectLinkDraft {
   label: string;
   url: string;
+}
+
+export interface LinearIssueRelationDraft {
+  identifier: string;
+  type: LinearIssueRelationType;
+}
+
+export function isLinearIssueRelationDraft(value: unknown): value is LinearIssueRelationDraft {
+  if (!value || typeof value !== 'object') return false;
+  const draft = value as Partial<LinearIssueRelationDraft>;
+  return (
+    typeof draft.identifier === 'string' &&
+    ['blocks', 'related', 'duplicate', 'similar'].includes(draft.type ?? '')
+  );
 }
 
 export function isLinearProjectLinkDraft(value: unknown): value is LinearProjectLinkDraft {
@@ -130,10 +149,12 @@ const organizationCacheCategories = [
   'issueCommentDraft',
   'issueCommentEditDraft',
   'issueDetail',
+  'issueRelationDraft',
   'issues',
   'milestones',
   'projectDocumentDraft',
   'projectDocumentCreateDraft',
+  'subIssueDraft',
   'projectDraft',
   'projectIssues',
   'projectLinkDraft',

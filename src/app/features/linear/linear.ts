@@ -47,6 +47,7 @@ import {
   isLinearCommentDraft,
   isLinearInitiativeDraft,
   isLinearInitiativeUpdateDraft,
+  isLinearIssueRelationDraft,
   isLinearProjectDraft,
   isLinearOrganizationCacheKey,
   isLinearProjectDocumentDraft,
@@ -70,6 +71,7 @@ import {
   type LinearProjectLinkDraft,
   type LinearInitiativeDraft,
   type LinearInitiativeUpdateDraft,
+  type LinearIssueRelationDraft,
   type LinearProjectDraft,
   type LinearProjectPlanningDraft,
 } from './linear-state';
@@ -661,13 +663,22 @@ function isLinearTeamList(value: unknown): value is readonly LinearTeam[] {
                   <p class="hint">No linked issues.</p>
                 }
                 <form class="detail-form" (submit)="createIssueRelation($event, detail.issue)">
+                  @if (relatedIssueIdentifier() || newIssueRelationType() !== 'blocks') {
+                    <p class="hint">Issue link draft saved on this device.</p>
+                  }
                   <label>
                     <span>Link issue by identifier</span>
                     <input
                       required
                       maxlength="32"
                       [value]="relatedIssueIdentifier()"
-                      (input)="relatedIssueIdentifier.set($any($event.target).value)"
+                      (input)="
+                        updateIssueRelationDraft(
+                          detail.issue,
+                          'identifier',
+                          $any($event.target).value
+                        )
+                      "
                       placeholder="ENG-123"
                     />
                   </label>
@@ -675,7 +686,9 @@ function isLinearTeamList(value: unknown): value is readonly LinearTeam[] {
                     <span>Relationship</span>
                     <select
                       [value]="newIssueRelationType()"
-                      (change)="newIssueRelationType.set($any($event.target).value)"
+                      (change)="
+                        updateIssueRelationDraft(detail.issue, 'type', $any($event.target).value)
+                      "
                     >
                       <option value="blocks">This issue blocks</option>
                       <option value="related">Related to</option>
@@ -692,13 +705,16 @@ function isLinearTeamList(value: unknown): value is readonly LinearTeam[] {
                 </form>
               </section>
               <form class="detail-form" (submit)="createSubIssue($event, detail.issue)">
+                @if (newSubIssueTitle()) {
+                  <p class="hint">Sub-issue draft saved on this device.</p>
+                }
                 <label>
                   <span>Add sub-issue</span>
                   <input
                     required
                     maxlength="255"
                     [value]="newSubIssueTitle()"
-                    (input)="newSubIssueTitle.set($any($event.target).value)"
+                    (input)="updateSubIssueDraft(detail.issue, $any($event.target).value)"
                   />
                 </label>
                 <umbra-button
@@ -4088,6 +4104,15 @@ export class Linear {
     this.newComment.set(
       this.readLocal<string>(this.issueCommentDraftKey(connection, issue.id)) ?? '',
     );
+    const relationDraft = this.readLocal<unknown>(this.issueRelationDraftKey(connection, issue.id));
+    this.relatedIssueIdentifier.set(
+      isLinearIssueRelationDraft(relationDraft) ? relationDraft.identifier : '',
+    );
+    this.newIssueRelationType.set(
+      isLinearIssueRelationDraft(relationDraft) ? relationDraft.type : 'blocks',
+    );
+    const subIssueDraft = this.readLocal<unknown>(this.subIssueDraftKey(connection, issue.id));
+    this.newSubIssueTitle.set(typeof subIssueDraft === 'string' ? subIssueDraft : '');
     this.confirmArchiveIssueId.set(null);
     this.confirmArchiveIssueDetailId.set(null);
     this.confirmDeleteIssueRelationId.set(null);
@@ -4175,9 +4200,13 @@ export class Linear {
         relatedIssueId,
         this.newIssueRelationType(),
       );
+      this.writeLocal(this.issueRelationDraftKey(connection, issue.id), null);
+      if (this.issueDetail()?.issue.id === issue.id) {
+        this.relatedIssueIdentifier.set('');
+        this.newIssueRelationType.set('blocks');
+      }
       const detail = await this.tauri.linearIssueDetail(connection.organizationId, issue.id);
       if (this.issueDetail()?.issue.id === issue.id) this.issueDetail.set(detail);
-      this.relatedIssueIdentifier.set('');
     } catch (error) {
       this.error.set(error instanceof Error ? error.message : String(error));
     } finally {
@@ -4510,6 +4539,8 @@ export class Linear {
     this.confirmArchiveIssueDetailId.set(null);
     this.codexContext.set(null);
     this.newComment.set('');
+    this.relatedIssueIdentifier.set('');
+    this.newIssueRelationType.set('blocks');
     this.editingCommentId.set(null);
     this.confirmDeleteCommentId.set(null);
     this.newSubIssueTitle.set('');
@@ -4670,12 +4701,13 @@ export class Linear {
         null,
         parent.id,
       );
+      this.writeLocal(this.subIssueDraftKey(connection, parent.id), null);
       this.issueDetail.update((detail) =>
         detail?.issue.id === parent.id
           ? { ...detail, children: [...detail.children, child] }
           : detail,
       );
-      this.newSubIssueTitle.set('');
+      if (this.issueDetail()?.issue.id === parent.id) this.newSubIssueTitle.set('');
     } catch (error) {
       this.error.set(error instanceof Error ? error.message : String(error));
     } finally {
@@ -4938,6 +4970,46 @@ export class Linear {
 
   private issueCommentEditDraftKey(connection: LinearConnection, commentId: string): string {
     return `relay.linear.issueCommentEditDraft.${connection.organizationId}.${connection.viewerId}.${commentId}`;
+  }
+
+  private issueRelationDraftKey(connection: LinearConnection, issueId: string): string {
+    return `relay.linear.issueRelationDraft.${connection.organizationId}.${connection.viewerId}.${issueId}`;
+  }
+
+  private subIssueDraftKey(connection: LinearConnection, issueId: string): string {
+    return `relay.linear.subIssueDraft.${connection.organizationId}.${connection.viewerId}.${issueId}`;
+  }
+
+  protected updateIssueRelationDraft(
+    issue: LinearIssue,
+    field: keyof LinearIssueRelationDraft,
+    value: string,
+  ): void {
+    const type: LinearIssueRelationType = ['blocks', 'related', 'duplicate', 'similar'].includes(
+      value,
+    )
+      ? (value as LinearIssueRelationType)
+      : 'blocks';
+    if (field === 'identifier') this.relatedIssueIdentifier.set(value);
+    else this.newIssueRelationType.set(type);
+    const connection = this.selected();
+    if (!connection) return;
+    const draft: LinearIssueRelationDraft = {
+      identifier: this.relatedIssueIdentifier(),
+      type: this.newIssueRelationType(),
+    };
+    this.writeLocal(
+      this.issueRelationDraftKey(connection, issue.id),
+      draft.identifier || draft.type !== 'blocks' ? draft : null,
+    );
+  }
+
+  protected updateSubIssueDraft(parent: LinearIssue, title: string): void {
+    this.newSubIssueTitle.set(title);
+    const connection = this.selected();
+    if (connection) {
+      this.writeLocal(this.subIssueDraftKey(connection, parent.id), title || null);
+    }
   }
 
   private readProjectDocumentDraft(

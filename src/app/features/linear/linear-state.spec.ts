@@ -6,6 +6,7 @@ import {
   isLinearCommentDraft,
   isLinearInitiativeDraft,
   isLinearInitiativeUpdateDraft,
+  isLinearIssueRelationDraft,
   isLinearOrganizationCacheKey,
   isLinearProjectPlanningDraft,
   isLinearProjectDraft,
@@ -195,6 +196,8 @@ describe('Linear organization cache cleanup', () => {
       'relay.linear.pendingIssueUpdates.org',
       'relay.linear.projectIssueDraft.org.project',
       'relay.linear.issueDetail.org.viewer.issue',
+      'relay.linear.issueRelationDraft.org.viewer.issue',
+      'relay.linear.subIssueDraft.org.viewer.issue',
       'relay.linear.projectIssues.org.viewer.project',
       'relay.linear.projectPlanningDraft.org.viewer.project',
       'relay.linear.projectDraft.org.viewer',
@@ -267,6 +270,13 @@ describe('Linear project link drafts', () => {
   it('validates external link fields before restoring them', () => {
     expect(isLinearProjectLinkDraft({ label: 'Design', url: 'https://example.com' })).toBe(true);
     expect(isLinearProjectLinkDraft({ label: 'Design', url: 9 })).toBe(false);
+  });
+});
+
+describe('Linear issue relation drafts', () => {
+  it('validates the identifier and supported relationship type', () => {
+    expect(isLinearIssueRelationDraft({ identifier: 'ENG-123', type: 'blocks' })).toBe(true);
+    expect(isLinearIssueRelationDraft({ identifier: 'ENG-123', type: 'unknown' })).toBe(false);
   });
 });
 
