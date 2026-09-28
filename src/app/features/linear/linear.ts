@@ -54,10 +54,12 @@ import {
   linearEstimateOptions,
   linearCodexPrompt,
   linearProjectIssueCacheKey,
+  isLinearProjectPlanningDraft,
   mergeLinearIssueUpdates,
   type LinearIssueUpdate,
   type PendingLinearIssueUpdate,
   type LinearProjectDocumentDraft,
+  type LinearProjectPlanningDraft,
 } from './linear-state';
 import { cycleDateInTimezone, cycleDateToIso, todayInTimezone } from './cycle-dates';
 
@@ -1788,6 +1790,11 @@ function isLinearTeamList(value: unknown): value is readonly LinearTeam[] {
                   } @empty {
                     <p class="hint">No milestones yet.</p>
                   }
+                  @if (hasProjectPlanningDraft()) {
+                    <p class="hint">
+                      Project update and milestone drafts are saved on this device.
+                    </p>
+                  }
                   <form class="project-edit" (submit)="createMilestone($event)">
                     <label>
                       <span>Milestone name</span>
@@ -1795,7 +1802,9 @@ function isLinearTeamList(value: unknown): value is readonly LinearTeam[] {
                         required
                         maxlength="255"
                         [value]="newMilestoneName()"
-                        (input)="newMilestoneName.set($any($event.target).value)"
+                        (input)="
+                          updateProjectPlanningDraft('milestoneName', $any($event.target).value)
+                        "
                       />
                     </label>
                     <label>
@@ -1803,7 +1812,9 @@ function isLinearTeamList(value: unknown): value is readonly LinearTeam[] {
                       <input
                         type="date"
                         [value]="newMilestoneDate()"
-                        (input)="newMilestoneDate.set($any($event.target).value)"
+                        (input)="
+                          updateProjectPlanningDraft('milestoneDate', $any($event.target).value)
+                        "
                       />
                     </label>
                     <label>
@@ -1835,7 +1846,12 @@ function isLinearTeamList(value: unknown): value is readonly LinearTeam[] {
                       <textarea
                         rows="2"
                         [value]="newMilestoneDescription()"
-                        (input)="newMilestoneDescription.set($any($event.target).value)"
+                        (input)="
+                          updateProjectPlanningDraft(
+                            'milestoneDescription',
+                            $any($event.target).value
+                          )
+                        "
                       ></textarea>
                     </label>
                     <umbra-button
@@ -1966,7 +1982,12 @@ function isLinearTeamList(value: unknown): value is readonly LinearTeam[] {
                         <span>Health</span>
                         <select
                           [value]="newProjectUpdateHealth()"
-                          (change)="newProjectUpdateHealth.set($any($event.target).value)"
+                          (change)="
+                            updateProjectPlanningDraft(
+                              'projectUpdateHealth',
+                              $any($event.target).value
+                            )
+                          "
                         >
                           <option value="onTrack">On track</option>
                           <option value="atRisk">At risk</option>
@@ -1980,7 +2001,12 @@ function isLinearTeamList(value: unknown): value is readonly LinearTeam[] {
                           maxlength="10000"
                           rows="3"
                           [value]="newProjectUpdateBody()"
-                          (input)="newProjectUpdateBody.set($any($event.target).value)"
+                          (input)="
+                            updateProjectPlanningDraft(
+                              'projectUpdateBody',
+                              $any($event.target).value
+                            )
+                          "
                         ></textarea>
                       </label>
                       <umbra-button
@@ -4749,6 +4775,10 @@ export class Linear {
     return `relay.linear.projectResources.${connection.organizationId}.${projectId}`;
   }
 
+  private projectPlanningDraftKey(connection: LinearConnection, projectId: string): string {
+    return `relay.linear.projectPlanningDraft.${connection.organizationId}.${connection.viewerId}.${projectId}`;
+  }
+
   private projectDocumentDraftKey(connection: LinearConnection, documentId: string): string {
     return `relay.linear.projectDocumentDraft.${connection.organizationId}.${documentId}`;
   }
@@ -5647,7 +5677,10 @@ export class Linear {
     this.nextProjectIssueCursor = null;
     this.projectIssuesHasNextPage.set(false);
     const connection = this.selected();
-    if (connection) this.restoreProjectIssueDraft(connection, project.id);
+    if (connection) {
+      this.restoreProjectIssueDraft(connection, project.id);
+      this.restoreProjectPlanningDraft(connection, project.id);
+    }
     this.editProjectName.set(project.name);
     this.editProjectDescription.set(project.description ?? '');
     this.editProjectStartDate.set(project.startDate ?? '');
@@ -5656,7 +5689,6 @@ export class Linear {
     this.editProjectLeadId.set(project.lead?.id ?? '');
     this.editProjectTeamIds.set((project.teams ?? []).map((team) => team.id));
     this.projectUpdates.set([]);
-    this.newProjectUpdateBody.set('');
     this.projectResources.set({ documents: [], externalLinks: [] });
     this.closeProjectDocumentEditor();
     this.confirmDeleteProjectLinkId.set(null);
@@ -5843,6 +5875,64 @@ export class Linear {
     }
   }
 
+  protected updateProjectPlanningDraft(
+    field: keyof LinearProjectPlanningDraft,
+    value: string,
+  ): void {
+    if (field === 'projectUpdateBody') this.newProjectUpdateBody.set(value);
+    else if (field === 'projectUpdateHealth') {
+      this.newProjectUpdateHealth.set(
+        ['onTrack', 'atRisk', 'offTrack'].includes(value)
+          ? (value as LinearProjectHealth)
+          : 'onTrack',
+      );
+    } else if (field === 'milestoneName') this.newMilestoneName.set(value);
+    else if (field === 'milestoneDescription') this.newMilestoneDescription.set(value);
+    else this.newMilestoneDate.set(value);
+    const project = this.selectedProject();
+    if (project) this.saveProjectPlanningDraft(project.id);
+  }
+
+  protected hasProjectPlanningDraft(): boolean {
+    return !!(
+      this.newProjectUpdateBody() ||
+      this.newProjectUpdateHealth() !== 'onTrack' ||
+      this.newMilestoneName() ||
+      this.newMilestoneDescription() ||
+      this.newMilestoneDate()
+    );
+  }
+
+  private restoreProjectPlanningDraft(connection: LinearConnection, projectId: string): void {
+    const stored = this.readLocal<unknown>(this.projectPlanningDraftKey(connection, projectId));
+    const draft = isLinearProjectPlanningDraft(stored) ? stored : null;
+    this.newProjectUpdateBody.set(draft?.projectUpdateBody ?? '');
+    this.newProjectUpdateHealth.set(draft?.projectUpdateHealth ?? 'onTrack');
+    this.newMilestoneName.set(draft?.milestoneName ?? '');
+    this.newMilestoneDescription.set(draft?.milestoneDescription ?? '');
+    this.newMilestoneDate.set(draft?.milestoneDate ?? '');
+  }
+
+  private saveProjectPlanningDraft(projectId: string): void {
+    const connection = this.selected();
+    if (!connection) return;
+    const draft: LinearProjectPlanningDraft = {
+      projectUpdateBody: this.newProjectUpdateBody(),
+      projectUpdateHealth: this.newProjectUpdateHealth(),
+      milestoneName: this.newMilestoneName(),
+      milestoneDescription: this.newMilestoneDescription(),
+      milestoneDate: this.newMilestoneDate(),
+    };
+    const hasDraft = Boolean(
+      draft.projectUpdateBody ||
+      draft.projectUpdateHealth !== 'onTrack' ||
+      draft.milestoneName ||
+      draft.milestoneDescription ||
+      draft.milestoneDate,
+    );
+    this.writeLocal(this.projectPlanningDraftKey(connection, projectId), hasDraft ? draft : null);
+  }
+
   protected async createProjectUpdate(event: Event): Promise<void> {
     event.preventDefault();
     const connection = this.selected();
@@ -5861,6 +5951,8 @@ export class Linear {
       this.projectUpdates.update((updates) => [update, ...updates]);
       this.saveProjectUpdatesCache(project.id, this.includeArchivedProjectUpdates());
       this.newProjectUpdateBody.set('');
+      this.newProjectUpdateHealth.set('onTrack');
+      this.saveProjectPlanningDraft(project.id);
     } catch (error) {
       this.error.set(error instanceof Error ? error.message : String(error));
     } finally {
@@ -5889,6 +5981,7 @@ export class Linear {
       this.newMilestoneName.set('');
       this.newMilestoneDescription.set('');
       this.newMilestoneDate.set('');
+      this.saveProjectPlanningDraft(project.id);
     } catch (error) {
       this.error.set(error instanceof Error ? error.message : String(error));
     } finally {

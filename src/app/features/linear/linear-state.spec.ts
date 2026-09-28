@@ -4,6 +4,7 @@ import {
   codexFailureRestoreTarget,
   isLinearCommentDraft,
   isLinearOrganizationCacheKey,
+  isLinearProjectPlanningDraft,
   isLinearProjectDocumentDraft,
   linearCodexPrompt,
   linearCommentDraftConflicts,
@@ -189,6 +190,7 @@ describe('Linear organization cache cleanup', () => {
       'relay.linear.projectIssueDraft.org.project',
       'relay.linear.issueDetail.org.viewer.issue',
       'relay.linear.projectIssues.org.viewer.project',
+      'relay.linear.projectPlanningDraft.org.viewer.project',
       'relay.linear.initiatives.org.viewer',
       'relay.linear.cycles.org.viewer.team',
     ]) {
@@ -198,6 +200,29 @@ describe('Linear organization cache cleanup', () => {
       isLinearOrganizationCacheKey('relay.linear.issueDetail.org-other.viewer.issue', 'org'),
     ).toBe(false);
     expect(isLinearOrganizationCacheKey('relay.linear.open', 'org')).toBe(false);
+  });
+});
+
+describe('Linear project planning drafts', () => {
+  it('restores only well-formed status update and milestone drafts', () => {
+    expect(
+      isLinearProjectPlanningDraft({
+        projectUpdateBody: 'Weekly update',
+        projectUpdateHealth: 'atRisk',
+        milestoneName: 'Beta',
+        milestoneDescription: 'Test build',
+        milestoneDate: '2026-10-10',
+      }),
+    ).toBe(true);
+    expect(
+      isLinearProjectPlanningDraft({
+        projectUpdateBody: 'Weekly update',
+        projectUpdateHealth: 'unknown',
+        milestoneName: 'Beta',
+        milestoneDescription: 'Test build',
+        milestoneDate: '2026-10-10',
+      }),
+    ).toBe(false);
   });
 });
 

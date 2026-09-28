@@ -1,4 +1,4 @@
-import type { LinearIssue, LinearIssueDetail } from '@core/tauri';
+import type { LinearIssue, LinearIssueDetail, LinearProjectHealth } from '@core/tauri';
 
 export interface LinearProjectIssueFilters {
   includeArchived: boolean;
@@ -7,6 +7,26 @@ export interface LinearProjectIssueFilters {
   priority: string;
   assigneeId: string;
   labelId: string;
+}
+
+export interface LinearProjectPlanningDraft {
+  projectUpdateBody: string;
+  projectUpdateHealth: LinearProjectHealth;
+  milestoneName: string;
+  milestoneDescription: string;
+  milestoneDate: string;
+}
+
+export function isLinearProjectPlanningDraft(value: unknown): value is LinearProjectPlanningDraft {
+  if (!value || typeof value !== 'object') return false;
+  const draft = value as Partial<LinearProjectPlanningDraft>;
+  return (
+    typeof draft.projectUpdateBody === 'string' &&
+    ['onTrack', 'atRisk', 'offTrack'].includes(draft.projectUpdateHealth ?? '') &&
+    typeof draft.milestoneName === 'string' &&
+    typeof draft.milestoneDescription === 'string' &&
+    typeof draft.milestoneDate === 'string'
+  );
 }
 
 const organizationCacheCategories = [
@@ -19,6 +39,7 @@ const organizationCacheCategories = [
   'milestones',
   'projectDocumentDraft',
   'projectIssues',
+  'projectPlanningDraft',
   'projectResources',
   'projectUpdates',
   'projects',
