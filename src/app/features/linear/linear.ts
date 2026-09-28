@@ -3676,7 +3676,7 @@ export class Linear {
     const requestId = ++this.projectOpenRequest;
     this.error.set(null);
     try {
-      await this.refreshConnections(request.organizationId);
+      await this.refreshConnections(request.organizationId, requestId);
       if (requestId !== this.projectOpenRequest) return;
       const connection = this.selected();
       if (!connection || connection.organizationId !== request.organizationId) {
@@ -6652,9 +6652,13 @@ export class Linear {
     }
   }
 
-  private async refreshConnections(selectOrganizationId?: string): Promise<void> {
+  private async refreshConnections(
+    selectOrganizationId?: string,
+    projectRequestId?: number,
+  ): Promise<void> {
     try {
       const connections = await this.tauri.linearStatus();
+      if (projectRequestId !== undefined && projectRequestId !== this.projectOpenRequest) return;
       this.connections.set(connections);
       const available = connections.filter((connection) => !connection.pausedOnDevice);
       const selected =
@@ -6669,7 +6673,9 @@ export class Linear {
         this.select(selected);
       }
     } catch (error) {
-      this.error.set(error instanceof Error ? error.message : String(error));
+      if (projectRequestId === undefined || projectRequestId === this.projectOpenRequest) {
+        this.error.set(error instanceof Error ? error.message : String(error));
+      }
     }
   }
 
