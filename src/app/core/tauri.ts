@@ -543,8 +543,8 @@ export class TauriBridge {
     await this.invoke('linear_connect_start');
   }
 
-  async linearDisconnect(organizationId: string): Promise<void> {
-    await this.invoke('linear_disconnect', { organizationId });
+  async linearDisconnect(organizationId: string): Promise<string | null> {
+    return (await this.invoke<string | null>('linear_disconnect', { organizationId })) ?? null;
   }
 
   async linearSyncConnection(organizationId: string): Promise<LinearConnection> {

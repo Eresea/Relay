@@ -18,6 +18,7 @@ pub use oauth::{LinearCodexLink, LinearCodexProjectPolicy};
 
 const CONNECTIONS_KEY: &str = "linear.connections";
 const CODEX_DEVICE_ID_KEY: &str = "linear.codex.device-id";
+const PENDING_REVOKES_KEY: &str = "linear.pending-nexus-revokes";
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -57,6 +58,47 @@ pub fn connections(app: &AppHandle) -> Result<Vec<LinearConnection>> {
         .map(Option::unwrap_or_default)
 }
 
+fn pending_revokes(app: &AppHandle) -> Result<Vec<String>> {
+    app.store("settings.json")
+        .map_err(|error| Error::LinearApi(error.to_string()))?
+        .get(PENDING_REVOKES_KEY)
+        .map(serde_json::from_value)
+        .transpose()
+        .map_err(|error| Error::LinearApi(error.to_string()))
+        .map(Option::unwrap_or_default)
+}
+
+fn update_pending_revoke(organizations: &mut Vec<String>, organization_id: &str, revoked: bool) {
+    if revoked {
+        organizations.retain(|id| id != organization_id);
+    } else if !organizations.iter().any(|id| id == organization_id) {
+        organizations.push(organization_id.to_owned());
+    }
+}
+
+fn save_pending_revokes(app: &AppHandle, organizations: &[String]) -> Result<()> {
+    let store = app
+        .store("settings.json")
+        .map_err(|error| Error::LinearApi(error.to_string()))?;
+    store.set(
+        PENDING_REVOKES_KEY,
+        serde_json::to_value(organizations).map_err(|error| Error::LinearApi(error.to_string()))?,
+    );
+    store
+        .save()
+        .map_err(|error| Error::LinearApi(error.to_string()))
+}
+
+pub(super) fn cancel_pending_revoke(app: &AppHandle, organization_id: &str) -> Result<()> {
+    let mut pending = pending_revokes(app)?;
+    let count = pending.len();
+    update_pending_revoke(&mut pending, organization_id, true);
+    if pending.len() != count {
+        save_pending_revokes(app, &pending)?;
+    }
+    Ok(())
+}
+
 fn save_connection(app: &AppHandle, connection: LinearConnection) -> Result<()> {
     let store = app
         .store("settings.json")
@@ -87,9 +129,21 @@ pub async fn handle_callback(app: AppHandle, url: url::Url) {
 
 pub async fn status(app: &AppHandle) -> Result<Vec<LinearConnection>> {
     if crate::nexus_auth::status().is_ok_and(|status| status.connected) {
+        let mut pending = pending_revokes(app)?;
+        let original_pending = pending.clone();
+        for organization_id in pending.clone() {
+            if nexus_sync::revoke(app, &organization_id).await.is_ok() {
+                update_pending_revoke(&mut pending, &organization_id, true);
+            }
+        }
+        if pending != original_pending {
+            save_pending_revokes(app, &pending)?;
+        }
         if let Ok(remote) = nexus_sync::discover(app).await {
+            let pending_set = pending.iter().collect::<std::collections::HashSet<_>>();
             let remote_ids = remote
                 .iter()
+                .filter(|(_, connection, _)| !pending_set.contains(&connection.organization_id))
                 .map(|(id, _, _)| id.clone())
                 .collect::<std::collections::HashSet<_>>();
             let local = connections(app)?;
@@ -114,6 +168,9 @@ pub async fn status(app: &AppHandle) -> Result<Vec<LinearConnection>> {
                 })
                 .collect::<Vec<_>>();
             for (credential_id, mut connection, bundle) in remote {
+                if pending_set.contains(&connection.organization_id) {
+                    continue;
+                }
                 connection.nexus_credential_id = Some(credential_id);
                 token_entry(&connection.organization_id)?
                     .set_password(
@@ -130,7 +187,7 @@ pub async fn status(app: &AppHandle) -> Result<Vec<LinearConnection>> {
     connections(app)
 }
 
-pub async fn disconnect(app: &AppHandle, organization_id: &str) -> Result<()> {
+pub async fn disconnect(app: &AppHandle, organization_id: &str) -> Result<Option<String>> {
     let remote_revoke = nexus_sync::revoke(app, organization_id).await;
     let entry = token_entry(organization_id)?;
     match entry.delete_credential() {
@@ -142,14 +199,23 @@ pub async fn disconnect(app: &AppHandle, organization_id: &str) -> Result<()> {
         .map_err(|error| Error::LinearApi(error.to_string()))?;
     let mut connections = connections(app)?;
     connections.retain(|connection| connection.organization_id != organization_id);
+    let mut pending = pending_revokes(app)?;
+    update_pending_revoke(&mut pending, organization_id, remote_revoke.is_ok());
     store.set(
         CONNECTIONS_KEY,
         serde_json::to_value(connections).map_err(|error| Error::LinearApi(error.to_string()))?,
     );
+    store.set(
+        PENDING_REVOKES_KEY,
+        serde_json::to_value(&pending).map_err(|error| Error::LinearApi(error.to_string()))?,
+    );
     store
         .save()
         .map_err(|error| Error::LinearApi(error.to_string()))?;
-    remote_revoke
+    Ok(remote_revoke.err().map(|_| {
+        "Disconnected on this device; Nexus will revoke access on other devices when it reconnects."
+            .to_owned()
+    }))
 }
 
 pub async fn sync_connection(app: &AppHandle, organization_id: &str) -> Result<LinearConnection> {
@@ -164,6 +230,7 @@ pub async fn sync_connection(app: &AppHandle, organization_id: &str) -> Result<L
     let bundle: TokenBundle = serde_json::from_str(&encoded)
         .map_err(|_| Error::LinearApi("stored Linear credentials are invalid".into()))?;
     connection.nexus_credential_id = Some(nexus_sync::persist(app, &connection, &bundle).await?);
+    cancel_pending_revoke(app, organization_id)?;
     save_connection(app, connection.clone())?;
     Ok(connection)
 }
@@ -1067,4 +1134,20 @@ fn save_connections(app: &AppHandle, connections: Vec<LinearConnection>) -> Resu
     store
         .save()
         .map_err(|error| Error::LinearApi(error.to_string()))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::update_pending_revoke;
+
+    #[test]
+    fn failed_revokes_queue_once_and_successful_retries_clear_them() {
+        let mut pending = Vec::new();
+        update_pending_revoke(&mut pending, "org-1", false);
+        update_pending_revoke(&mut pending, "org-1", false);
+        assert_eq!(pending, vec!["org-1".to_owned()]);
+
+        update_pending_revoke(&mut pending, "org-1", true);
+        assert!(pending.is_empty());
+    }
 }

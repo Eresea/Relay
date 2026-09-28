@@ -295,7 +295,7 @@ pub async fn revoke(app: &AppHandle, organization_id: &str) -> Result<()> {
                 && credential.metadata["organizationId"] == organization_id
         })
     {
-        client
+        let response = client
             .delete(format!(
                 "{NEXUS}/credentials/{}/grants/{CLIENT_ID}",
                 credential.id
@@ -303,9 +303,16 @@ pub async fn revoke(app: &AppHandle, organization_id: &str) -> Result<()> {
             .bearer_auth(&bearer)
             .send()
             .await
-            .map_err(request_error)?
-            .error_for_status()
             .map_err(request_error)?;
+        if !response.status().is_success() && response.status() != StatusCode::NOT_FOUND {
+            let status = response.status();
+            return Err(match response.error_for_status() {
+                Err(error) => request_error(error),
+                Ok(_) => Error::LinearApi(format!(
+                    "Nexus could not revoke the Linear connection (HTTP {status})"
+                )),
+            });
+        }
     }
     Ok(())
 }

@@ -5287,7 +5287,7 @@ export class Linear {
     const connection = this.selected();
     if (!connection) return;
     try {
-      await this.tauri.linearDisconnect(connection.organizationId);
+      const warning = await this.tauri.linearDisconnect(connection.organizationId);
       this.writeLocal(this.issueCacheKey(connection), null);
       this.writeLocal(this.projectCacheKey(connection), null);
       this.writeLocal(this.projectCacheKey(connection, true), null);
@@ -5298,6 +5298,7 @@ export class Linear {
       this.selected.set(connections[0] ?? null);
       this.issues.set([]);
       if (connections[0]) this.select(connections[0]);
+      this.error.set(warning);
     } catch (error) {
       this.error.set(error instanceof Error ? error.message : String(error));
       await this.refreshConnections();

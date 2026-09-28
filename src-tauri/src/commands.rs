@@ -331,7 +331,10 @@ pub async fn linear_connect_start(app: AppHandle) -> Result<()> {
 }
 
 #[tauri::command]
-pub async fn linear_disconnect(app: AppHandle, organization_id: String) -> Result<()> {
+pub async fn linear_disconnect(app: AppHandle, organization_id: String) -> Result<Option<String>> {
+    if organization_id.trim().is_empty() {
+        return Err(std::io::Error::other("A Linear workspace is required").into());
+    }
     linear::disconnect(&app, &organization_id).await
 }
 

@@ -217,6 +217,7 @@ pub async fn handle_callback(app: AppHandle, callback: Url) {
         save_connected(&app, bundle.clone(), viewer.clone())?;
         let warning = match super::nexus_sync::persist(&app, &connection, &bundle).await {
             Ok(credential_id) => {
+                super::cancel_pending_revoke(&app, &connection.organization_id)?;
                 connection.nexus_credential_id = Some(credential_id);
                 super::save_connection(&app, connection.clone())?;
                 None
