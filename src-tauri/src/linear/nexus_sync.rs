@@ -180,7 +180,7 @@ pub async fn persist(
     Ok(created.id)
 }
 
-fn merge_bundle(existing: &TokenBundle, incoming: &TokenBundle) -> TokenBundle {
+pub(super) fn merge_bundle(existing: &TokenBundle, incoming: &TokenBundle) -> TokenBundle {
     let mut merged = if incoming.expires_at >= existing.expires_at {
         incoming.clone()
     } else {
@@ -285,6 +285,7 @@ pub async fn discover(app: &AppHandle) -> Result<Vec<(String, LinearConnection, 
                 nexus_credential_id: None,
                 agent_installed: false,
                 paused_on_device: false,
+                nexus_sync_pending: false,
             },
             bundle,
         ));
@@ -380,6 +381,7 @@ mod tests {
             nexus_credential_id: None,
             agent_installed: false,
             paused_on_device: false,
+            nexus_sync_pending: false,
         };
         let bundle = |expires_at| TokenBundle {
             access_token: "fresh".into(),
@@ -466,5 +468,41 @@ mod tests {
         assert_eq!(merged.agent.unwrap().access_token, "new-agent");
         assert_eq!(merged.codex_links.len(), 2);
         assert!(!merged.codex_project_policy[0].allowed);
+    }
+
+    #[test]
+    fn merge_preserves_a_locally_installed_agent_when_nexus_is_stale() {
+        let local = TokenBundle {
+            access_token: "local-access".into(),
+            refresh_token: "local-refresh".into(),
+            expires_at: 20,
+            agent: Some(AgentTokenBundle {
+                access_token: "agent-access".into(),
+                refresh_token: "agent-refresh".into(),
+                expires_at: 40,
+            }),
+            codex_links: vec![LinearCodexLink {
+                issue_id: "issue-1".into(),
+                device_id: "device-a".into(),
+                workspace_repo: "org/repo".into(),
+                workspace_name: "repo".into(),
+                thread_id: "thread-1".into(),
+                updated_at: 4,
+            }],
+            codex_project_policy: vec![],
+        };
+        let nexus = TokenBundle {
+            access_token: "remote-access".into(),
+            refresh_token: "remote-refresh".into(),
+            expires_at: 30,
+            agent: None,
+            codex_links: vec![],
+            codex_project_policy: vec![],
+        };
+
+        let merged = merge_bundle(&local, &nexus);
+        assert_eq!(merged.access_token, "remote-access");
+        assert_eq!(merged.agent.unwrap().access_token, "agent-access");
+        assert_eq!(merged.codex_links.len(), 1);
     }
 }

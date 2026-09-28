@@ -1707,6 +1707,7 @@ export interface LinearConnection {
   readonly nexusCredentialId?: string;
   readonly agentInstalled: boolean;
   readonly pausedOnDevice: boolean;
+  readonly nexusSyncPending?: boolean;
 }
 
 export interface LinearTeam {

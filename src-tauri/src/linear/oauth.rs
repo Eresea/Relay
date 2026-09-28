@@ -280,11 +280,15 @@ pub async fn handle_callback(app: AppHandle, callback: Url) {
                 Ok(credential_id) => {
                     super::cancel_pending_revoke(&app, &organization_id)?;
                     connection.nexus_credential_id = Some(credential_id);
+                    connection.nexus_sync_pending = false;
                     None
                 }
-                Err(error) => Some(format!(
-                    "Relay agent installed on this device; Nexus sync failed: {error}"
-                )),
+                Err(error) => {
+                    connection.nexus_sync_pending = true;
+                    Some(format!(
+                        "Relay agent installed on this device; Nexus sync failed: {error}"
+                    ))
+                }
             };
             super::save_connection(&app, connection.clone())?;
             return Ok::<_, Error>(Some((connection, warning)));
@@ -307,19 +311,24 @@ pub async fn handle_callback(app: AppHandle, callback: Url) {
             nexus_credential_id: None,
             agent_installed: false,
             paused_on_device: false,
+            nexus_sync_pending: false,
         };
         save_connected(&app, bundle.clone(), viewer.clone())?;
         let warning = match super::nexus_sync::persist(&app, &connection, &bundle).await {
             Ok(credential_id) => {
                 super::cancel_pending_revoke(&app, &connection.organization_id)?;
                 connection.nexus_credential_id = Some(credential_id);
-                super::save_connection(&app, connection.clone())?;
+                connection.nexus_sync_pending = false;
                 None
             }
-            Err(error) => Some(format!(
-                "Connected on this device; Nexus sync failed: {error}"
-            )),
+            Err(error) => {
+                connection.nexus_sync_pending = true;
+                Some(format!(
+                    "Connected on this device; Nexus sync failed: {error}"
+                ))
+            }
         };
+        super::save_connection(&app, connection.clone())?;
         Ok::<_, Error>(Some((connection, warning)))
     }
     .await;

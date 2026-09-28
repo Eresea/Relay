@@ -90,14 +90,20 @@ interface LinearIssueDraft {
                 {{ retryingIssueUpdates() ? 'Retrying changes' : 'Retry issue changes' }}
               </umbra-button>
             }
-            @if (selected() && !selected()?.nexusCredentialId) {
+            @if (selected() && (!selected()?.nexusCredentialId || selected()?.nexusSyncPending)) {
               <umbra-button
                 size="sm"
                 variant="outline"
                 (click)="syncSelected()"
                 [disabled]="syncing() || !nexus.status().connected"
               >
-                {{ syncing() ? 'Syncing' : 'Sync through Nexus' }}
+                {{
+                  syncing()
+                    ? 'Syncing'
+                    : selected()?.nexusSyncPending
+                      ? 'Retry Nexus sync'
+                      : 'Sync through Nexus'
+                }}
               </umbra-button>
             }
             <umbra-button
@@ -188,7 +194,13 @@ interface LinearIssueDraft {
                 <span>{{ connection.organizationName }}</span>
                 <span class="muted">{{ connection.viewerName }}</span>
                 <span class="sync-state">
-                  {{ connection.nexusCredentialId ? 'Synced through Nexus' : 'This device only' }}
+                  {{
+                    connection.nexusSyncPending
+                      ? 'Needs Nexus sync'
+                      : connection.nexusCredentialId
+                        ? 'Synced through Nexus'
+                        : 'This device only'
+                  }}
                 </span>
               </button>
             }

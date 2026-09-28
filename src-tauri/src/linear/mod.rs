@@ -37,6 +37,8 @@ pub struct LinearConnection {
     pub agent_installed: bool,
     #[serde(default)]
     pub paused_on_device: bool,
+    #[serde(default)]
+    pub nexus_sync_pending: bool,
 }
 
 #[derive(Default)]
@@ -166,6 +168,24 @@ fn save_connection(app: &AppHandle, connection: LinearConnection) -> Result<()> 
         .map_err(|error| Error::LinearApi(error.to_string()))
 }
 
+async fn persist_bundle_to_nexus(
+    app: &AppHandle,
+    connection: &mut LinearConnection,
+    bundle: &TokenBundle,
+) -> Result<()> {
+    match nexus_sync::persist(app, connection, bundle).await {
+        Ok(credential_id) => {
+            connection.nexus_credential_id = Some(credential_id);
+            connection.nexus_sync_pending = false;
+            Ok(())
+        }
+        Err(error) => {
+            connection.nexus_sync_pending = true;
+            Err(error)
+        }
+    }
+}
+
 pub async fn connect_start(app: AppHandle) -> Result<()> {
     oauth::start(app).await
 }
@@ -226,11 +246,23 @@ pub async fn status(app: &AppHandle) -> Result<Vec<LinearConnection>> {
                         .is_none_or(|id| remote_ids.contains(id))
                 })
                 .collect::<Vec<_>>();
-            for (credential_id, mut connection, bundle) in remote {
+            for (credential_id, mut connection, remote_bundle) in remote {
                 if pending_set.contains(&connection.organization_id) {
                     continue;
                 }
+                let local_bundle = stored_bundle(&connection.organization_id).ok();
+                let bundle = local_bundle
+                    .as_ref()
+                    .map_or_else(|| remote_bundle.clone(), |local| {
+                        nexus_sync::merge_bundle(local, &remote_bundle)
+                    });
+                if bundle != remote_bundle {
+                    let _ = persist_bundle_to_nexus(app, &mut connection, &bundle).await;
+                } else {
+                    connection.nexus_sync_pending = false;
+                }
                 connection.nexus_credential_id = Some(credential_id);
+                connection.agent_installed = bundle.agent.is_some();
                 token_entry(&connection.organization_id)?
                     .set_password(
                         &serde_json::to_string(&bundle)
@@ -307,7 +339,7 @@ pub async fn sync_connection(app: &AppHandle, organization_id: &str) -> Result<L
         .map_err(|error| Error::SecretStoreUnavailable(error.to_string()))?;
     let bundle: TokenBundle = serde_json::from_str(&encoded)
         .map_err(|_| Error::LinearApi("stored Linear credentials are invalid".into()))?;
-    connection.nexus_credential_id = Some(nexus_sync::persist(app, &connection, &bundle).await?);
+    persist_bundle_to_nexus(app, &mut connection, &bundle).await?;
     cancel_pending_revoke(app, organization_id)?;
     save_connection(app, connection.clone())?;
     Ok(connection)
@@ -1076,7 +1108,9 @@ pub async fn agent_access_token(app: &AppHandle, organization_id: &str) -> Resul
             .into_iter()
             .find(|connection| connection.organization_id == organization_id)
         {
-            let _ = nexus_sync::persist(app, &connection, &bundle).await;
+            let mut connection = connection;
+            let _ = persist_bundle_to_nexus(app, &mut connection, &bundle).await;
+            let _ = save_connection(app, connection);
         }
     }
     Ok(agent.access_token)
@@ -1167,7 +1201,12 @@ async fn update_bundle(
             .into_iter()
             .find(|connection| connection.organization_id == organization_id)
         {
-            nexus_sync::persist(app, &connection, &bundle).await?;
+            let mut connection = connection;
+            if let Err(error) = persist_bundle_to_nexus(app, &mut connection, &bundle).await {
+                let _ = save_connection(app, connection);
+                return Err(error);
+            }
+            save_connection(app, connection)?;
         }
     }
     Ok(())
@@ -1348,7 +1387,9 @@ async fn access_token(app: &AppHandle, organization_id: &str) -> Result<String> 
                 .into_iter()
                 .find(|connection| connection.organization_id == organization_id)
             {
-                let _ = nexus_sync::persist(app, &connection, &bundle).await;
+                let mut connection = connection;
+                let _ = persist_bundle_to_nexus(app, &mut connection, &bundle).await;
+                let _ = save_connection(app, connection);
             }
         }
     }
@@ -1379,6 +1420,7 @@ fn save_connected(app: &AppHandle, bundle: TokenBundle, viewer: Viewer) -> Resul
             nexus_credential_id: None,
             agent_installed: false,
             paused_on_device: false,
+            nexus_sync_pending: false,
         },
     )
 }

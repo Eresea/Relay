@@ -49,9 +49,11 @@ import { UmbraButtonComponent } from '@umbra/components/umbra-button/umbra-butto
               {{
                 connection.pausedOnDevice
                   ? 'Paused on this device'
-                  : connection.nexusCredentialId
-                    ? 'Available across devices'
-                    : 'Stored on this device'
+                  : connection.nexusSyncPending
+                    ? 'Needs sync through Nexus'
+                    : connection.nexusCredentialId
+                      ? 'Available across devices'
+                      : 'Stored on this device'
               }}
             </span>
           </div>
@@ -59,7 +61,13 @@ import { UmbraButtonComponent } from '@umbra/components/umbra-button/umbra-butto
             @if (connection.agentInstalled) {
               <span class="hint">
                 Relay agent installed ·
-                {{ connection.nexusCredentialId ? 'available across devices' : 'this device only' }}
+                {{
+                  connection.nexusSyncPending
+                    ? 'needs Nexus sync'
+                    : connection.nexusCredentialId
+                      ? 'available across devices'
+                      : 'this device only'
+                }}
               </span>
             } @else {
               <span class="hint"
