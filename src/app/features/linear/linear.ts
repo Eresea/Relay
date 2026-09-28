@@ -4081,6 +4081,7 @@ export class Linear {
       );
       if (requestId !== this.issueDetailRequest) return;
       this.cycles.update((items) => ({ ...items, [detail.issue.team.id]: teamCycles }));
+      this.persistCycleCache(connection, detail.issue.team.id);
       this.codexContext.set(
         await this.tauri.linearCodexContext(connection.organizationId, issue.id),
       );
@@ -5155,6 +5156,15 @@ export class Linear {
     }
   }
 
+  private persistCycleCache(connection: LinearConnection, teamId: string): void {
+    if (
+      this.selected()?.organizationId === connection.organizationId &&
+      this.selected()?.viewerId === connection.viewerId
+    ) {
+      this.writeLocal(this.cycleCacheKey(connection, teamId), this.cycles()[teamId] ?? []);
+    }
+  }
+
   protected cycleDateInTeam(value: string | null, team: LinearTeam): string {
     return value ? cycleDateInTimezone(value, team.timezone) : 'Open';
   }
@@ -5233,6 +5243,7 @@ export class Linear {
           (left.startsAt ?? '').localeCompare(right.startsAt ?? ''),
         ),
       }));
+      this.persistCycleCache(connection, team.id);
       this.writeLocal(this.cycleDraftKey(connection, team.id), null);
       this.createCycleTeamId.set(null);
     } catch (error) {
@@ -5280,6 +5291,7 @@ export class Linear {
           item.id === updated.id ? updated : item,
         ),
       }));
+      this.persistCycleCache(connection, cycle.team.id);
       this.editingCycleId.set(null);
     } catch (error) {
       this.error.set(error instanceof Error ? error.message : String(error));
