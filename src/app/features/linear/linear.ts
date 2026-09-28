@@ -3727,6 +3727,7 @@ export class Linear {
   private nextProjectIssueCursor: string | null = null;
   private projectIssuesRequest = 0;
   private projectOpenRequest = 0;
+  private projectsRequest = 0;
   private issueDetailRequest = 0;
   private initiativeRequest = 0;
   private projectUpdatesRequest = 0;
@@ -3848,6 +3849,7 @@ export class Linear {
 
   protected select(connection: LinearConnection): void {
     if (connection.pausedOnDevice) return;
+    this.projectsRequest++;
     this.issueDetailRequest++;
     this.selected.set(connection);
     this.selectedProject.set(null);
@@ -5303,6 +5305,7 @@ export class Linear {
   protected async loadProjects(): Promise<void> {
     const connection = this.selected();
     if (!connection) return;
+    const requestId = ++this.projectsRequest;
     const includeArchived = this.showArchivedProjects();
     this.projectCacheStale.set(false);
     const cacheKey = this.projectCacheKey(connection, includeArchived);
@@ -5316,10 +5319,24 @@ export class Linear {
     }
     try {
       const projects = await this.tauri.linearProjects(connection.organizationId, includeArchived);
+      if (
+        requestId !== this.projectsRequest ||
+        this.selected()?.organizationId !== connection.organizationId ||
+        this.selected()?.viewerId !== connection.viewerId
+      ) {
+        return;
+      }
       this.projects.set(projects);
       this.writeLocal(cacheKey, projects);
       this.projectCacheStale.set(false);
     } catch (error) {
+      if (
+        requestId !== this.projectsRequest ||
+        this.selected()?.organizationId !== connection.organizationId ||
+        this.selected()?.viewerId !== connection.viewerId
+      ) {
+        return;
+      }
       this.projectCacheStale.set(hasCache);
       this.error.set(
         hasCache
