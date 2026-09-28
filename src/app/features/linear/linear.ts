@@ -823,6 +823,22 @@ interface LinearIssueDraft {
                           }
                         </select>
                       </label>
+                      <label>
+                        <span>Cycle</span>
+                        <select
+                          [value]="issueCycleId()"
+                          [disabled]="loading()"
+                          (change)="setIssueCycleFilter($any($event.target).value)"
+                        >
+                          <option value="">Any cycle</option>
+                          <option value="uncycled">No cycle</option>
+                          @for (cycle of cyclesFor(issueTeamId()); track cycle.id) {
+                            <option [value]="cycle.id">
+                              {{ cycle.name || 'Cycle ' + cycle.number }}
+                            </option>
+                          }
+                        </select>
+                      </label>
                     }
                     <label>
                       <span>Label</span>
@@ -2887,6 +2903,7 @@ export class Linear {
   protected readonly issuePriority = signal('');
   protected readonly issueAssigneeId = signal('');
   protected readonly issueLabelId = signal('');
+  protected readonly issueCycleId = signal('');
   protected readonly confirmArchiveIssueId = signal<string | null>(null);
   protected readonly confirmArchiveIssueDetailId = signal<string | null>(null);
   protected readonly archivingIssueId = signal<string | null>(null);
@@ -3145,7 +3162,9 @@ export class Linear {
     this.issueTeamId.set('');
     this.issueAssigneeId.set('');
     this.issueLabelId.set('');
+    this.issueCycleId.set('');
     this.issueStateId.set('');
+    this.cycles.set({});
     this.restoreIssueDraft(connection);
     this.restorePendingIssueUpdates(connection);
     this.issueCacheStale.set(false);
@@ -3173,6 +3192,7 @@ export class Linear {
     if (this.loading() || teamId === this.issueTeamId()) return;
     this.issueTeamId.set(teamId);
     if (!teamId) this.issueAssigneeId.set('');
+    this.issueCycleId.set('');
     if (teamId && !this.labelsFor(teamId).some((label) => label.id === this.issueLabelId())) {
       this.issueLabelId.set('');
     }
@@ -3183,6 +3203,8 @@ export class Linear {
     this.nextCursor = null;
     this.hasNextPage.set(false);
     this.issues.set([]);
+    const connection = this.selected();
+    if (connection && teamId) void this.loadTeamCycles(connection, teamId);
     void this.loadIssues();
   }
 
@@ -3214,12 +3236,20 @@ export class Linear {
     void this.loadIssues();
   }
 
+  protected setIssueCycleFilter(cycleId: string): void {
+    if (this.loading() || cycleId === this.issueCycleId()) return;
+    this.issueCycleId.set(cycleId);
+    this.resetIssuePage();
+    void this.loadIssues();
+  }
+
   protected issueFilterCount(): number {
     return (
       Number(!!this.issueStateId()) +
       Number(!!this.issuePriority()) +
       Number(!!this.issueTeamId() && !!this.issueAssigneeId()) +
-      Number(!!this.issueLabelId())
+      Number(!!this.issueLabelId()) +
+      Number(!!this.issueTeamId() && !!this.issueCycleId())
     );
   }
 
@@ -3817,7 +3847,7 @@ export class Linear {
     this.saveIssueDraft();
     this.saveProjectIssueDraft();
     const connection = this.selected();
-    if (connection) void this.loadCreateTeamCycles(connection, teamId);
+    if (connection) void this.loadTeamCycles(connection, teamId);
   }
 
   protected updateIssueDraft(field: 'title' | 'description', value: string): void {
@@ -3882,7 +3912,8 @@ export class Linear {
     const priority = this.issuePriority();
     const assignee = this.issueAssigneeId();
     const label = this.issueLabelId();
-    return `${scope}${archived}${search ? `.search.${encodeURIComponent(search)}` : ''}${state ? `.state.${encodeURIComponent(state)}` : ''}${priority ? `.priority.${priority}` : ''}${assignee ? `.assignee.${encodeURIComponent(assignee)}` : ''}${label ? `.label.${encodeURIComponent(label)}` : ''}`;
+    const cycle = this.issueCycleId();
+    return `${scope}${archived}${search ? `.search.${encodeURIComponent(search)}` : ''}${state ? `.state.${encodeURIComponent(state)}` : ''}${priority ? `.priority.${priority}` : ''}${assignee ? `.assignee.${encodeURIComponent(assignee)}` : ''}${label ? `.label.${encodeURIComponent(label)}` : ''}${cycle ? `.cycle.${encodeURIComponent(cycle)}` : ''}`;
   }
 
   private projectCacheKey(connection: LinearConnection, includeArchived = false): string {
@@ -3967,6 +3998,11 @@ export class Linear {
       (!search || issue.title.toLowerCase().includes(search)) &&
       (!this.issueStateId() || issue.state?.id === this.issueStateId()) &&
       (this.issuePriority() === '' || issue.priority === Number(this.issuePriority())) &&
+      (!this.issueTeamId() ||
+        !this.issueCycleId() ||
+        (this.issueCycleId() === 'uncycled'
+          ? !issue.cycle
+          : issue.cycle?.id === this.issueCycleId())) &&
       (!this.issueTeamId() ||
         !this.issueAssigneeId() ||
         (this.issueAssigneeId() === 'unassigned'
@@ -4165,14 +4201,11 @@ export class Linear {
     return this.cycles()[teamId] ?? [];
   }
 
-  private async loadCreateTeamCycles(connection: LinearConnection, teamId: string): Promise<void> {
+  private async loadTeamCycles(connection: LinearConnection, teamId: string): Promise<void> {
     if (!teamId || this.cycles()[teamId]) return;
     try {
       const cycles = await this.tauri.linearCycles(connection.organizationId, teamId);
-      if (
-        this.selected()?.organizationId === connection.organizationId &&
-        this.createTeamId() === teamId
-      ) {
+      if (this.selected()?.organizationId === connection.organizationId) {
         this.cycles.update((items) => ({ ...items, [teamId]: cycles }));
       }
     } catch (error) {
@@ -5549,6 +5582,7 @@ export class Linear {
           this.issuePriority() === '' ? undefined : Number(this.issuePriority()),
           this.issueAssigneeId() || undefined,
           this.issueLabelId() || undefined,
+          this.issueCycleId() || undefined,
         )
       : this.tauri.linearMyIssues(
           organizationId,
@@ -5619,7 +5653,7 @@ export class Linear {
         ),
       );
       this.workflowStates.set(Object.fromEntries(entries));
-      await this.loadCreateTeamCycles(connection, teamId);
+      await this.loadTeamCycles(connection, teamId);
     } catch (error) {
       this.error.set(error instanceof Error ? error.message : String(error));
     }

@@ -1330,6 +1330,7 @@ pub async fn linear_team_issues(
     priority: Option<u8>,
     assignee_id: Option<String>,
     label_id: Option<String>,
+    cycle_id: Option<String>,
 ) -> Result<IssuePage> {
     if team_id.trim().is_empty() {
         return Err(std::io::Error::other("A Linear team is required").into());
@@ -1344,6 +1345,9 @@ pub async fn linear_team_issues(
             .as_deref()
             .is_some_and(|value| value.trim().is_empty())
         || label_id
+            .as_deref()
+            .is_some_and(|value| value.trim().is_empty())
+        || cycle_id
             .as_deref()
             .is_some_and(|value| value.trim().is_empty())
         || priority.is_some_and(|value| value > 4)
@@ -1364,6 +1368,7 @@ pub async fn linear_team_issues(
         priority,
         assignee_id.as_deref(),
         label_id.as_deref(),
+        cycle_id.as_deref(),
     )
     .await
 }

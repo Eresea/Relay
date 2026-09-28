@@ -927,6 +927,7 @@ pub async fn team_issues(
     priority: Option<u8>,
     assignee_id: Option<&str>,
     label_id: Option<&str>,
+    cycle_id: Option<&str>,
 ) -> Result<IssuePage> {
     api::team_issues(
         &access_token(app, organization_id).await?,
@@ -938,6 +939,7 @@ pub async fn team_issues(
         priority,
         assignee_id,
         label_id,
+        cycle_id,
     )
     .await
 }
