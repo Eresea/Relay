@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   codexFailureRestoreTarget,
   isLinearCommentDraft,
+  isLinearOrganizationCacheKey,
   isLinearProjectDocumentDraft,
   linearCodexPrompt,
   linearCommentDraftConflicts,
@@ -177,6 +178,26 @@ describe('Linear project issue cache keys', () => {
     expect(
       linearProjectIssueCacheKey('org', 'viewer', 'project', { ...base, search: 'other' }),
     ).not.toBe(key);
+  });
+});
+
+describe('Linear organization cache cleanup', () => {
+  it('matches this workspace caches without matching neighboring workspace ids', () => {
+    for (const key of [
+      'relay.linear.issueDraft.org',
+      'relay.linear.pendingIssueUpdates.org',
+      'relay.linear.projectIssueDraft.org.project',
+      'relay.linear.issueDetail.org.viewer.issue',
+      'relay.linear.projectIssues.org.viewer.project',
+      'relay.linear.initiatives.org.viewer',
+      'relay.linear.cycles.org.viewer.team',
+    ]) {
+      expect(isLinearOrganizationCacheKey(key, 'org')).toBe(true);
+    }
+    expect(
+      isLinearOrganizationCacheKey('relay.linear.issueDetail.org-other.viewer.issue', 'org'),
+    ).toBe(false);
+    expect(isLinearOrganizationCacheKey('relay.linear.open', 'org')).toBe(false);
   });
 });
 

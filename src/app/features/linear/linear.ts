@@ -44,6 +44,7 @@ import { UmbraButtonComponent } from '@umbra/components/umbra-button/umbra-butto
 import {
   codexFailureRestoreTarget,
   isLinearCommentDraft,
+  isLinearOrganizationCacheKey,
   isLinearProjectDocumentDraft,
   isPendingLinearIssueUpdate,
   linearCommentDraftConflicts,
@@ -4920,6 +4921,19 @@ export class Linear {
     }
   }
 
+  private clearOrganizationCache(organizationId: string): void {
+    try {
+      for (let index = localStorage.length - 1; index >= 0; index--) {
+        const key = localStorage.key(index);
+        if (key && isLinearOrganizationCacheKey(key, organizationId)) {
+          localStorage.removeItem(key);
+        }
+      }
+    } catch {
+      // Disconnect must still finish if browser storage is unavailable.
+    }
+  }
+
   private writeLocal<T>(key: string, value: T | null): void {
     try {
       if (value) localStorage.setItem(key, JSON.stringify(value));
@@ -6637,9 +6651,7 @@ export class Linear {
     this.disconnectingOrganizationId.set(connection.organizationId);
     try {
       const warning = await this.tauri.linearDisconnect(connection.organizationId);
-      this.writeLocal(this.issueCacheKey(connection), null);
-      this.writeLocal(this.projectCacheKey(connection), null);
-      this.writeLocal(this.projectCacheKey(connection, true), null);
+      this.clearOrganizationCache(connection.organizationId);
       const connections = this.connections().filter(
         (entry) => entry.organizationId !== connection.organizationId,
       );

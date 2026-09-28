@@ -9,6 +9,36 @@ export interface LinearProjectIssueFilters {
   labelId: string;
 }
 
+const organizationCacheCategories = [
+  'cycles',
+  'initiatives',
+  'issueCommentDraft',
+  'issueCommentEditDraft',
+  'issueDetail',
+  'issues',
+  'milestones',
+  'projectDocumentDraft',
+  'projectIssues',
+  'projectResources',
+  'projectUpdates',
+  'projects',
+  'teams',
+] as const;
+
+export function isLinearOrganizationCacheKey(key: string, organizationId: string): boolean {
+  const base = `relay.linear.`;
+  if (
+    key === `${base}issueDraft.${organizationId}` ||
+    key === `${base}pendingIssueUpdates.${organizationId}`
+  ) {
+    return true;
+  }
+  return [
+    `${base}projectIssueDraft.${organizationId}.`,
+    ...organizationCacheCategories.map((category) => `${base}${category}.${organizationId}.`),
+  ].some((prefix) => key.startsWith(prefix));
+}
+
 export function linearProjectIssueCacheKey(
   organizationId: string,
   viewerId: string,
