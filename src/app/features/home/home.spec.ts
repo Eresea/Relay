@@ -30,7 +30,7 @@ it('manages Nexus sign-in from the avatar below Settings and reports failures', 
       return Promise.resolve(() => undefined);
     }),
     nexusAuthStatus: vi.fn().mockResolvedValue(disconnected),
-    nexusAuthStart: vi.fn().mockResolvedValue(undefined),
+    nexusAuthGoogleStart: vi.fn().mockResolvedValue(undefined),
     nexusAuthLogout: vi.fn().mockResolvedValue(undefined),
   };
   TestBed.configureTestingModule({
@@ -59,24 +59,30 @@ it('manages Nexus sign-in from the avatar below Settings and reports failures', 
   fixture.detectChanges();
   expect(trigger.getAttribute('aria-expanded')).toBe('true');
   host.querySelector<HTMLButtonElement>('[role="menuitem"]')!.click();
+  fixture.detectChanges();
+  host.querySelector<HTMLButtonElement>('.account-dialog-google')!.click();
   await fixture.whenStable();
-  expect(bridge.nexusAuthStart).toHaveBeenCalledOnce();
-  expect(host.textContent).toContain('Waiting for sign-in');
+  expect(bridge.nexusAuthGoogleStart).toHaveBeenCalledOnce();
+  expect(host.textContent).toContain('Waiting for Google…');
 
   onAuth({ connected: true, userId: 'user', email: 'alex@example.com', displayName: 'Alex' });
   fixture.detectChanges();
   expect(trigger.querySelector('.avatar')?.textContent?.trim()).toBe('A');
+  trigger.click();
+  fixture.detectChanges();
   expect(host.querySelector('.account-menu')?.textContent).toContain('alex@example.com');
-  host.querySelector<HTMLButtonElement>('[role="menuitem"]')!.click();
+  (host.querySelectorAll('[role="menuitem"]')[1] as HTMLButtonElement).click();
   await fixture.whenStable();
   expect(bridge.nexusAuthLogout).toHaveBeenCalledOnce();
   expect(host.textContent).toContain('Connect through Nexus');
 
-  bridge.nexusAuthStart.mockRejectedValueOnce('Could not open browser');
+  bridge.nexusAuthGoogleStart.mockRejectedValueOnce('Could not open browser');
   host.querySelector<HTMLButtonElement>('[role="menuitem"]')!.click();
+  fixture.detectChanges();
+  host.querySelector<HTMLButtonElement>('.account-dialog-google')!.click();
   await fixture.whenStable();
   expect(host.querySelector('[role="alert"]')?.textContent).toContain('Could not open browser');
-  expect(host.querySelector<HTMLButtonElement>('[role="menuitem"]')!.disabled).toBe(false);
+  expect(host.querySelector<HTMLButtonElement>('.account-dialog-google')!.disabled).toBe(false);
 
   document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
   fixture.detectChanges();

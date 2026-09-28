@@ -25,7 +25,7 @@ import { mergeProjectSummaries, projectKey, type ProjectSummary } from './projec
           <h1 id="projects-title">Projects</h1>
           <p class="page-description">Local clones and recent GitHub repositories.</p>
         </div>
-        <umbra-button size="sm" [disabled]="loading() || syncing()" (click)="sync()">
+        <umbra-button class="scan-button" size="sm" [disabled]="loading() || syncing()" (click)="sync()">
           <rl-icon umbraButtonIcon [name]="syncing() ? 'loader-circle' : 'search'" [size]="14" />
           {{ syncing() ? 'Syncing' : 'Sync projects' }}
         </umbra-button>

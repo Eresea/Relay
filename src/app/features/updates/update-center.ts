@@ -50,7 +50,7 @@ export class UpdateCenter {
     <div class="update-wrap" [attr.data-state]="snapshot().state">
       <button
         type="button"
-        class="indicator"
+        class="indicator action"
         [attr.aria-label]="label()"
         [attr.title]="label()"
         (click)="activate()"

@@ -2,13 +2,13 @@ import {
   ChangeDetectionStrategy,
   Component,
   DestroyRef,
-  ElementRef,
   afterRenderEffect,
   computed,
   effect,
   inject,
   signal,
   viewChild,
+  type ElementRef,
 } from '@angular/core';
 
 import { NexusAccount } from '@core/nexus-account';
@@ -61,6 +61,7 @@ const RAIL_EXPANDED_SETTING_KEY = 'rail.expanded';
           [class.active]="view() === 'home'"
           (click)="view.set('home')"
           aria-label="Home"
+          title="Home"
         >
           <rl-icon name="house" [size]="16" />
         </button>
@@ -68,10 +69,22 @@ const RAIL_EXPANDED_SETTING_KEY = 'rail.expanded';
         <rl-notification-popover />
       </div>
       <div class="window-controls">
-        <button type="button" class="window-btn" (click)="theme.toggle()" aria-label="Toggle theme">
+        <button
+          type="button"
+          class="window-btn"
+          (click)="theme.toggle()"
+          aria-label="Toggle theme"
+          [attr.title]="'Switch to ' + (theme.theme() === 'dark' ? 'light' : 'dark') + ' theme'"
+        >
           <rl-icon [name]="theme.theme() === 'dark' ? 'sun' : 'moon'" [size]="14" />
         </button>
-        <button type="button" class="window-btn" (click)="minimize()" aria-label="Minimize">
+        <button
+          type="button"
+          class="window-btn"
+          (click)="minimize()"
+          aria-label="Minimize"
+          title="Minimize"
+        >
           <rl-icon name="minus" [size]="14" />
         </button>
         <button
@@ -79,10 +92,17 @@ const RAIL_EXPANDED_SETTING_KEY = 'rail.expanded';
           class="window-btn"
           (click)="toggleMaximize()"
           [attr.aria-label]="maximized() ? 'Restore' : 'Maximize'"
+          [attr.title]="maximized() ? 'Restore' : 'Maximize'"
         >
           <rl-icon [name]="maximized() ? 'copy' : 'square'" [size]="14" />
         </button>
-        <button type="button" class="window-btn close" (click)="close()" aria-label="Close">
+        <button
+          type="button"
+          class="window-btn close"
+          (click)="close()"
+          aria-label="Close"
+          title="Close"
+        >
           <rl-icon name="x" [size]="14" />
         </button>
       </div>
@@ -96,6 +116,7 @@ const RAIL_EXPANDED_SETTING_KEY = 'rail.expanded';
             class="rail-toggle"
             (click)="toggleRail()"
             [attr.aria-label]="railExpanded() ? 'Collapse sidebar' : 'Expand sidebar'"
+            [attr.title]="railExpanded() ? 'Collapse sidebar' : 'Expand sidebar'"
           >
             <rl-icon name="panel-left" [size]="16" />
           </button>
@@ -105,6 +126,7 @@ const RAIL_EXPANDED_SETTING_KEY = 'rail.expanded';
             [class.active]="view() === 'home'"
             (click)="view.set('home')"
             aria-label="Projects"
+            title="Projects"
           >
             <span class="rail-icon"><rl-icon name="library" [size]="16" /></span>
             <span class="rail-label">Projects</span>
@@ -115,6 +137,7 @@ const RAIL_EXPANDED_SETTING_KEY = 'rail.expanded';
             [class.active]="view() === 'runtime'"
             (click)="view.set('runtime')"
             aria-label="Runtime"
+            title="Runtime"
           >
             <span class="rail-icon"><rl-icon name="info" [size]="16" /></span>
             <span class="rail-label">Runtime</span>
@@ -125,6 +148,7 @@ const RAIL_EXPANDED_SETTING_KEY = 'rail.expanded';
             [class.active]="view() === 'codex'"
             (click)="view.set('codex')"
             aria-label="Codex"
+            title="Codex"
           >
             <span class="rail-icon"><rl-icon name="command" [size]="16" /></span>
             <span class="rail-label">Codex</span>
@@ -138,6 +162,7 @@ const RAIL_EXPANDED_SETTING_KEY = 'rail.expanded';
             [class.active]="view() === 'settings'"
             (click)="openSettings()"
             aria-label="Settings"
+            title="Settings"
           >
             <span class="rail-icon"><rl-icon name="settings" [size]="16" /></span>
             <span class="rail-label">Settings</span>
@@ -194,6 +219,7 @@ const RAIL_EXPANDED_SETTING_KEY = 'rail.expanded';
       </nav>
 
       @if (accountDialogOpen()) {
+          <!-- eslint-disable-next-line @angular-eslint/template/click-events-have-key-events, @angular-eslint/template/interactive-supports-focus -->
           <dialog
             #accountDialog
             class="account-dialog"
@@ -1143,7 +1169,10 @@ export class Home {
 
   protected closeNexusDialog(): void {
     const dialog = this.accountDialogElement()?.nativeElement;
-    if (dialog?.open) dialog.close();
+    if (dialog?.open) {
+      if (typeof dialog.close === 'function') dialog.close();
+      else dialog.open = false;
+    }
     this.accountDialogOpen.set(false);
     this.authView.set('social');
     this.authPassword.set('');
@@ -1212,7 +1241,10 @@ export class Home {
   constructor() {
     afterRenderEffect(() => {
       const dialog = this.accountDialogElement()?.nativeElement;
-      if (this.accountDialogOpen() && dialog && !dialog.open) dialog.showModal();
+      if (this.accountDialogOpen() && dialog && !dialog.open) {
+        if (typeof dialog.showModal === 'function') dialog.showModal();
+        else dialog.open = true;
+      }
     });
     effect(() => {
       if (this.accountDialogOpen() && this.account.status().connected) this.closeNexusDialog();
