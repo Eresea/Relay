@@ -10,8 +10,9 @@ use crate::error::{Error, Result};
 
 pub use api::{
     Initiative, InitiativeProject, InitiativeUpdate, Issue, IssueDetail, IssuePage, IssueRelation,
-    LinearComment, LinearCycle, LinearLabel, LinearMilestone, LinearProject, LinearProjectStatus,
-    LinearProjectUpdate, Person, Team, Viewer, WorkflowState,
+    LinearComment, LinearCycle, LinearDocument, LinearExternalLink, LinearLabel, LinearMilestone,
+    LinearProject, LinearProjectResources, LinearProjectStatus, LinearProjectUpdate, Person, Team,
+    Viewer, WorkflowState,
 };
 use oauth::TokenBundle;
 pub use oauth::{LinearCodexLink, LinearCodexProjectPolicy};
@@ -361,6 +362,54 @@ pub async fn update_project(
         team_ids,
     )
     .await
+}
+
+pub async fn project_resources(
+    app: &AppHandle,
+    organization_id: &str,
+    project_id: &str,
+) -> Result<LinearProjectResources> {
+    api::project_resources(&access_token(app, organization_id).await?, project_id).await
+}
+
+pub async fn create_project_document(
+    app: &AppHandle,
+    organization_id: &str,
+    project_id: &str,
+    title: &str,
+    content: &str,
+) -> Result<LinearDocument> {
+    api::create_project_document(
+        &access_token(app, organization_id).await?,
+        project_id,
+        title,
+        content,
+    )
+    .await
+}
+
+pub async fn create_project_external_link(
+    app: &AppHandle,
+    organization_id: &str,
+    project_id: &str,
+    label: &str,
+    url: &str,
+) -> Result<LinearExternalLink> {
+    api::create_project_external_link(
+        &access_token(app, organization_id).await?,
+        project_id,
+        label,
+        url,
+    )
+    .await
+}
+
+pub async fn delete_project_external_link(
+    app: &AppHandle,
+    organization_id: &str,
+    link_id: &str,
+) -> Result<()> {
+    api::delete_project_external_link(&access_token(app, organization_id).await?, link_id).await
 }
 
 pub async fn project_statuses(

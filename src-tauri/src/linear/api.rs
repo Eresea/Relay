@@ -222,6 +222,32 @@ pub struct LinearProject {
     pub teams: Vec<Team>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LinearDocument {
+    pub id: String,
+    pub title: String,
+    pub url: String,
+    pub updated_at: String,
+    #[serde(default)]
+    pub creator: Option<Person>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LinearExternalLink {
+    pub id: String,
+    pub label: String,
+    pub url: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LinearProjectResources {
+    pub documents: Vec<LinearDocument>,
+    pub external_links: Vec<LinearExternalLink>,
+}
+
 fn deserialize_nodes<'de, D, T>(deserializer: D) -> std::result::Result<Vec<T>, D::Error>
 where
     D: serde::Deserializer<'de>,
@@ -609,6 +635,143 @@ pub async fn update_project(
     )
     .await?;
     data.result.into_value("Linear did not update the project")
+}
+
+pub async fn project_resources(token: &str, project_id: &str) -> Result<LinearProjectResources> {
+    #[derive(Deserialize)]
+    struct Data {
+        project: Option<ProjectDocuments>,
+    }
+    #[derive(Deserialize)]
+    struct ProjectDocuments {
+        documents: ResourceConnection<LinearDocument>,
+    }
+    let mut documents = Vec::new();
+    let mut after = None;
+    loop {
+        let data: Data = query(
+            token,
+            "query RelayProjectDocuments($id: String!, $after: String) { project(id: $id) { documents(first: 100, after: $after) { nodes { id title url updatedAt creator { id name } } pageInfo { endCursor hasNextPage } } } }",
+            json!({ "id": project_id, "after": after }),
+        )
+        .await?;
+        let page = data
+            .project
+            .ok_or_else(|| Error::LinearApi("Linear project was not found".into()))?
+            .documents;
+        documents.extend(page.nodes);
+        if !page.page_info.has_next_page {
+            break;
+        }
+        after = page.page_info.end_cursor;
+        if after.is_none() {
+            return Err(Error::LinearApi(
+                "Linear returned an incomplete document page".into(),
+            ));
+        }
+    }
+
+    #[derive(Deserialize)]
+    struct LinkData {
+        project: Option<ProjectLinks>,
+    }
+    #[derive(Deserialize)]
+    struct ProjectLinks {
+        #[serde(rename = "externalLinks")]
+        external_links: ResourceConnection<LinearExternalLink>,
+    }
+    let mut external_links = Vec::new();
+    let mut after = None;
+    loop {
+        let data: LinkData = query(
+            token,
+            "query RelayProjectExternalLinks($id: String!, $after: String) { project(id: $id) { externalLinks(first: 100, after: $after) { nodes { id label url } pageInfo { endCursor hasNextPage } } } }",
+            json!({ "id": project_id, "after": after }),
+        )
+        .await?;
+        let page = data
+            .project
+            .ok_or_else(|| Error::LinearApi("Linear project was not found".into()))?
+            .external_links;
+        external_links.extend(page.nodes);
+        if !page.page_info.has_next_page {
+            break;
+        }
+        after = page.page_info.end_cursor;
+        if after.is_none() {
+            return Err(Error::LinearApi(
+                "Linear returned an incomplete external-link page".into(),
+            ));
+        }
+    }
+
+    Ok(LinearProjectResources {
+        documents,
+        external_links,
+    })
+}
+
+pub async fn create_project_document(
+    token: &str,
+    project_id: &str,
+    title: &str,
+    content: &str,
+) -> Result<LinearDocument> {
+    #[derive(Deserialize)]
+    struct Data {
+        #[serde(rename = "documentCreate")]
+        result: DocumentMutation,
+    }
+    let data: Data = query(
+        token,
+        "mutation RelayProjectDocumentCreate($input: DocumentCreateInput!) { documentCreate(input: $input) { success document { id title url updatedAt creator { id name } } } }",
+        json!({ "input": { "projectId": project_id, "title": title, "content": content } }),
+    )
+    .await?;
+    data.result
+        .into_value("Linear did not create the project document")
+}
+
+pub async fn create_project_external_link(
+    token: &str,
+    project_id: &str,
+    label: &str,
+    url: &str,
+) -> Result<LinearExternalLink> {
+    #[derive(Deserialize)]
+    struct Data {
+        #[serde(rename = "entityExternalLinkCreate")]
+        result: ExternalLinkMutation,
+    }
+    let data: Data = query(
+        token,
+        "mutation RelayProjectExternalLinkCreate($input: EntityExternalLinkCreateInput!) { entityExternalLinkCreate(input: $input) { success entityExternalLink { id label url } } }",
+        json!({ "input": { "projectId": project_id, "label": label, "url": url } }),
+    )
+    .await?;
+    data.result
+        .into_value("Linear did not create the project link")
+}
+
+pub async fn delete_project_external_link(token: &str, link_id: &str) -> Result<()> {
+    #[derive(Deserialize)]
+    struct Data {
+        #[serde(rename = "entityExternalLinkDelete")]
+        result: DeleteMutation,
+    }
+    let data: Data = query(
+        token,
+        "mutation RelayProjectExternalLinkDelete($id: String!) { entityExternalLinkDelete(id: $id) { success } }",
+        json!({ "id": link_id }),
+    )
+    .await?;
+    if data.result.success {
+        Ok(())
+    } else {
+        Err(Error::LinearApi(
+            "Linear did not delete the project link".into(),
+        ))
+    }
 }
 
 pub async fn project_statuses(token: &str) -> Result<Vec<LinearProjectStatus>> {
@@ -1550,6 +1713,19 @@ struct ProjectMutation {
 }
 
 #[derive(Deserialize)]
+struct DocumentMutation {
+    success: bool,
+    document: Option<LinearDocument>,
+}
+
+#[derive(Deserialize)]
+struct ExternalLinkMutation {
+    success: bool,
+    #[serde(rename = "entityExternalLink")]
+    link: Option<LinearExternalLink>,
+}
+
+#[derive(Deserialize)]
 struct CycleMutation {
     success: bool,
     cycle: Option<LinearCycle>,
@@ -1704,6 +1880,28 @@ impl ProjectMutation {
         if self.success {
             self.project
                 .ok_or_else(|| Error::LinearApi("Linear returned no project".into()))
+        } else {
+            Err(Error::LinearApi(message.into()))
+        }
+    }
+}
+
+impl DocumentMutation {
+    fn into_value(self, message: &str) -> Result<LinearDocument> {
+        if self.success {
+            self.document
+                .ok_or_else(|| Error::LinearApi("Linear returned no project document".into()))
+        } else {
+            Err(Error::LinearApi(message.into()))
+        }
+    }
+}
+
+impl ExternalLinkMutation {
+    fn into_value(self, message: &str) -> Result<LinearExternalLink> {
+        if self.success {
+            self.link
+                .ok_or_else(|| Error::LinearApi("Linear returned no project link".into()))
         } else {
             Err(Error::LinearApi(message.into()))
         }
@@ -1938,6 +2136,13 @@ struct ProjectConnection {
 }
 
 #[derive(Deserialize)]
+struct ResourceConnection<T> {
+    nodes: Vec<T>,
+    #[serde(rename = "pageInfo")]
+    page_info: PageInfo,
+}
+
+#[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct PageInfo {
     end_cursor: Option<String>,
@@ -1990,6 +2195,35 @@ mod tests {
         assert_eq!(labels.labels[0].id, "label-1");
         let encoded = serde_json::to_value(labels).unwrap();
         assert_eq!(encoded["labels"][0]["id"], "label-1");
+    }
+
+    #[test]
+    fn project_resources_decode_linear_documents_and_links() {
+        let documents: ResourceConnection<LinearDocument> = serde_json::from_value(json!({
+            "nodes": [{
+                "id": "doc-1",
+                "title": "Plan",
+                "url": "https://linear.app/acme/document/doc-1",
+                "updatedAt": "2026-09-28T12:00:00.000Z",
+                "creator": { "id": "user-1", "name": "Ada" }
+            }],
+            "pageInfo": { "endCursor": "next", "hasNextPage": true }
+        }))
+        .unwrap();
+        assert!(documents.page_info.has_next_page);
+        assert_eq!(documents.page_info.end_cursor.as_deref(), Some("next"));
+        assert_eq!(documents.nodes[0].creator.as_ref().unwrap().name, "Ada");
+
+        let link: ExternalLinkMutation = serde_json::from_value(json!({
+            "success": true,
+            "entityExternalLink": {
+                "id": "link-1",
+                "label": "Design",
+                "url": "https://example.com/design"
+            }
+        }))
+        .unwrap();
+        assert_eq!(link.into_value("failed").unwrap().label, "Design");
     }
 
     #[test]

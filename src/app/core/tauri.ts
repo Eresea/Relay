@@ -630,6 +630,54 @@ export class TauriBridge {
     );
   }
 
+  async linearProjectResources(
+    organizationId: string,
+    projectId: string,
+  ): Promise<LinearProjectResources> {
+    return (
+      (await this.invoke<LinearProjectResources>('linear_project_resources', {
+        organizationId,
+        projectId,
+      })) ?? { documents: [], externalLinks: [] }
+    );
+  }
+
+  async linearCreateProjectDocument(
+    organizationId: string,
+    projectId: string,
+    title: string,
+    content: string,
+  ): Promise<LinearDocument> {
+    const document = await this.invoke<LinearDocument>('linear_create_project_document', {
+      organizationId,
+      projectId,
+      title,
+      content,
+    });
+    if (!document) throw new Error('Linear returned no project document.');
+    return document;
+  }
+
+  async linearCreateProjectExternalLink(
+    organizationId: string,
+    projectId: string,
+    label: string,
+    url: string,
+  ): Promise<LinearExternalLink> {
+    const link = await this.invoke<LinearExternalLink>('linear_create_project_external_link', {
+      organizationId,
+      projectId,
+      label,
+      url,
+    });
+    if (!link) throw new Error('Linear returned no project link.');
+    return link;
+  }
+
+  async linearDeleteProjectExternalLink(organizationId: string, linkId: string): Promise<void> {
+    await this.invoke('linear_delete_project_external_link', { organizationId, linkId });
+  }
+
   async linearCreateProject(
     organizationId: string,
     teamIds: readonly string[],
@@ -1627,6 +1675,25 @@ export interface LinearProjectTeam {
   readonly id: string;
   readonly name: string;
   readonly key: string;
+}
+
+export interface LinearDocument {
+  readonly id: string;
+  readonly title: string;
+  readonly url: string;
+  readonly updatedAt: string;
+  readonly creator: LinearPerson | null;
+}
+
+export interface LinearExternalLink {
+  readonly id: string;
+  readonly label: string;
+  readonly url: string;
+}
+
+export interface LinearProjectResources {
+  readonly documents: readonly LinearDocument[];
+  readonly externalLinks: readonly LinearExternalLink[];
 }
 
 export interface LinearProjectStatus {

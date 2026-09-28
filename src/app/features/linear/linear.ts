@@ -17,6 +17,8 @@ import {
   TauriBridge,
   type LinearConnection,
   type LinearCycle,
+  type LinearDocument,
+  type LinearExternalLink,
   type LinearInitiative,
   type LinearInitiativeUpdate,
   type LinearIssue,
@@ -1314,6 +1316,132 @@ interface LinearIssueDraft {
                     </label>
                   </div>
                 }
+                <section class="milestones" aria-label="Project resources">
+                  <h3>Resources</h3>
+                  @for (document of projectResources().documents; track document.id) {
+                    <article class="resource-row">
+                      <div>
+                        <strong>{{ document.title }}</strong>
+                        <span class="muted">
+                          Updated {{ document.updatedAt }}
+                          @if (document.creator?.name) {
+                            by {{ document.creator.name }}
+                          }
+                        </span>
+                      </div>
+                      <umbra-button size="sm" variant="link" (click)="openResource(document.url)">
+                        Open in Linear
+                      </umbra-button>
+                    </article>
+                  } @empty {
+                    <p class="hint">No project documents yet.</p>
+                  }
+                  @for (link of projectResources().externalLinks; track link.id) {
+                    <article class="resource-row">
+                      <strong>{{ link.label }}</strong>
+                      <div class="issue-actions">
+                        <umbra-button size="sm" variant="link" (click)="openResource(link.url)">
+                          Open link
+                        </umbra-button>
+                        @if (confirmDeleteProjectLinkId() === link.id) {
+                          <span class="muted">Remove this project link?</span>
+                          <umbra-button
+                            size="sm"
+                            variant="destructive"
+                            [disabled]="deletingProjectLinkId() === link.id"
+                            (click)="deleteProjectLink(link)"
+                          >
+                            {{
+                              deletingProjectLinkId() === link.id ? 'Removing' : 'Confirm remove'
+                            }}
+                          </umbra-button>
+                          <umbra-button
+                            size="sm"
+                            variant="link"
+                            (click)="confirmDeleteProjectLinkId.set(null)"
+                          >
+                            Cancel
+                          </umbra-button>
+                        } @else {
+                          <umbra-button
+                            size="sm"
+                            variant="link"
+                            (click)="confirmDeleteProjectLinkId.set(link.id)"
+                          >
+                            Remove
+                          </umbra-button>
+                        }
+                      </div>
+                    </article>
+                  }
+                  @if (!selectedProject()!.archivedAt) {
+                    <form class="project-edit" (submit)="createProjectDocument($event)">
+                      <label>
+                        <span>New document</span>
+                        <input
+                          required
+                          maxlength="255"
+                          [value]="newProjectDocumentTitle()"
+                          (input)="newProjectDocumentTitle.set($any($event.target).value)"
+                          placeholder="Document title"
+                        />
+                      </label>
+                      <label>
+                        <span>Markdown content</span>
+                        <textarea
+                          required
+                          maxlength="50000"
+                          rows="4"
+                          [value]="newProjectDocumentContent()"
+                          (input)="newProjectDocumentContent.set($any($event.target).value)"
+                        ></textarea>
+                      </label>
+                      <umbra-button
+                        size="sm"
+                        [disabled]="
+                          creatingProjectDocument() ||
+                          !newProjectDocumentTitle().trim() ||
+                          !newProjectDocumentContent().trim()
+                        "
+                      >
+                        {{ creatingProjectDocument() ? 'Creating' : 'Create document in Linear' }}
+                      </umbra-button>
+                    </form>
+                    <form class="project-edit" (submit)="createProjectLink($event)">
+                      <label>
+                        <span>Add external link</span>
+                        <input
+                          required
+                          maxlength="255"
+                          [value]="newProjectLinkLabel()"
+                          (input)="newProjectLinkLabel.set($any($event.target).value)"
+                          placeholder="Link name"
+                        />
+                      </label>
+                      <label>
+                        <span>URL</span>
+                        <input
+                          required
+                          type="url"
+                          maxlength="2048"
+                          [value]="newProjectLinkUrl()"
+                          (input)="newProjectLinkUrl.set($any($event.target).value)"
+                          placeholder="https://"
+                        />
+                      </label>
+                      <umbra-button
+                        size="sm"
+                        [disabled]="
+                          creatingProjectLink() ||
+                          !newProjectLinkLabel().trim() ||
+                          !newProjectLinkUrl().trim()
+                        "
+                      >
+                        {{ creatingProjectLink() ? 'Adding' : 'Add link' }}
+                      </umbra-button>
+                    </form>
+                  }
+                </section>
                 <section class="milestones" aria-label="Project milestones">
                   <h3>Milestones</h3>
                   @for (milestone of milestones(); track milestone.id) {
@@ -2956,6 +3084,19 @@ interface LinearIssueDraft {
       color: var(--accent);
       text-align: start;
     }
+    .resource-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: var(--space-2) var(--space-3);
+      padding-block: var(--space-2);
+      border-bottom: 1px solid var(--border-subtle);
+    }
+    .resource-row > div:first-child {
+      display: grid;
+      gap: var(--space-1);
+    }
     @media (max-width: 600px) {
       .issue {
         grid-template-columns: 1fr auto;
@@ -3020,6 +3161,18 @@ export class Linear {
   protected readonly loadingProjectIssues = signal(false);
   protected readonly projectIssuesHasNextPage = signal(false);
   protected readonly milestones = signal<readonly LinearMilestone[]>([]);
+  protected readonly projectResources = signal<{
+    documents: readonly LinearDocument[];
+    externalLinks: readonly LinearExternalLink[];
+  }>({ documents: [], externalLinks: [] });
+  protected readonly newProjectDocumentTitle = signal('');
+  protected readonly newProjectDocumentContent = signal('');
+  protected readonly creatingProjectDocument = signal(false);
+  protected readonly newProjectLinkLabel = signal('');
+  protected readonly newProjectLinkUrl = signal('');
+  protected readonly creatingProjectLink = signal(false);
+  protected readonly confirmDeleteProjectLinkId = signal<string | null>(null);
+  protected readonly deletingProjectLinkId = signal<string | null>(null);
   protected readonly projectUpdates = signal<readonly LinearProjectUpdate[]>([]);
   protected readonly newProjectUpdateBody = signal('');
   protected readonly newProjectUpdateHealth = signal<LinearProjectHealth>('onTrack');
@@ -4835,10 +4988,17 @@ export class Linear {
     this.editProjectTeamIds.set((project.teams ?? []).map((team) => team.id));
     this.projectUpdates.set([]);
     this.newProjectUpdateBody.set('');
+    this.projectResources.set({ documents: [], externalLinks: [] });
+    this.confirmDeleteProjectLinkId.set(null);
+    this.newProjectDocumentTitle.set('');
+    this.newProjectDocumentContent.set('');
+    this.newProjectLinkLabel.set('');
+    this.newProjectLinkUrl.set('');
     await Promise.all([
       this.loadProjectIssues(project.id),
       this.loadMilestones(project.id),
       this.loadProjectUpdates(project.id),
+      this.loadProjectResources(project.id),
       this.canUseCodex ? this.loadCodexPolicy() : Promise.resolve(),
     ]);
   }
@@ -5290,6 +5450,113 @@ export class Linear {
       this.milestones.set(
         await this.tauri.linearProjectMilestones(connection.organizationId, projectId),
       );
+    } catch (error) {
+      this.error.set(error instanceof Error ? error.message : String(error));
+    }
+  }
+
+  private async loadProjectResources(projectId: string): Promise<void> {
+    const connection = this.selected();
+    if (!connection) return;
+    try {
+      const resources = await this.tauri.linearProjectResources(
+        connection.organizationId,
+        projectId,
+      );
+      if (this.selectedProject()?.id === projectId) this.projectResources.set(resources);
+    } catch (error) {
+      this.error.set(error instanceof Error ? error.message : String(error));
+    }
+  }
+
+  protected async createProjectDocument(event: Event): Promise<void> {
+    event.preventDefault();
+    const connection = this.selected();
+    const project = this.selectedProject();
+    const title = this.newProjectDocumentTitle().trim();
+    const content = this.newProjectDocumentContent().trim();
+    if (!connection || !project || !title || !content || this.creatingProjectDocument()) return;
+    this.creatingProjectDocument.set(true);
+    this.error.set(null);
+    try {
+      const document = await this.tauri.linearCreateProjectDocument(
+        connection.organizationId,
+        project.id,
+        title,
+        content,
+      );
+      if (this.selectedProject()?.id !== project.id) return;
+      this.projectResources.update((resources) => ({
+        ...resources,
+        documents: [document, ...resources.documents],
+      }));
+      this.newProjectDocumentTitle.set('');
+      this.newProjectDocumentContent.set('');
+    } catch (error) {
+      this.error.set(error instanceof Error ? error.message : String(error));
+    } finally {
+      this.creatingProjectDocument.set(false);
+    }
+  }
+
+  protected async createProjectLink(event: Event): Promise<void> {
+    event.preventDefault();
+    const connection = this.selected();
+    const project = this.selectedProject();
+    const label = this.newProjectLinkLabel().trim();
+    const url = this.newProjectLinkUrl().trim();
+    if (!connection || !project || !label || !url || this.creatingProjectLink()) return;
+    this.creatingProjectLink.set(true);
+    this.error.set(null);
+    try {
+      const link = await this.tauri.linearCreateProjectExternalLink(
+        connection.organizationId,
+        project.id,
+        label,
+        url,
+      );
+      if (this.selectedProject()?.id !== project.id) return;
+      this.projectResources.update((resources) => ({
+        ...resources,
+        externalLinks: [link, ...resources.externalLinks],
+      }));
+      this.newProjectLinkLabel.set('');
+      this.newProjectLinkUrl.set('');
+    } catch (error) {
+      this.error.set(error instanceof Error ? error.message : String(error));
+    } finally {
+      this.creatingProjectLink.set(false);
+    }
+  }
+
+  protected async deleteProjectLink(link: LinearExternalLink): Promise<void> {
+    const connection = this.selected();
+    const project = this.selectedProject();
+    if (!connection || !project || this.deletingProjectLinkId()) return;
+    this.deletingProjectLinkId.set(link.id);
+    this.error.set(null);
+    try {
+      await this.tauri.linearDeleteProjectExternalLink(connection.organizationId, link.id);
+      if (this.selectedProject()?.id !== project.id) return;
+      this.projectResources.update((resources) => ({
+        ...resources,
+        externalLinks: resources.externalLinks.filter((item) => item.id !== link.id),
+      }));
+      this.confirmDeleteProjectLinkId.set(null);
+    } catch (error) {
+      this.error.set(error instanceof Error ? error.message : String(error));
+    } finally {
+      this.deletingProjectLinkId.set(null);
+    }
+  }
+
+  protected async openResource(url: string): Promise<void> {
+    try {
+      const parsed = new URL(url);
+      if (!['https:', 'http:'].includes(parsed.protocol) || !parsed.hostname) {
+        throw new Error('Linear returned an invalid project resource URL.');
+      }
+      await this.tauri.openUrl(parsed.toString());
     } catch (error) {
       this.error.set(error instanceof Error ? error.message : String(error));
     }

@@ -29,9 +29,9 @@ use crate::gmail::{self, GmailSettings, GmailState, GmailStatus, HttpGoogleApi, 
 use crate::jobs::{JobId, JobRegistry};
 use crate::linear::{
     self, Initiative, InitiativeProject, InitiativeUpdate, Issue, IssueDetail, IssuePage,
-    IssueRelation, LinearCodexContext, LinearComment, LinearConnection, LinearCycle, LinearLabel,
-    LinearMilestone, LinearProject, LinearProjectStatus, LinearProjectUpdate, Person, Team,
-    WorkflowState,
+    IssueRelation, LinearCodexContext, LinearComment, LinearConnection, LinearCycle,
+    LinearDocument, LinearExternalLink, LinearLabel, LinearMilestone, LinearProject,
+    LinearProjectResources, LinearProjectStatus, LinearProjectUpdate, Person, Team, WorkflowState,
 };
 #[cfg(mobile)]
 use crate::mobile_updates;
@@ -544,6 +544,81 @@ pub async fn linear_update_project(
         &team_ids,
     )
     .await
+}
+
+#[tauri::command]
+pub async fn linear_project_resources(
+    app: AppHandle,
+    organization_id: String,
+    project_id: String,
+) -> Result<LinearProjectResources> {
+    if organization_id.trim().is_empty() || project_id.trim().is_empty() {
+        return Err(std::io::Error::other("Project is required").into());
+    }
+    linear::project_resources(&app, &organization_id, &project_id).await
+}
+
+#[tauri::command]
+pub async fn linear_create_project_document(
+    app: AppHandle,
+    organization_id: String,
+    project_id: String,
+    title: String,
+    content: String,
+) -> Result<LinearDocument> {
+    if organization_id.trim().is_empty()
+        || project_id.trim().is_empty()
+        || title.trim().is_empty()
+        || title.chars().count() > 255
+        || content.trim().is_empty()
+        || content.chars().count() > 50_000
+    {
+        return Err(std::io::Error::other("Project document title or content is invalid").into());
+    }
+    linear::create_project_document(&app, &organization_id, &project_id, title.trim(), &content)
+        .await
+}
+
+#[tauri::command]
+pub async fn linear_create_project_external_link(
+    app: AppHandle,
+    organization_id: String,
+    project_id: String,
+    label: String,
+    url: String,
+) -> Result<LinearExternalLink> {
+    let parsed_url = url::Url::parse(&url)
+        .map_err(|_| std::io::Error::other("A label and valid web URL are required"))?;
+    if organization_id.trim().is_empty()
+        || project_id.trim().is_empty()
+        || label.trim().is_empty()
+        || label.chars().count() > 255
+        || url.len() > 2048
+        || !matches!(parsed_url.scheme(), "http" | "https")
+        || parsed_url.host_str().is_none()
+    {
+        return Err(std::io::Error::other("A label and valid web URL are required").into());
+    }
+    linear::create_project_external_link(
+        &app,
+        &organization_id,
+        &project_id,
+        label.trim(),
+        parsed_url.as_str(),
+    )
+    .await
+}
+
+#[tauri::command]
+pub async fn linear_delete_project_external_link(
+    app: AppHandle,
+    organization_id: String,
+    link_id: String,
+) -> Result<()> {
+    if organization_id.trim().is_empty() || link_id.trim().is_empty() {
+        return Err(std::io::Error::other("Project link is required").into());
+    }
+    linear::delete_project_external_link(&app, &organization_id, &link_id).await
 }
 
 #[tauri::command]
