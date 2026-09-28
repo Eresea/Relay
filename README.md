@@ -48,6 +48,15 @@ To work on the interface alone in a browser, `npm start` and open
 `localhost:1420/?surface=palette`. Calls into the Rust core become logged
 no-ops, so every screen still renders.
 
+### Linear OAuth
+
+Linear sign-in uses PKCE and the `relay://linear/callback` redirect. Add that
+redirect URI to Relay's Linear OAuth application, then set its public client ID
+as `RELAY_LINEAR_CLIENT_ID` before building Relay. For local development, set
+the variable in the shell that runs `npm run dev`; release builds read the same
+value from the GitHub Actions repository variable. Nexus sign-in is required
+before connecting a Linear workspace.
+
 ## Commands
 
 ```bash
