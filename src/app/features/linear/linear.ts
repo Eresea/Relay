@@ -73,6 +73,20 @@ interface LinearIssueDraft {
   cycleId?: string;
 }
 
+function isLinearTeamList(value: unknown): value is readonly LinearTeam[] {
+  return (
+    Array.isArray(value) &&
+    value.every(
+      (team: unknown) =>
+        !!team &&
+        typeof team === 'object' &&
+        typeof (team as LinearTeam).id === 'string' &&
+        typeof (team as LinearTeam).name === 'string' &&
+        typeof (team as LinearTeam).key === 'string',
+    )
+  );
+}
+
 @Component({
   selector: 'rl-linear',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -3668,6 +3682,7 @@ export class Linear {
   private projectIssuesRequest = 0;
   private projectOpenRequest = 0;
   private issueDetailRequest = 0;
+  private initiativeRequest = 0;
 
   protected pageTitle(): string {
     return {
@@ -5027,14 +5042,26 @@ export class Linear {
 
   private async loadTeamCycles(connection: LinearConnection, teamId: string): Promise<void> {
     if (!teamId || this.cycles()[teamId]) return;
+    const cacheKey = this.cycleCacheKey(connection, teamId);
+    const cached = this.readLocal<readonly LinearCycle[]>(cacheKey);
+    if (Array.isArray(cached) && this.selected()?.organizationId === connection.organizationId) {
+      this.cycles.update((items) => ({ ...items, [teamId]: cached }));
+    }
     try {
       const cycles = await this.tauri.linearCycles(connection.organizationId, teamId);
       if (this.selected()?.organizationId === connection.organizationId) {
         this.cycles.update((items) => ({ ...items, [teamId]: cycles }));
+        this.writeLocal(cacheKey, cycles);
       }
     } catch (error) {
       if (this.selected()?.organizationId === connection.organizationId) {
-        this.error.set(error instanceof Error ? error.message : String(error));
+        this.error.set(
+          Array.isArray(cached)
+            ? 'Linear is unavailable. Showing saved cycles.'
+            : error instanceof Error
+              ? error.message
+              : String(error),
+        );
       }
     }
   }
@@ -5275,16 +5302,36 @@ export class Linear {
   private async loadInitiatives(): Promise<void> {
     const connection = this.selected();
     if (!connection) return;
+    const requestId = ++this.initiativeRequest;
+    const includeArchived = this.includeArchivedInitiatives();
+    const includeArchivedUpdates = this.includeArchivedInitiativeUpdates();
+    const cacheKey = this.initiativeCacheKey(connection, includeArchived, includeArchivedUpdates);
+    const cached = this.readLocal<readonly LinearInitiative[]>(cacheKey);
+    const hasCache = Array.isArray(cached);
+    if (hasCache) this.initiatives.set(cached);
     try {
-      this.initiatives.set(
-        await this.tauri.linearInitiatives(
-          connection.organizationId,
-          this.includeArchivedInitiatives(),
-          this.includeArchivedInitiativeUpdates(),
-        ),
+      const initiatives = await this.tauri.linearInitiatives(
+        connection.organizationId,
+        includeArchived,
+        includeArchivedUpdates,
       );
+      if (
+        requestId !== this.initiativeRequest ||
+        this.selected()?.organizationId !== connection.organizationId
+      ) {
+        return;
+      }
+      this.initiatives.set(initiatives);
+      this.writeLocal(cacheKey, initiatives);
     } catch (error) {
-      this.error.set(error instanceof Error ? error.message : String(error));
+      if (requestId !== this.initiativeRequest) return;
+      this.error.set(
+        hasCache
+          ? 'Linear is unavailable. Showing saved initiatives.'
+          : error instanceof Error
+            ? error.message
+            : String(error),
+      );
     }
   }
 
@@ -5965,15 +6012,8 @@ export class Linear {
     }
     if (this.section() === 'cycles') {
       try {
-        const teams = await this.tauri.linearTeams(connection.organizationId);
-        this.teams.set(teams);
-        const entries = await Promise.all(
-          teams.map(
-            async (team) =>
-              [team.id, await this.tauri.linearCycles(connection.organizationId, team.id)] as const,
-          ),
-        );
-        this.cycles.set(Object.fromEntries(entries));
+        const teams = await this.loadCachedTeams(connection);
+        await Promise.all(teams.map((team) => this.loadTeamCycles(connection, team.id)));
       } catch (error) {
         this.error.set(error instanceof Error ? error.message : String(error));
       }
@@ -6907,13 +6947,13 @@ export class Linear {
 
   private async loadTeams(connection: LinearConnection): Promise<void> {
     try {
-      const teams = await this.tauri.linearTeams(connection.organizationId);
-      this.teams.set(teams);
+      const teams = await this.loadCachedTeams(connection);
       const [users, labels, statuses] = await Promise.all([
         this.tauri.linearUsers(connection.organizationId),
         this.tauri.linearIssueLabels(connection.organizationId),
         this.tauri.linearProjectStatuses(connection.organizationId),
       ]);
+      if (this.selected()?.organizationId !== connection.organizationId) return;
       this.users.set(users);
       this.labels.set(labels);
       this.projectStatuses.set(statuses);
@@ -6930,10 +6970,52 @@ export class Linear {
             ] as const,
         ),
       );
+      if (this.selected()?.organizationId !== connection.organizationId) return;
       this.workflowStates.set(Object.fromEntries(entries));
       await this.loadTeamCycles(connection, teamId);
     } catch (error) {
       this.error.set(error instanceof Error ? error.message : String(error));
     }
+  }
+
+  private async loadCachedTeams(connection: LinearConnection): Promise<readonly LinearTeam[]> {
+    const cacheKey = this.teamCacheKey(connection);
+    const cached = this.readLocal<unknown>(cacheKey);
+    const hasCache = isLinearTeamList(cached);
+    if (hasCache && this.selected()?.organizationId === connection.organizationId) {
+      this.teams.set(cached);
+    }
+    try {
+      const teams = await this.tauri.linearTeams(connection.organizationId);
+      if (this.selected()?.organizationId === connection.organizationId) {
+        this.teams.set(teams);
+        this.writeLocal(cacheKey, teams);
+      }
+      return teams;
+    } catch (error) {
+      if (hasCache) {
+        this.error.set('Linear is unavailable. Showing saved teams.');
+        return cached;
+      }
+      throw error;
+    }
+  }
+
+  private teamCacheKey(connection: LinearConnection): string {
+    return `relay.linear.teams.${connection.organizationId}.${connection.viewerId}`;
+  }
+
+  private cycleCacheKey(connection: LinearConnection, teamId: string): string {
+    return `relay.linear.cycles.${connection.organizationId}.${connection.viewerId}.${teamId}`;
+  }
+
+  private initiativeCacheKey(
+    connection: LinearConnection,
+    includeArchived: boolean,
+    includeArchivedUpdates: boolean,
+  ): string {
+    const archived = includeArchived ? '.all' : '';
+    const updates = includeArchivedUpdates ? '.updates.all' : '';
+    return `relay.linear.initiatives.${connection.organizationId}.${connection.viewerId}${archived}${updates}`;
   }
 }
