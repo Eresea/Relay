@@ -58,6 +58,22 @@ import { UmbraButtonComponent } from '@umbra/components/umbra-button/umbra-butto
             </span>
           </div>
           <div class="connection-actions">
+            @if (!connection.nexusCredentialId || connection.nexusSyncPending) {
+              <umbra-button
+                size="sm"
+                variant="outline"
+                [disabled]="syncingId() === connection.organizationId || !nexus.status().connected"
+                (click)="sync(connection)"
+              >
+                {{
+                  syncingId() === connection.organizationId
+                    ? 'Syncing'
+                    : connection.nexusSyncPending
+                      ? 'Retry Nexus sync'
+                      : 'Sync through Nexus'
+                }}
+              </umbra-button>
+            }
             @if (connection.agentInstalled) {
               <span class="hint">
                 Relay agent installed ·
@@ -177,6 +193,7 @@ export class LinearSettings {
   protected readonly connections = signal<readonly LinearConnection[]>([]);
   protected readonly oauthConfigured = signal(false);
   protected readonly pending = signal(false);
+  protected readonly syncingId = signal<string | null>(null);
   protected readonly confirmDisconnectId = signal<string | null>(null);
   protected readonly disconnectingId = signal<string | null>(null);
   protected readonly error = signal<string | null>(null);
@@ -224,6 +241,20 @@ export class LinearSettings {
     } catch (error) {
       this.pending.set(false);
       this.error.set(error instanceof Error ? error.message : String(error));
+    }
+  }
+
+  protected async sync(connection: LinearConnection): Promise<void> {
+    if (this.syncingId() || !this.nexus.status().connected) return;
+    this.error.set(null);
+    this.syncingId.set(connection.organizationId);
+    try {
+      await this.tauri.linearSyncConnection(connection.organizationId);
+      await this.refresh();
+    } catch (error) {
+      this.error.set(error instanceof Error ? error.message : String(error));
+    } finally {
+      this.syncingId.set(null);
     }
   }
 
