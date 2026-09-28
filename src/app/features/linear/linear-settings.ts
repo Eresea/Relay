@@ -47,7 +47,11 @@ import { UmbraButtonComponent } from '@umbra/components/umbra-button/umbra-butto
             <span>{{ connection.viewerName }}</span>
             <span class="hint">
               {{
-                connection.nexusCredentialId ? 'Available across devices' : 'Stored on this device'
+                connection.pausedOnDevice
+                  ? 'Paused on this device'
+                  : connection.nexusCredentialId
+                    ? 'Available across devices'
+                    : 'Stored on this device'
               }}
             </span>
           </div>
@@ -70,8 +74,15 @@ import { UmbraButtonComponent } from '@umbra/components/umbra-button/umbra-butto
                 {{ pending() ? 'Opening Linear' : 'Install Relay agent' }}
               </umbra-button>
             }
+            <umbra-button
+              size="sm"
+              variant="outline"
+              (click)="pause(connection, !connection.pausedOnDevice)"
+            >
+              {{ connection.pausedOnDevice ? 'Resume on this device' : 'Pause on this device' }}
+            </umbra-button>
             <umbra-button size="sm" variant="outline" (click)="disconnect(connection)">
-              Disconnect
+              Disconnect everywhere
             </umbra-button>
           </div>
         </div>
@@ -181,6 +192,15 @@ export class LinearSettings {
     } catch (error) {
       this.error.set(error instanceof Error ? error.message : String(error));
       await this.refresh();
+    }
+  }
+
+  protected async pause(connection: LinearConnection, paused: boolean): Promise<void> {
+    try {
+      await this.tauri.linearPauseOnDevice(connection.organizationId, paused);
+      await this.refresh();
+    } catch (error) {
+      this.error.set(error instanceof Error ? error.message : String(error));
     }
   }
 

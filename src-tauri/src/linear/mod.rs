@@ -20,6 +20,7 @@ pub use oauth::{LinearCodexLink, LinearCodexProjectPolicy};
 const CONNECTIONS_KEY: &str = "linear.connections";
 const CODEX_DEVICE_ID_KEY: &str = "linear.codex.device-id";
 const PENDING_REVOKES_KEY: &str = "linear.pending-nexus-revokes";
+const PAUSED_ON_DEVICE_KEY: &str = "linear.paused-on-device";
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -34,6 +35,8 @@ pub struct LinearConnection {
     pub nexus_credential_id: Option<String>,
     #[serde(default)]
     pub agent_installed: bool,
+    #[serde(default)]
+    pub paused_on_device: bool,
 }
 
 #[derive(Default)]
@@ -69,6 +72,51 @@ fn pending_revokes(app: &AppHandle) -> Result<Vec<String>> {
         .transpose()
         .map_err(|error| Error::LinearApi(error.to_string()))
         .map(Option::unwrap_or_default)
+}
+
+fn paused_on_device(app: &AppHandle) -> Result<Vec<String>> {
+    app.store("settings.json")
+        .map_err(|error| Error::LinearApi(error.to_string()))?
+        .get(PAUSED_ON_DEVICE_KEY)
+        .map(serde_json::from_value)
+        .transpose()
+        .map_err(|error| Error::LinearApi(error.to_string()))
+        .map(Option::unwrap_or_default)
+}
+
+fn set_paused_on_device(app: &AppHandle, organization_id: &str, paused: bool) -> Result<()> {
+    let store = app
+        .store("settings.json")
+        .map_err(|error| Error::LinearApi(error.to_string()))?;
+    let mut organizations = paused_on_device(app)?;
+    update_paused_on_device(&mut organizations, organization_id, paused);
+    store.set(
+        PAUSED_ON_DEVICE_KEY,
+        serde_json::to_value(organizations).map_err(|error| Error::LinearApi(error.to_string()))?,
+    );
+    store
+        .save()
+        .map_err(|error| Error::LinearApi(error.to_string()))
+}
+
+fn update_paused_on_device(organizations: &mut Vec<String>, organization_id: &str, paused: bool) {
+    if paused {
+        if !organizations.iter().any(|id| id == organization_id) {
+            organizations.push(organization_id.to_owned());
+        }
+    } else {
+        organizations.retain(|id| id != organization_id);
+    }
+}
+
+fn ensure_not_paused(app: &AppHandle, organization_id: &str) -> Result<()> {
+    if paused_on_device(app)?
+        .iter()
+        .any(|id| id == organization_id)
+    {
+        return Err(Error::LinearApi("Linear is paused on this device".into()));
+    }
+    Ok(())
 }
 
 fn update_pending_revoke(organizations: &mut Vec<String>, organization_id: &str, revoked: bool) {
@@ -192,12 +240,24 @@ pub async fn status(app: &AppHandle) -> Result<Vec<LinearConnection>> {
         }
     }
     let mut connections = connections(app)?;
+    let paused = paused_on_device(app)?;
     for connection in &mut connections {
         connection.agent_installed = stored_bundle(&connection.organization_id)
             .ok()
             .is_some_and(|bundle| bundle.agent.is_some());
+        connection.paused_on_device = paused.iter().any(|id| id == &connection.organization_id);
     }
     Ok(connections)
+}
+
+pub fn pause_on_device(app: &AppHandle, organization_id: &str, paused: bool) -> Result<()> {
+    if !connections(app)?
+        .iter()
+        .any(|connection| connection.organization_id == organization_id)
+    {
+        return Err(Error::LinearApi("Linear workspace is not connected".into()));
+    }
+    set_paused_on_device(app, organization_id, paused)
 }
 
 pub async fn disconnect(app: &AppHandle, organization_id: &str) -> Result<Option<String>> {
@@ -214,6 +274,7 @@ pub async fn disconnect(app: &AppHandle, organization_id: &str) -> Result<Option
     connections.retain(|connection| connection.organization_id != organization_id);
     let mut pending = pending_revokes(app)?;
     update_pending_revoke(&mut pending, organization_id, remote_revoke.is_ok());
+    set_paused_on_device(app, organization_id, false)?;
     store.set(
         CONNECTIONS_KEY,
         serde_json::to_value(connections).map_err(|error| Error::LinearApi(error.to_string()))?,
@@ -971,6 +1032,7 @@ fn agent_project_allowed(policies: &[LinearCodexProjectPolicy], project_id: &str
 }
 
 pub async fn agent_access_token(app: &AppHandle, organization_id: &str) -> Result<String> {
+    ensure_not_paused(app, organization_id)?;
     let state = app.state::<LinearState>();
     let _guard = state.refresh.lock().await;
     let mut bundle = stored_bundle(organization_id)?;
@@ -1237,6 +1299,7 @@ pub async fn project_issues(
 }
 
 async fn access_token(app: &AppHandle, organization_id: &str) -> Result<String> {
+    ensure_not_paused(app, organization_id)?;
     // ponytail: one lock keeps rotating refresh tokens from racing across workspaces; split by workspace if refreshes queue.
     let state = app.state::<LinearState>();
     let _guard = state.refresh.lock().await;
@@ -1311,6 +1374,7 @@ fn save_connected(app: &AppHandle, bundle: TokenBundle, viewer: Viewer) -> Resul
             viewer_email: viewer.email,
             nexus_credential_id: None,
             agent_installed: false,
+            paused_on_device: false,
         },
     )
 }
@@ -1330,7 +1394,19 @@ fn save_connections(app: &AppHandle, connections: Vec<LinearConnection>) -> Resu
 
 #[cfg(test)]
 mod tests {
-    use super::{LinearCodexProjectPolicy, agent_project_allowed, update_pending_revoke};
+    use super::{
+        agent_project_allowed, update_paused_on_device, update_pending_revoke,
+        LinearCodexProjectPolicy,
+    };
+
+    #[test]
+    fn device_pause_is_idempotent_and_only_changes_the_requested_workspace() {
+        let mut paused = vec!["org-1".to_owned()];
+        update_paused_on_device(&mut paused, "org-1", true);
+        update_paused_on_device(&mut paused, "org-2", true);
+        update_paused_on_device(&mut paused, "org-1", false);
+        assert_eq!(paused, ["org-2"]);
+    }
 
     #[test]
     fn failed_revokes_queue_once_and_successful_retries_clear_them() {

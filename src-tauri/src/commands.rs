@@ -22,8 +22,8 @@ use crate::error::Result;
 use crate::events::UpdateSnapshot;
 use crate::events::{AppEvent, EventSink};
 use crate::github::{
-    self, GithubStatus, client::HttpGitHubClient, client::RepositorySummary,
-    oauth::DeviceAuthorization, poll::PullRequestSnapshot,
+    self, client::HttpGitHubClient, client::RepositorySummary, oauth::DeviceAuthorization,
+    poll::PullRequestSnapshot, GithubStatus,
 };
 use crate::gmail::{self, GmailSettings, GmailState, GmailStatus, HttpGoogleApi, OsKeyStore};
 use crate::jobs::{JobId, JobRegistry};
@@ -318,6 +318,14 @@ pub async fn github_disconnect(app: AppHandle) -> Result<()> {
 #[tauri::command]
 pub async fn linear_status(app: AppHandle) -> Result<Vec<LinearConnection>> {
     linear::status(&app).await
+}
+
+#[tauri::command]
+pub fn linear_pause_on_device(app: AppHandle, organization_id: String, paused: bool) -> Result<()> {
+    if organization_id.trim().is_empty() {
+        return Err(std::io::Error::other("A Linear workspace is required").into());
+    }
+    linear::pause_on_device(&app, &organization_id, paused)
 }
 
 #[tauri::command]

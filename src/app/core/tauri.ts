@@ -583,6 +583,10 @@ export class TauriBridge {
     return (await this.invoke<string | null>('linear_disconnect', { organizationId })) ?? null;
   }
 
+  async linearPauseOnDevice(organizationId: string, paused: boolean): Promise<void> {
+    await this.invoke<void>('linear_pause_on_device', { organizationId, paused });
+  }
+
   async linearSyncConnection(organizationId: string): Promise<LinearConnection> {
     const connection = await this.invoke<LinearConnection>('linear_sync_connection', {
       organizationId,
@@ -1698,6 +1702,7 @@ export interface LinearConnection {
   readonly viewerEmail: string;
   readonly nexusCredentialId?: string;
   readonly agentInstalled: boolean;
+  readonly pausedOnDevice: boolean;
 }
 
 export interface LinearTeam {

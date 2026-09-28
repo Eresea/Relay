@@ -130,6 +130,7 @@ pub fn run() {
                 commands::github_connect_start,
                 commands::github_disconnect,
                 commands::linear_status,
+                commands::linear_pause_on_device,
                 commands::linear_oauth_configured,
                 commands::linear_connect_start,
                 commands::linear_agent_install_start,

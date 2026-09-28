@@ -284,6 +284,7 @@ pub async fn handle_callback(app: AppHandle, callback: Url) {
             viewer_email: viewer.email.clone(),
             nexus_credential_id: None,
             agent_installed: false,
+            paused_on_device: false,
         };
         save_connected(&app, bundle.clone(), viewer.clone())?;
         let warning = match super::nexus_sync::persist(&app, &connection, &bundle).await {

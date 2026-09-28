@@ -284,6 +284,7 @@ pub async fn discover(app: &AppHandle) -> Result<Vec<(String, LinearConnection, 
                 viewer_email: metadata.viewer_email,
                 nexus_credential_id: None,
                 agent_installed: false,
+                paused_on_device: false,
             },
             bundle,
         ));
@@ -378,6 +379,7 @@ mod tests {
             viewer_email: "viewer@example.com".into(),
             nexus_credential_id: None,
             agent_installed: false,
+            paused_on_device: false,
         };
         let bundle = |expires_at| TokenBundle {
             access_token: "fresh".into(),

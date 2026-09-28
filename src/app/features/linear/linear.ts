@@ -174,18 +174,20 @@ interface LinearIssueDraft {
       } @else {
         <nav class="workspaces" aria-label="Linear workspaces">
           @for (connection of connections(); track connection.organizationId) {
-            <button
-              type="button"
-              class="workspace"
-              [class.active]="selected()?.organizationId === connection.organizationId"
-              (click)="select(connection)"
-            >
-              <span>{{ connection.organizationName }}</span>
-              <span class="muted">{{ connection.viewerName }}</span>
-              <span class="sync-state">
-                {{ connection.nexusCredentialId ? 'Synced through Nexus' : 'This device only' }}
-              </span>
-            </button>
+            @if (!connection.pausedOnDevice) {
+              <button
+                type="button"
+                class="workspace"
+                [class.active]="selected()?.organizationId === connection.organizationId"
+                (click)="select(connection)"
+              >
+                <span>{{ connection.organizationName }}</span>
+                <span class="muted">{{ connection.viewerName }}</span>
+                <span class="sync-state">
+                  {{ connection.nexusCredentialId ? 'Synced through Nexus' : 'This device only' }}
+                </span>
+              </button>
+            }
           }
         </nav>
         @if (selected()) {
@@ -921,7 +923,7 @@ interface LinearIssueDraft {
                     {{ includeArchivedIssues() ? 'Hide archived' : 'Include archived' }}
                   </umbra-button>
                   <umbra-button size="sm" variant="outline" (click)="disconnectSelected()">
-                    Disconnect
+                    Disconnect everywhere
                   </umbra-button>
                 </div>
               </div>
@@ -2837,6 +2839,14 @@ interface LinearIssueDraft {
           }
         }
       }
+      @if (connections().length && !selected()) {
+        <div class="empty">
+          <p class="label">Linear is paused on this device</p>
+          <p class="hint">
+            Resume a workspace in Linear settings to use it here. Other devices remain connected.
+          </p>
+        </div>
+      }
     </section>
   `,
   styles: `
@@ -3483,6 +3493,7 @@ export class Linear {
   }
 
   protected select(connection: LinearConnection): void {
+    if (connection.pausedOnDevice) return;
     this.selected.set(connection);
     this.selectedProject.set(null);
     this.projectIssues.set([]);
@@ -5892,9 +5903,10 @@ export class Linear {
         (entry) => entry.organizationId !== connection.organizationId,
       );
       this.connections.set(connections);
-      this.selected.set(connections[0] ?? null);
+      const next = connections.find((entry) => !entry.pausedOnDevice) ?? null;
+      this.selected.set(next);
       this.issues.set([]);
-      if (connections[0]) this.select(connections[0]);
+      if (next) this.select(next);
       this.error.set(warning);
     } catch (error) {
       this.error.set(error instanceof Error ? error.message : String(error));
@@ -6307,12 +6319,13 @@ export class Linear {
     try {
       const connections = await this.tauri.linearStatus();
       this.connections.set(connections);
+      const available = connections.filter((connection) => !connection.pausedOnDevice);
       const selected =
-        connections.find((connection) => connection.organizationId === selectOrganizationId) ??
-        connections.find(
+        available.find((connection) => connection.organizationId === selectOrganizationId) ??
+        available.find(
           (connection) => connection.organizationId === this.selected()?.organizationId,
         ) ??
-        connections[0] ??
+        available[0] ??
         null;
       this.selected.set(selected);
       if (selected) {
