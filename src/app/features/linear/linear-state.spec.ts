@@ -1,12 +1,21 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  codexFailureRestoreTarget,
   linearCodexPrompt,
   linearEstimateOptions,
   linearIssueConflicts,
   linearIssueValues,
   mergeLinearIssueUpdates,
 } from './linear-state';
+
+describe('Codex failure status recovery', () => {
+  it('restores the previous status only if Linear still has the status Relay set', () => {
+    expect(codexFailureRestoreTarget('todo', 'started', 'started')).toBe('todo');
+    expect(codexFailureRestoreTarget('todo', 'started', 'done')).toBeNull();
+    expect(codexFailureRestoreTarget(undefined, 'started', 'started')).toBeNull();
+  });
+});
 
 describe('Linear issue update drafts', () => {
   it('keeps changes to different fields together', () => {

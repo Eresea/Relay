@@ -39,6 +39,7 @@ import {
 } from '@core/tauri';
 import { UmbraButtonComponent } from '@umbra/components/umbra-button/umbra-button.component';
 import {
+  codexFailureRestoreTarget,
   isPendingLinearIssueUpdate,
   linearIssueConflicts,
   linearIssueValues,
@@ -4133,6 +4134,8 @@ export class Linear {
 
     this.codexPending.set(true);
     this.error.set(null);
+    const previousStateId = issue.state?.id;
+    let inProgressStateId: string | null = null;
     try {
       const inProgress = this.statesFor(issue).find(
         (state) => /in progress/i.test(state.name) || state.kind === 'started',
@@ -4145,13 +4148,45 @@ export class Linear {
           inProgress.id,
         );
         this.applyUpdatedIssue(connection.organizationId, updated);
+        inProgressStateId = inProgress.id;
       }
       const prompt = linearCodexPrompt(issue, this.issueDetail());
-      const run = await this.tauri.codexSend(
-        prompt,
-        workspace.path,
-        continueThread ? (existingLink?.threadId ?? null) : null,
-      );
+      let run: Awaited<ReturnType<TauriBridge['codexSend']>>;
+      try {
+        run = await this.tauri.codexSend(
+          prompt,
+          workspace.path,
+          continueThread ? (existingLink?.threadId ?? null) : null,
+        );
+      } catch (error) {
+        if (inProgressStateId && previousStateId) {
+          try {
+            const latest = await this.tauri.linearIssueDetail(connection.organizationId, issue.id);
+            const restoreTarget = codexFailureRestoreTarget(
+              previousStateId,
+              inProgressStateId,
+              latest.issue.state?.id,
+            );
+            if (restoreTarget) {
+              const restored = await this.tauri.linearAgentUpdateIssueState(
+                connection.organizationId,
+                projectId,
+                issue.id,
+                restoreTarget,
+              );
+              this.applyUpdatedIssue(connection.organizationId, restored);
+            }
+          } catch (restoreError) {
+            const failure = error instanceof Error ? error.message : String(error);
+            const restoreFailure =
+              restoreError instanceof Error ? restoreError.message : String(restoreError);
+            throw new Error(
+              `${failure}. Relay could not verify or restore the Linear status: ${restoreFailure}`,
+            );
+          }
+        }
+        throw error;
+      }
 
       let syncError: string | null = null;
       try {

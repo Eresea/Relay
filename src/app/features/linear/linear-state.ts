@@ -20,6 +20,16 @@ export interface LinearIssueUpdate {
   labelIds?: readonly string[];
 }
 
+export function codexFailureRestoreTarget(
+  previousStateId: string | undefined,
+  inProgressStateId: string | null,
+  currentStateId: string | undefined,
+): string | null {
+  return previousStateId && inProgressStateId && currentStateId === inProgressStateId
+    ? previousStateId
+    : null;
+}
+
 export function linearCodexPrompt(issue: LinearIssue, detail: LinearIssueDetail | null): string {
   const description = issue.description?.trim() || '(none)';
   const boundedDescription =
