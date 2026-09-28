@@ -67,6 +67,86 @@ export function linearCodexPrompt(issue: LinearIssue, detail: LinearIssueDetail 
 export interface PendingLinearIssueUpdate {
   issueId: string;
   update: LinearIssueUpdate;
+  base?: Record<string, unknown>;
+  conflicts?: readonly LinearIssueConflict[];
+}
+
+export interface LinearIssueConflict {
+  field: string;
+  label: string;
+  base: unknown;
+  current: unknown;
+  desired: unknown;
+}
+
+const issueUpdateFields: readonly [keyof LinearIssueUpdate, string, string][] = [
+  ['title', 'title', 'Title'],
+  ['description', 'description', 'Description'],
+  ['projectId', 'projectId', 'Project'],
+  ['projectMilestoneId', 'projectMilestoneId', 'Milestone'],
+  ['dueDate', 'dueDate', 'Due date'],
+  ['estimate', 'estimate', 'Estimate'],
+  ['stateId', 'stateId', 'Status'],
+  ['assigneeId', 'assigneeId', 'Assignee'],
+  ['cycleId', 'cycleId', 'Cycle'],
+  ['priority', 'priority', 'Priority'],
+  ['labelIds', 'labelIds', 'Labels'],
+];
+
+export function linearIssueValues(issue: LinearIssue): Record<string, unknown> {
+  return {
+    title: issue.title,
+    description: issue.description,
+    projectId: issue.project?.id ?? null,
+    projectMilestoneId: issue.projectMilestone?.id ?? null,
+    dueDate: issue.dueDate ?? null,
+    estimate: issue.estimate ?? null,
+    stateId: issue.state?.id ?? null,
+    assigneeId: issue.assignee?.id ?? null,
+    cycleId: issue.cycle?.id ?? null,
+    priority: issue.priority,
+    labelIds: issue.labels.map((label) => label.id).sort(),
+  };
+}
+
+export function linearIssueConflicts(
+  issue: LinearIssue,
+  update: LinearIssueUpdate,
+  base: Record<string, unknown>,
+): LinearIssueConflict[] {
+  const current = linearIssueValues(issue);
+  return issueUpdateFields.flatMap(([updateField, issueField, label]) => {
+    const requested =
+      updateField in update ||
+      (updateField === 'projectId' && update.clearProject) ||
+      (updateField === 'projectMilestoneId' && update.clearProjectMilestone) ||
+      (updateField === 'dueDate' && update.clearDueDate) ||
+      (updateField === 'estimate' && update.clearEstimate) ||
+      (updateField === 'assigneeId' && update.clearAssignee) ||
+      (updateField === 'cycleId' && update.clearCycle);
+    if (!requested) return [];
+    const desired = updateField in update ? update[updateField] : null;
+    const currentValue = current[issueField];
+    const baseValue = base[issueField];
+    const normalize = (value: unknown) =>
+      JSON.stringify(
+        issueField === 'labelIds' && Array.isArray(value)
+          ? value.filter((item): item is string => typeof item === 'string').sort()
+          : (value ?? null),
+      );
+    return normalize(currentValue) !== normalize(baseValue) &&
+      normalize(currentValue) !== normalize(desired)
+      ? [
+          {
+            field: issueField,
+            label,
+            base: baseValue ?? null,
+            current: currentValue ?? null,
+            desired: desired ?? null,
+          },
+        ]
+      : [];
+  });
 }
 
 export function linearEstimateOptions(type: string, extended: boolean, allowZero: boolean) {

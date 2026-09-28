@@ -1,6 +1,12 @@
 import { describe, expect, it } from 'vitest';
 
-import { linearCodexPrompt, linearEstimateOptions, mergeLinearIssueUpdates } from './linear-state';
+import {
+  linearCodexPrompt,
+  linearEstimateOptions,
+  linearIssueConflicts,
+  linearIssueValues,
+  mergeLinearIssueUpdates,
+} from './linear-state';
 
 describe('Linear issue update drafts', () => {
   it('keeps changes to different fields together', () => {
@@ -79,6 +85,36 @@ describe('Linear issue update drafts', () => {
     expect(mergeLinearIssueUpdates({ cycleId: 'cycle-1' }, { clearCycle: true })).toEqual({
       clearCycle: true,
     });
+  });
+
+  it('flags only fields changed remotely since an offline edit was made', () => {
+    const issue = {
+      id: 'issue-1',
+      identifier: 'ENG-1',
+      title: 'Remote title',
+      description: 'Original description',
+      url: 'https://linear.app/acme/issue/ENG-1',
+      priority: 2,
+      updatedAt: '2026-09-28T10:00:00Z',
+      state: { id: 'state-1', name: 'Todo', kind: 'unstarted' },
+      assignee: null,
+      project: null,
+      cycle: null,
+      labels: [],
+      team: { id: 'team-1', name: 'Engineering', key: 'ENG' },
+    } as const;
+    const base = linearIssueValues({ ...issue, title: 'Original title' });
+
+    expect(linearIssueConflicts(issue, { title: 'Offline title', priority: 3 }, base)).toEqual([
+      {
+        field: 'title',
+        label: 'Title',
+        base: 'Original title',
+        current: 'Remote title',
+        desired: 'Offline title',
+      },
+    ]);
+    expect(linearIssueConflicts(issue, { title: 'Remote title' }, base)).toEqual([]);
   });
 });
 

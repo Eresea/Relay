@@ -2,6 +2,7 @@ import {
   ChangeDetectionStrategy,
   Component,
   DestroyRef,
+  computed,
   effect,
   inject,
   signal,
@@ -36,6 +37,8 @@ import {
 import { UmbraButtonComponent } from '@umbra/components/umbra-button/umbra-button.component';
 import {
   isPendingLinearIssueUpdate,
+  linearIssueConflicts,
+  linearIssueValues,
   linearEstimateOptions,
   linearCodexPrompt,
   mergeLinearIssueUpdates,
@@ -102,6 +105,37 @@ interface LinearIssueDraft {
           </div>
         }
       </header>
+
+      @for (pending of conflictedIssueUpdates(); track pending.issueId) {
+        <section class="issue-conflicts" aria-label="Offline issue update conflicts">
+          <p class="label">{{ issueIdentifier(pending.issueId) }} changed in Linear</p>
+          <p class="hint">Review the remote edits before applying your offline changes.</p>
+          @for (conflict of pending.conflicts ?? []; track conflict.field) {
+            <p class="hint">
+              <strong>{{ conflict.label }}:</strong>
+              Linear now has “{{ conflictValue(conflict.field, conflict.current) }}”; Relay’s
+              offline change was “{{ conflictValue(conflict.field, conflict.desired) }}”.
+            </p>
+          }
+          <div class="header-actions">
+            <umbra-button
+              size="sm"
+              variant="outline"
+              [disabled]="retryingIssueUpdates()"
+              (click)="resolveIssueUpdate(pending, false)"
+            >
+              Keep Linear’s version
+            </umbra-button>
+            <umbra-button
+              size="sm"
+              [disabled]="retryingIssueUpdates()"
+              (click)="resolveIssueUpdate(pending, true)"
+            >
+              Apply my changes
+            </umbra-button>
+          </div>
+        </section>
+      }
 
       @if (error()) {
         <p class="error" role="alert">{{ error() }}</p>
@@ -2641,6 +2675,15 @@ interface LinearIssueDraft {
     .error {
       color: var(--danger);
     }
+    .issue-conflicts {
+      display: grid;
+      gap: var(--space-2);
+      margin-block: var(--space-3);
+      padding: var(--space-3);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-md);
+      background: var(--bg-raised);
+    }
     .empty {
       display: grid;
       justify-items: center;
@@ -3062,6 +3105,9 @@ export class Linear {
   protected readonly projectCacheStale = signal(false);
   protected readonly pendingIssueUpdates = signal<readonly PendingLinearIssueUpdate[]>([]);
   protected readonly retryingIssueUpdates = signal(false);
+  protected readonly conflictedIssueUpdates = computed(() =>
+    this.pendingIssueUpdates().filter((pending) => pending.conflicts?.length),
+  );
   protected readonly pending = signal(false);
   protected readonly syncing = signal(false);
   protected readonly oauthConfigured = signal(false);
@@ -3946,14 +3992,15 @@ export class Linear {
 
   private queueIssueUpdate(
     organizationId: string,
-    issueId: string,
+    issue: LinearIssue,
     update: LinearIssueUpdate,
   ): LinearIssueUpdate {
     const updates = this.readPendingIssueUpdates(organizationId);
-    const index = updates.findIndex((item) => item.issueId === issueId);
+    const index = updates.findIndex((item) => item.issueId === issue.id);
     const merged = mergeLinearIssueUpdates(updates[index]?.update ?? {}, update);
-    if (index < 0) updates.push({ issueId, update: merged });
-    else updates[index] = { issueId, update: merged };
+    const base = updates[index]?.base ?? linearIssueValues(issue);
+    if (index < 0) updates.push({ issueId: issue.id, update: merged, base });
+    else updates[index] = { issueId: issue.id, update: merged, base };
     this.storePendingIssueUpdates(organizationId, updates);
     return merged;
   }
@@ -5477,7 +5524,7 @@ export class Linear {
   private async saveIssueUpdate(issue: LinearIssue, update: LinearIssueUpdate): Promise<boolean> {
     const connection = this.selected();
     if (!connection) return false;
-    const combined = this.queueIssueUpdate(connection.organizationId, issue.id, update);
+    const combined = this.queueIssueUpdate(connection.organizationId, issue, update);
     try {
       const updated = await this.tauri.linearUpdateIssue(
         connection.organizationId,
@@ -5488,7 +5535,7 @@ export class Linear {
       this.applyUpdatedIssue(connection.organizationId, updated);
       return true;
     } catch (error) {
-      this.queueIssueUpdate(connection.organizationId, issue.id, update);
+      this.queueIssueUpdate(connection.organizationId, issue, update);
       this.error.set(error instanceof Error ? error.message : String(error));
       return false;
     }
@@ -5502,13 +5549,7 @@ export class Linear {
     try {
       for (const pending of [...this.pendingIssueUpdates()]) {
         try {
-          const updated = await this.tauri.linearUpdateIssue(
-            connection.organizationId,
-            pending.issueId,
-            pending.update,
-          );
-          this.removePendingIssueUpdate(connection.organizationId, pending.issueId);
-          this.applyUpdatedIssue(connection.organizationId, updated);
+          await this.retryPendingIssueUpdate(connection.organizationId, pending);
         } catch (error) {
           this.error.set(error instanceof Error ? error.message : String(error));
         }
@@ -5516,6 +5557,110 @@ export class Linear {
     } finally {
       this.retryingIssueUpdates.set(false);
     }
+  }
+
+  protected issueIdentifier(issueId: string): string {
+    return (
+      [...this.issues(), ...this.projectIssues()].find((issue) => issue.id === issueId)
+        ?.identifier ?? issueId
+    );
+  }
+
+  protected conflictValue(field: string, value: unknown): string {
+    if (value == null || value === '') return 'None';
+    const id = typeof value === 'string' || typeof value === 'number' ? `${value}` : '';
+    switch (field) {
+      case 'projectId':
+        return this.projects().find((project) => project.id === id)?.name ?? id;
+      case 'projectMilestoneId':
+        return this.milestones().find((milestone) => milestone.id === id)?.name ?? id;
+      case 'stateId':
+        return (
+          Object.values(this.workflowStates())
+            .flat()
+            .find((state) => state.id === id)?.name ?? id
+        );
+      case 'assigneeId':
+        return this.users().find((user) => user.id === id)?.name ?? id;
+      case 'cycleId':
+        return (
+          Object.values(this.cycles())
+            .flat()
+            .find((cycle) => cycle.id === id)?.name ?? id
+        );
+      case 'labelIds':
+        return Array.isArray(value)
+          ? value
+              .filter((labelId): labelId is string => typeof labelId === 'string')
+              .map(
+                (labelId) => this.labels().find((label) => label.id === labelId)?.name ?? labelId,
+              )
+              .join(', ') || 'None'
+          : id || 'Unknown value';
+      case 'priority':
+        return ['No priority', 'Urgent', 'High', 'Normal', 'Low'][Number(value)] ?? id;
+      default:
+        return Array.isArray(value)
+          ? value.filter((item): item is string => typeof item === 'string').join(', ')
+          : id || 'Unknown value';
+    }
+  }
+
+  protected async resolveIssueUpdate(
+    pending: PendingLinearIssueUpdate,
+    applyLocal: boolean,
+  ): Promise<void> {
+    const connection = this.selected();
+    if (!connection) return;
+    if (!applyLocal) {
+      this.removePendingIssueUpdate(connection.organizationId, pending.issueId);
+      return;
+    }
+    this.retryingIssueUpdates.set(true);
+    try {
+      const updated = await this.tauri.linearUpdateIssue(
+        connection.organizationId,
+        pending.issueId,
+        pending.update,
+      );
+      this.removePendingIssueUpdate(connection.organizationId, pending.issueId);
+      this.applyUpdatedIssue(connection.organizationId, updated);
+    } catch (error) {
+      this.error.set(error instanceof Error ? error.message : String(error));
+    } finally {
+      this.retryingIssueUpdates.set(false);
+    }
+  }
+
+  private async retryPendingIssueUpdate(
+    organizationId: string,
+    pending: PendingLinearIssueUpdate,
+  ): Promise<void> {
+    const detail = await this.tauri.linearIssueDetail(organizationId, pending.issueId);
+    const base = pending.base ?? linearIssueValues(detail.issue);
+    if (!pending.base) {
+      const migrated = this.readPendingIssueUpdates(organizationId).map((item) =>
+        item.issueId === pending.issueId ? { ...item, base } : item,
+      );
+      this.storePendingIssueUpdates(organizationId, migrated);
+    }
+    const conflicts = linearIssueConflicts(detail.issue, pending.update, base);
+    if (conflicts.length) {
+      this.storePendingIssueUpdates(
+        organizationId,
+        this.readPendingIssueUpdates(organizationId).map((item) =>
+          item.issueId === pending.issueId ? { ...item, base, conflicts } : item,
+        ),
+      );
+      return;
+    }
+    const updated = await this.tauri.linearUpdateIssue(
+      organizationId,
+      pending.issueId,
+      pending.update,
+    );
+    this.removePendingIssueUpdate(organizationId, pending.issueId);
+    this.applyUpdatedIssue(organizationId, updated);
   }
 
   protected async loadIssues(): Promise<void> {
