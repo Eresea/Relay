@@ -331,6 +331,52 @@ pub async fn linear_connect_start(app: AppHandle) -> Result<()> {
 }
 
 #[tauri::command]
+pub async fn linear_agent_install_start(app: AppHandle, organization_id: String) -> Result<()> {
+    if organization_id.trim().is_empty() {
+        return Err(std::io::Error::other("A Linear workspace is required").into());
+    }
+    linear::agent_install_start(app, organization_id).await
+}
+
+#[tauri::command]
+pub async fn linear_agent_update_issue_state(
+    app: AppHandle,
+    organization_id: String,
+    project_id: String,
+    issue_id: String,
+    state_id: String,
+) -> Result<Issue> {
+    if organization_id.trim().is_empty()
+        || project_id.trim().is_empty()
+        || issue_id.trim().is_empty()
+        || state_id.trim().is_empty()
+    {
+        return Err(std::io::Error::other("Linear agent issue details are required").into());
+    }
+    linear::agent_update_issue_state(&app, &organization_id, &project_id, &issue_id, &state_id)
+        .await
+}
+
+#[tauri::command]
+pub async fn linear_agent_create_comment(
+    app: AppHandle,
+    organization_id: String,
+    project_id: String,
+    issue_id: String,
+    body: String,
+) -> Result<LinearComment> {
+    if organization_id.trim().is_empty()
+        || project_id.trim().is_empty()
+        || issue_id.trim().is_empty()
+        || body.trim().is_empty()
+        || body.chars().count() > 50_000
+    {
+        return Err(std::io::Error::other("Linear agent comment is invalid").into());
+    }
+    linear::agent_create_comment(&app, &organization_id, &project_id, &issue_id, &body).await
+}
+
+#[tauri::command]
 pub async fn linear_disconnect(app: AppHandle, organization_id: String) -> Result<Option<String>> {
     if organization_id.trim().is_empty() {
         return Err(std::io::Error::other("A Linear workspace is required").into());

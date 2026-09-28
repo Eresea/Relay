@@ -32,6 +32,8 @@ pub struct LinearConnection {
     pub viewer_email: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub nexus_credential_id: Option<String>,
+    #[serde(default)]
+    pub agent_installed: bool,
 }
 
 #[derive(Default)]
@@ -120,6 +122,10 @@ pub async fn connect_start(app: AppHandle) -> Result<()> {
     oauth::start(app).await
 }
 
+pub async fn agent_install_start(app: AppHandle, organization_id: String) -> Result<()> {
+    oauth::start_agent(app, organization_id).await
+}
+
 pub fn oauth_configured() -> bool {
     oauth::configured()
 }
@@ -185,7 +191,13 @@ pub async fn status(app: &AppHandle) -> Result<Vec<LinearConnection>> {
             save_connections(app, remaining)?;
         }
     }
-    connections(app)
+    let mut connections = connections(app)?;
+    for connection in &mut connections {
+        connection.agent_installed = stored_bundle(&connection.organization_id)
+            .ok()
+            .is_some_and(|bundle| bundle.agent.is_some());
+    }
+    Ok(connections)
 }
 
 pub async fn disconnect(app: &AppHandle, organization_id: &str) -> Result<Option<String>> {
@@ -910,6 +922,100 @@ pub fn codex_context(
     })
 }
 
+pub async fn agent_update_issue_state(
+    app: &AppHandle,
+    organization_id: &str,
+    project_id: &str,
+    issue_id: &str,
+    state_id: &str,
+) -> Result<Issue> {
+    ensure_agent_project_allowed(organization_id, project_id)?;
+    let token = agent_access_token(app, organization_id).await?;
+    api::ensure_issue_project(&token, issue_id, project_id).await?;
+    api::update_agent_issue_state(&token, issue_id, state_id).await
+}
+
+pub async fn agent_create_comment(
+    app: &AppHandle,
+    organization_id: &str,
+    project_id: &str,
+    issue_id: &str,
+    body: &str,
+) -> Result<LinearComment> {
+    ensure_agent_project_allowed(organization_id, project_id)?;
+    let token = agent_access_token(app, organization_id).await?;
+    api::ensure_issue_project(&token, issue_id, project_id).await?;
+    api::create_comment(&token, issue_id, body).await
+}
+
+fn ensure_agent_project_allowed(organization_id: &str, project_id: &str) -> Result<()> {
+    let bundle = stored_bundle(organization_id)?;
+    if agent_project_allowed(&bundle.codex_project_policy, project_id) {
+        Ok(())
+    } else {
+        Err(Error::LinearApi(
+            "Relay agent is not allowed to work in this Linear project".into(),
+        ))
+    }
+}
+
+fn agent_project_allowed(policies: &[LinearCodexProjectPolicy], project_id: &str) -> bool {
+    policies.iter().any(|policy| {
+        policy.project_id == project_id
+            && policy.allowed
+            && policy
+                .workspace_repo
+                .as_deref()
+                .is_some_and(|repo| !repo.trim().is_empty())
+    })
+}
+
+pub async fn agent_access_token(app: &AppHandle, organization_id: &str) -> Result<String> {
+    let state = app.state::<LinearState>();
+    let _guard = state.refresh.lock().await;
+    let mut bundle = stored_bundle(organization_id)?;
+    let agent = bundle.agent.clone().ok_or_else(|| {
+        Error::LinearApi("Install the Relay agent in this Linear workspace first".into())
+    })?;
+    if agent.expires_at > oauth::now_seconds().saturating_add(60) {
+        return Ok(agent.access_token);
+    }
+    let agent = match oauth::refresh_agent(agent).await {
+        Ok(agent) => agent,
+        Err(refresh_error) => {
+            let remote = if crate::nexus_auth::status().is_ok_and(|status| status.connected) {
+                nexus_sync::discover(app)
+                    .await
+                    .ok()
+                    .and_then(|connections| {
+                        connections.into_iter().find_map(|(_, connection, bundle)| {
+                            (connection.organization_id == organization_id)
+                                .then_some(bundle.agent)
+                                .flatten()
+                                .filter(|agent| {
+                                    agent.expires_at > oauth::now_seconds().saturating_add(60)
+                                })
+                        })
+                    })
+            } else {
+                None
+            };
+            remote.ok_or(refresh_error)?
+        }
+    };
+    bundle.agent = Some(agent.clone());
+    save_bundle(organization_id, &bundle)?;
+    if crate::nexus_auth::status().is_ok_and(|status| status.connected) {
+        if let Some(connection) = connections(app)?
+            .into_iter()
+            .find(|connection| connection.organization_id == organization_id)
+        {
+            let _ = nexus_sync::persist(app, &connection, &bundle).await;
+        }
+    }
+    Ok(agent.access_token)
+}
+
 pub async fn set_codex_project_allowed(
     app: &AppHandle,
     organization_id: &str,
@@ -1007,6 +1113,14 @@ fn stored_bundle(organization_id: &str) -> Result<TokenBundle> {
         .map_err(|error| Error::SecretStoreUnavailable(error.to_string()))?;
     serde_json::from_str(&encoded)
         .map_err(|_| Error::LinearApi("stored Linear credentials are invalid".into()))
+}
+
+fn save_bundle(organization_id: &str, bundle: &TokenBundle) -> Result<()> {
+    token_entry(organization_id)?
+        .set_password(
+            &serde_json::to_string(bundle).map_err(|error| Error::LinearApi(error.to_string()))?,
+        )
+        .map_err(|error| Error::SecretStoreUnavailable(error.to_string()))
 }
 
 fn local_codex_device_id(app: &AppHandle) -> Result<String> {
@@ -1196,6 +1310,7 @@ fn save_connected(app: &AppHandle, bundle: TokenBundle, viewer: Viewer) -> Resul
             viewer_name: viewer.name,
             viewer_email: viewer.email,
             nexus_credential_id: None,
+            agent_installed: false,
         },
     )
 }
@@ -1215,7 +1330,7 @@ fn save_connections(app: &AppHandle, connections: Vec<LinearConnection>) -> Resu
 
 #[cfg(test)]
 mod tests {
-    use super::update_pending_revoke;
+    use super::{LinearCodexProjectPolicy, agent_project_allowed, update_pending_revoke};
 
     #[test]
     fn failed_revokes_queue_once_and_successful_retries_clear_them() {
@@ -1226,5 +1341,28 @@ mod tests {
 
         update_pending_revoke(&mut pending, "org-1", true);
         assert!(pending.is_empty());
+    }
+
+    #[test]
+    fn relay_agent_projects_are_default_deny_and_require_an_explicit_repository() {
+        assert!(!agent_project_allowed(&[], "project-1"));
+        assert!(!agent_project_allowed(
+            &[LinearCodexProjectPolicy {
+                project_id: "project-1".into(),
+                allowed: true,
+                workspace_repo: None,
+                updated_at: 1,
+            }],
+            "project-1"
+        ));
+        assert!(agent_project_allowed(
+            &[LinearCodexProjectPolicy {
+                project_id: "project-1".into(),
+                allowed: true,
+                workspace_repo: Some("org/repo".into()),
+                updated_at: 1,
+            }],
+            "project-1"
+        ));
     }
 }

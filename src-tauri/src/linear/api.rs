@@ -1625,6 +1625,67 @@ pub async fn create_comment(token: &str, issue_id: &str, body: &str) -> Result<L
     data.result.into_value("Linear did not create the comment")
 }
 
+pub async fn update_agent_issue_state(
+    token: &str,
+    issue_id: &str,
+    state_id: &str,
+) -> Result<Issue> {
+    update_issue(
+        token,
+        issue_id,
+        Some(state_id),
+        None,
+        false,
+        None,
+        false,
+        None,
+        None,
+        None,
+        None,
+        None,
+        false,
+        None,
+        false,
+        None,
+        false,
+        None,
+        false,
+    )
+    .await
+}
+
+pub async fn ensure_issue_project(token: &str, issue_id: &str, project_id: &str) -> Result<()> {
+    #[derive(Deserialize)]
+    struct IssueProject {
+        project: Option<ProjectRef>,
+    }
+    #[derive(Deserialize)]
+    struct Data {
+        issue: Option<IssueProject>,
+    }
+    let data: Data = query(
+        token,
+        "query RelayAgentIssueProject($id: String!) { issue(id: $id) { project { id } } }",
+        json!({ "id": issue_id }),
+    )
+    .await?;
+    let actual_project_id = data
+        .issue
+        .and_then(|issue| issue.project)
+        .map(|project| project.id);
+    if issue_matches_project(actual_project_id.as_deref(), project_id) {
+        Ok(())
+    } else {
+        Err(Error::LinearApi(
+            "Relay agent issue is outside the allowed project".into(),
+        ))
+    }
+}
+
+fn issue_matches_project(actual_project_id: Option<&str>, expected_project_id: &str) -> bool {
+    actual_project_id == Some(expected_project_id)
+}
+
 pub async fn update_comment(token: &str, comment_id: &str, body: &str) -> Result<LinearComment> {
     #[derive(Deserialize)]
     struct Data {
@@ -2285,6 +2346,13 @@ mod tests {
         let error =
             ensure_document_fresh("2026-09-28T12:01:00Z", "2026-09-28T12:00:00Z").unwrap_err();
         assert!(error.to_string().contains("changed in Linear"));
+    }
+
+    #[test]
+    fn relay_agent_rejects_issues_outside_the_allowed_project() {
+        assert!(issue_matches_project(Some("project-1"), "project-1"));
+        assert!(!issue_matches_project(Some("project-2"), "project-1"));
+        assert!(!issue_matches_project(None, "project-1"));
     }
 
     #[test]

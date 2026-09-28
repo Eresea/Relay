@@ -1,5 +1,5 @@
-use reqwest::header::{ETAG, IF_MATCH};
 use reqwest::StatusCode;
+use reqwest::header::{ETAG, IF_MATCH};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use tauri::AppHandle;
@@ -7,7 +7,7 @@ use tauri::AppHandle;
 use crate::error::{Error, Result};
 use crate::nexus_auth;
 
-use super::{oauth::TokenBundle, LinearConnection};
+use super::{LinearConnection, oauth::TokenBundle};
 
 const NEXUS: &str = "https://nexus.eresea.net/api/v1";
 const CLIENT_ID: &str = "relay";
@@ -186,6 +186,15 @@ fn merge_bundle(existing: &TokenBundle, incoming: &TokenBundle) -> TokenBundle {
     } else {
         existing.clone()
     };
+    merged.agent = match (&existing.agent, &incoming.agent) {
+        (Some(left), Some(right)) => Some(if right.expires_at >= left.expires_at {
+            right.clone()
+        } else {
+            left.clone()
+        }),
+        (Some(agent), None) | (None, Some(agent)) => Some(agent.clone()),
+        (None, None) => None,
+    };
 
     let mut links =
         std::collections::HashMap::<(String, String), super::oauth::LinearCodexLink>::new();
@@ -274,6 +283,7 @@ pub async fn discover(app: &AppHandle) -> Result<Vec<(String, LinearConnection, 
                 viewer_name: metadata.viewer_name,
                 viewer_email: metadata.viewer_email,
                 nexus_credential_id: None,
+                agent_installed: false,
             },
             bundle,
         ));
@@ -355,7 +365,7 @@ fn request_error(error: reqwest::Error) -> Error {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::linear::oauth::{LinearCodexLink, LinearCodexProjectPolicy};
+    use crate::linear::oauth::{AgentTokenBundle, LinearCodexLink, LinearCodexProjectPolicy};
 
     #[test]
     fn current_bundle_for_uses_only_a_fresh_matching_workspace_credential() {
@@ -367,11 +377,13 @@ mod tests {
             viewer_name: "Viewer".into(),
             viewer_email: "viewer@example.com".into(),
             nexus_credential_id: None,
+            agent_installed: false,
         };
         let bundle = |expires_at| TokenBundle {
             access_token: "fresh".into(),
             refresh_token: "refresh".into(),
             expires_at,
+            agent: None,
             codex_links: vec![],
             codex_project_policy: vec![],
         };
@@ -402,6 +414,11 @@ mod tests {
             access_token: "old-access".into(),
             refresh_token: "old-refresh".into(),
             expires_at: 10,
+            agent: Some(AgentTokenBundle {
+                access_token: "old-agent".into(),
+                refresh_token: "old-agent-refresh".into(),
+                expires_at: 30,
+            }),
             codex_links: vec![LinearCodexLink {
                 issue_id: "issue-1".into(),
                 device_id: "device-a".into(),
@@ -421,6 +438,11 @@ mod tests {
             access_token: "new-access".into(),
             refresh_token: "new-refresh".into(),
             expires_at: 20,
+            agent: Some(AgentTokenBundle {
+                access_token: "new-agent".into(),
+                refresh_token: "new-agent-refresh".into(),
+                expires_at: 40,
+            }),
             codex_links: vec![LinearCodexLink {
                 issue_id: "issue-1".into(),
                 device_id: "device-b".into(),
@@ -439,6 +461,7 @@ mod tests {
 
         let merged = merge_bundle(&existing, &incoming);
         assert_eq!(merged.access_token, "new-access");
+        assert_eq!(merged.agent.unwrap().access_token, "new-agent");
         assert_eq!(merged.codex_links.len(), 2);
         assert!(!merged.codex_project_policy[0].allowed);
     }

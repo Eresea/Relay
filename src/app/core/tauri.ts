@@ -543,6 +543,42 @@ export class TauriBridge {
     await this.invoke('linear_connect_start');
   }
 
+  async linearAgentInstallStart(organizationId: string): Promise<void> {
+    await this.invoke('linear_agent_install_start', { organizationId });
+  }
+
+  async linearAgentUpdateIssueState(
+    organizationId: string,
+    projectId: string,
+    issueId: string,
+    stateId: string,
+  ): Promise<LinearIssue> {
+    const issue = await this.invoke<LinearIssue>('linear_agent_update_issue_state', {
+      organizationId,
+      projectId,
+      issueId,
+      stateId,
+    });
+    if (!issue) throw new Error('Linear agent returned no updated issue.');
+    return issue;
+  }
+
+  async linearAgentCreateComment(
+    organizationId: string,
+    projectId: string,
+    issueId: string,
+    body: string,
+  ): Promise<LinearComment> {
+    const comment = await this.invoke<LinearComment>('linear_agent_create_comment', {
+      organizationId,
+      projectId,
+      issueId,
+      body,
+    });
+    if (!comment) throw new Error('Linear agent returned no result comment.');
+    return comment;
+  }
+
   async linearDisconnect(organizationId: string): Promise<string | null> {
     return (await this.invoke<string | null>('linear_disconnect', { organizationId })) ?? null;
   }
@@ -1661,6 +1697,7 @@ export interface LinearConnection {
   readonly viewerName: string;
   readonly viewerEmail: string;
   readonly nexusCredentialId?: string;
+  readonly agentInstalled: boolean;
 }
 
 export interface LinearTeam {

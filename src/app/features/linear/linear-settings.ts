@@ -51,9 +51,29 @@ import { UmbraButtonComponent } from '@umbra/components/umbra-button/umbra-butto
               }}
             </span>
           </div>
-          <umbra-button size="sm" variant="outline" (click)="disconnect(connection)">
-            Disconnect
-          </umbra-button>
+          <div class="connection-actions">
+            @if (connection.agentInstalled) {
+              <span class="hint">
+                Relay agent installed ·
+                {{ connection.nexusCredentialId ? 'available across devices' : 'this device only' }}
+              </span>
+            } @else {
+              <span class="hint"
+                >Workspace admin approval required for the separate agent identity.</span
+              >
+              <umbra-button
+                size="sm"
+                variant="outline"
+                [disabled]="pending() || !nexus.status().connected"
+                (click)="installAgent(connection)"
+              >
+                {{ pending() ? 'Opening Linear' : 'Install Relay agent' }}
+              </umbra-button>
+            }
+            <umbra-button size="sm" variant="outline" (click)="disconnect(connection)">
+              Disconnect
+            </umbra-button>
+          </div>
         </div>
       } @empty {
         <p class="hint">No workspaces connected.</p>
@@ -97,6 +117,12 @@ import { UmbraButtonComponent } from '@umbra/components/umbra-button/umbra-butto
       display: grid;
       gap: var(--space-1);
     }
+    .connection-actions {
+      display: flex;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: var(--space-2);
+    }
     .error {
       color: var(--danger);
     }
@@ -131,6 +157,17 @@ export class LinearSettings {
     this.pending.set(true);
     try {
       await this.tauri.linearConnectStart();
+    } catch (error) {
+      this.pending.set(false);
+      this.error.set(error instanceof Error ? error.message : String(error));
+    }
+  }
+
+  protected async installAgent(connection: LinearConnection): Promise<void> {
+    this.error.set(null);
+    this.pending.set(true);
+    try {
+      await this.tauri.linearAgentInstallStart(connection.organizationId);
     } catch (error) {
       this.pending.set(false);
       this.error.set(error instanceof Error ? error.message : String(error));

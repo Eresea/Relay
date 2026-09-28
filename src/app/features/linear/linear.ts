@@ -445,6 +445,12 @@ interface LinearIssueDraft {
               @if (canUseCodex) {
                 <section class="detail-section" aria-label="Codex work">
                   <h3>Codex</h3>
+                  @if (!selected()?.agentInstalled) {
+                    <p class="hint">
+                      Install the Relay agent in Linear from Settings before running Codex. Codex
+                      writes will appear under Relay’s separate agent identity.
+                    </p>
+                  }
                   @if (detail.issue.project && isCodexAllowed(detail.issue)) {
                     @if (codexRequest()?.issue.id === detail.issue.id) {
                       <div class="codex-confirm" role="group" aria-label="Confirm Codex handoff">
@@ -496,7 +502,11 @@ interface LinearIssueDraft {
                     <div class="issue-actions">
                       <umbra-button
                         size="sm"
-                        [disabled]="codexPending() || !selectedCodexWorkspacePath()"
+                        [disabled]="
+                          codexPending() ||
+                          !selected()?.agentInstalled ||
+                          !selectedCodexWorkspacePath()
+                        "
                         (click)="requestCodex(detail.issue, false)"
                       >
                         {{ codexPending() ? 'Working in Codex' : 'Start new Codex thread' }}
@@ -505,7 +515,11 @@ interface LinearIssueDraft {
                         <umbra-button
                           size="sm"
                           variant="outline"
-                          [disabled]="codexPending() || !selectedCodexWorkspacePath()"
+                          [disabled]="
+                            codexPending() ||
+                            !selected()?.agentInstalled ||
+                            !selectedCodexWorkspacePath()
+                          "
                           (click)="requestCodex(detail.issue, true)"
                         >
                           Continue Codex
@@ -3905,6 +3919,10 @@ export class Linear {
       this.error.set('Enable Codex for this issue’s Linear project first.');
       return;
     }
+    if (!connection.agentInstalled) {
+      this.error.set('Install the Relay agent for this Linear workspace in Settings first.');
+      return;
+    }
     if (!workspace?.githubRepo) {
       this.error.set('Choose a Relay-discovered workspace linked to a GitHub repository.');
       return;
@@ -3929,7 +3947,13 @@ export class Linear {
         (state) => /in progress/i.test(state.name) || state.kind === 'started',
       );
       if (inProgress && inProgress.id !== issue.state?.id) {
-        await this.saveIssueUpdate(issue, { stateId: inProgress.id });
+        const updated = await this.tauri.linearAgentUpdateIssueState(
+          connection.organizationId,
+          projectId,
+          issue.id,
+          inProgress.id,
+        );
+        this.applyUpdatedIssue(connection.organizationId, updated);
       }
       const prompt = linearCodexPrompt(issue, this.issueDetail());
       const run = await this.tauri.codexSend(
@@ -3962,11 +3986,23 @@ export class Linear {
       }
 
       const review = this.statesFor(issue).find((state) => /review/i.test(state.name));
-      if (review) await this.saveIssueUpdate(issue, { stateId: review.id });
-      const comment = await this.tauri.linearCreateComment(
+      if (review) {
+        const updated = await this.tauri.linearAgentUpdateIssueState(
+          connection.organizationId,
+          projectId,
+          issue.id,
+          review.id,
+        );
+        this.applyUpdatedIssue(connection.organizationId, updated);
+      }
+      const response = run.response.trim().replace(/\n{3,}/g, '\n\n');
+      const conciseResponse =
+        response.length > 2_000 ? `${response.slice(0, 1_997).trimEnd()}…` : response;
+      const comment = await this.tauri.linearAgentCreateComment(
         connection.organizationId,
+        projectId,
         issue.id,
-        `Codex result — ${workspace.name}\n\n${run.response}`,
+        `Codex result — ${workspace.name}\n\n${conciseResponse}`,
       );
       this.issueDetail.update((detail) =>
         detail?.issue.id === issue.id
