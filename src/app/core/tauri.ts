@@ -543,6 +543,10 @@ export class TauriBridge {
     await this.invoke('linear_connect_start');
   }
 
+  async linearConnectCancel(): Promise<void> {
+    await this.invoke('linear_connect_cancel');
+  }
+
   async linearAgentInstallStart(organizationId: string): Promise<void> {
     await this.invoke('linear_agent_install_start', { organizationId });
   }

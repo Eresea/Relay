@@ -25,10 +25,10 @@ import { UmbraButtonComponent } from '@umbra/components/umbra-button/umbra-butto
         <umbra-button
           size="sm"
           variant="outline"
-          [disabled]="pending() || !oauthConfigured() || !nexus.status().connected"
-          (click)="connect()"
+          [disabled]="!pending() && (!oauthConfigured() || !nexus.status().connected)"
+          (click)="pending() ? cancelAuth() : connect()"
         >
-          {{ pending() ? 'Opening Linear' : 'Connect workspace' }}
+          {{ pending() ? 'Cancel sign-in' : 'Connect workspace' }}
         </umbra-button>
       </header>
       @if (!oauthConfigured()) {
@@ -195,6 +195,15 @@ export class LinearSettings {
       await this.tauri.linearConnectStart();
     } catch (error) {
       this.pending.set(false);
+      this.error.set(error instanceof Error ? error.message : String(error));
+    }
+  }
+
+  protected async cancelAuth(): Promise<void> {
+    try {
+      await this.tauri.linearConnectCancel();
+      this.pending.set(false);
+    } catch (error) {
       this.error.set(error instanceof Error ? error.message : String(error));
     }
   }

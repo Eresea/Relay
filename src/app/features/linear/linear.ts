@@ -101,10 +101,10 @@ interface LinearIssueDraft {
             <umbra-button
               size="sm"
               variant="outline"
-              (click)="connect()"
-              [disabled]="pending() || !oauthConfigured()"
+              (click)="pending() ? cancelConnect() : connect()"
+              [disabled]="!pending() && !oauthConfigured()"
             >
-              Connect workspace
+              {{ pending() ? 'Cancel sign-in' : 'Connect workspace' }}
             </umbra-button>
           </div>
         }
@@ -161,12 +161,12 @@ interface LinearIssueDraft {
           <p class="hint">Nexus sign-in is required before Linear can be connected.</p>
           <umbra-button
             size="sm"
-            [disabled]="pending() || !nexus.status().connected || !oauthConfigured()"
-            (click)="connect()"
+            [disabled]="!pending() && (!nexus.status().connected || !oauthConfigured())"
+            (click)="pending() ? cancelConnect() : connect()"
           >
             {{
               pending()
-                ? 'Opening Linear'
+                ? 'Cancel sign-in'
                 : oauthConfigured()
                   ? 'Connect Linear'
                   : 'OAuth setup pending'
@@ -3651,6 +3651,15 @@ export class Linear {
       await this.tauri.linearConnectStart();
     } catch (error) {
       this.pending.set(false);
+      this.error.set(error instanceof Error ? error.message : String(error));
+    }
+  }
+
+  protected async cancelConnect(): Promise<void> {
+    try {
+      await this.tauri.linearConnectCancel();
+      this.pending.set(false);
+    } catch (error) {
       this.error.set(error instanceof Error ? error.message : String(error));
     }
   }

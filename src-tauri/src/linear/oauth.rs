@@ -33,6 +33,22 @@ pub(super) struct PendingAuth {
     agent_organization_id: Option<String>,
 }
 
+fn take_callback_pending(
+    pending: &mut Option<PendingAuth>,
+    state: &str,
+    now: u64,
+) -> Option<PendingAuth> {
+    let attempt = pending.as_ref()?;
+    if attempt.expires_at < now {
+        pending.take();
+        return None;
+    }
+    if attempt.state != state {
+        return None;
+    }
+    pending.take()
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub(super) struct TokenBundle {
@@ -124,7 +140,10 @@ async fn start_with_actor(app: AppHandle, agent_organization_id: Option<String>)
     {
         let app_state = app.state::<LinearState>();
         let mut pending = app_state.pending.lock().unwrap();
-        if pending.is_some() {
+        if pending
+            .as_ref()
+            .is_some_and(|attempt| attempt.expires_at >= now_seconds())
+        {
             return Err(Error::LinearApi(
                 "Linear sign-in is already in progress".into(),
             ));
@@ -148,6 +167,10 @@ async fn start_with_actor(app: AppHandle, agent_organization_id: Option<String>)
         return Err(Error::LinearApi(error.to_string()));
     }
     Ok(())
+}
+
+pub fn cancel(app: &AppHandle) {
+    app.state::<LinearState>().pending.lock().unwrap().take();
 }
 
 fn authorization_url(client_id: &str, challenge: &str, state: &str, agent: bool) -> Result<Url> {
@@ -179,18 +202,17 @@ pub async fn handle_callback(app: AppHandle, callback: Url) {
         .into_owned()
         .collect::<std::collections::HashMap<_, _>>();
     let outcome = async {
-        let pending = app
-            .state::<LinearState>()
-            .pending
-            .lock()
-            .unwrap()
-            .take()
-            .ok_or_else(|| Error::LinearApi("Linear sign-in expired; try again".into()))?;
-        if pending.expires_at < now_seconds() || params.get("state") != Some(&pending.state) {
-            return Err(Error::LinearApi(
-                "Linear sign-in state did not match; try again".into(),
-            ));
-        }
+        let Some(state) = params.get("state") else {
+            return Ok::<_, Error>(None);
+        };
+        let pending = take_callback_pending(
+            &mut app.state::<LinearState>().pending.lock().unwrap(),
+            state,
+            now_seconds(),
+        );
+        let Some(pending) = pending else {
+            return Ok(None);
+        };
         if let Some(error) = params.get("error") {
             return Err(Error::LinearApi(format!(
                 "Linear sign-in was not approved ({error})"
@@ -265,7 +287,7 @@ pub async fn handle_callback(app: AppHandle, callback: Url) {
                 )),
             };
             super::save_connection(&app, connection.clone())?;
-            return Ok::<_, Error>((connection, warning));
+            return Ok::<_, Error>(Some((connection, warning)));
         }
         let bundle = TokenBundle {
             access_token: response.access_token,
@@ -298,16 +320,17 @@ pub async fn handle_callback(app: AppHandle, callback: Url) {
                 "Connected on this device; Nexus sync failed: {error}"
             )),
         };
-        Ok::<_, Error>((connection, warning))
+        Ok::<_, Error>(Some((connection, warning)))
     }
     .await;
 
     let event = match outcome {
-        Ok((connection, error)) => AuthEvent {
+        Ok(Some((connection, error))) => AuthEvent {
             connected: true,
             connection: Some(connection),
             error,
         },
+        Ok(None) => return,
         Err(error) => AuthEvent {
             connected: false,
             connection: None,
@@ -425,7 +448,37 @@ pub(super) fn random_token(size: usize) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::authorization_url;
+    use super::{authorization_url, take_callback_pending, PendingAuth};
+
+    #[test]
+    fn stale_callbacks_do_not_consume_a_new_sign_in_attempt() {
+        let current = PendingAuth {
+            state: "current".into(),
+            verifier: "verifier".into(),
+            expires_at: 20,
+            agent_organization_id: None,
+        };
+        let mut pending = Some(current);
+
+        assert!(take_callback_pending(&mut pending, "stale", 10).is_none());
+        assert_eq!(
+            pending.as_ref().map(|attempt| attempt.state.as_str()),
+            Some("current")
+        );
+    }
+
+    #[test]
+    fn expired_sign_in_attempts_are_cleared_by_callback() {
+        let mut pending = Some(PendingAuth {
+            state: "expired".into(),
+            verifier: "verifier".into(),
+            expires_at: 10,
+            agent_organization_id: None,
+        });
+
+        assert!(take_callback_pending(&mut pending, "expired", 11).is_none());
+        assert!(pending.is_none());
+    }
 
     #[test]
     fn authorize_flow_keeps_user_and_agent_actors_separate() {

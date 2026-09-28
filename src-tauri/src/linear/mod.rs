@@ -170,6 +170,10 @@ pub async fn connect_start(app: AppHandle) -> Result<()> {
     oauth::start(app).await
 }
 
+pub fn cancel_connect(app: &AppHandle) {
+    oauth::cancel(app);
+}
+
 pub async fn agent_install_start(app: AppHandle, organization_id: String) -> Result<()> {
     oauth::start_agent(app, organization_id).await
 }

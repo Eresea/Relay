@@ -339,6 +339,11 @@ pub async fn linear_connect_start(app: AppHandle) -> Result<()> {
 }
 
 #[tauri::command]
+pub fn linear_connect_cancel(app: AppHandle) {
+    linear::cancel_connect(&app);
+}
+
+#[tauri::command]
 pub async fn linear_agent_install_start(app: AppHandle, organization_id: String) -> Result<()> {
     if organization_id.trim().is_empty() {
         return Err(std::io::Error::other("A Linear workspace is required").into());
