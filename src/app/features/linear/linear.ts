@@ -1572,6 +1572,20 @@ interface LinearIssueDraft {
                         <option value="4">Low</option>
                       </select>
                     </label>
+                    <label>
+                      <span>Assignee</span>
+                      <select
+                        [value]="projectIssueAssigneeId()"
+                        [disabled]="loadingProjectIssues()"
+                        (change)="setProjectIssueAssigneeFilter($any($event.target).value)"
+                      >
+                        <option value="">Anyone</option>
+                        <option value="unassigned">Unassigned</option>
+                        @for (user of users(); track user.id) {
+                          <option [value]="user.id">{{ user.name }}</option>
+                        }
+                      </select>
+                    </label>
                   </details>
                 </form>
                 @if (teams().length) {
@@ -2855,6 +2869,7 @@ export class Linear {
   protected readonly projectIssueSearchTerm = signal('');
   protected readonly projectIssueStateId = signal('');
   protected readonly projectIssuePriority = signal('');
+  protected readonly projectIssueAssigneeId = signal('');
   protected readonly includeArchivedProjectIssues = signal(false);
   protected readonly loadingProjectIssues = signal(false);
   protected readonly projectIssuesHasNextPage = signal(false);
@@ -3892,7 +3907,12 @@ export class Linear {
       (this.includeArchivedProjectIssues() || !issue.archivedAt) &&
       (!search || issue.title.toLowerCase().includes(search)) &&
       (!this.projectIssueStateId() || issue.state?.id === this.projectIssueStateId()) &&
-      (this.projectIssuePriority() === '' || issue.priority === Number(this.projectIssuePriority()))
+      (this.projectIssuePriority() === '' ||
+        issue.priority === Number(this.projectIssuePriority())) &&
+      (!this.projectIssueAssigneeId() ||
+        (this.projectIssueAssigneeId() === 'unassigned'
+          ? !issue.assignee
+          : issue.assignee?.id === this.projectIssueAssigneeId()))
     );
   }
 
@@ -4571,6 +4591,7 @@ export class Linear {
     this.projectIssueSearchTerm.set('');
     this.projectIssueStateId.set('');
     this.projectIssuePriority.set('');
+    this.projectIssueAssigneeId.set('');
     this.selectedProject.set(project);
     this.projectIssues.set([]);
     this.nextProjectIssueCursor = null;
@@ -4640,8 +4661,20 @@ export class Linear {
     this.resetProjectIssuePage(project.id);
   }
 
+  protected setProjectIssueAssigneeFilter(assigneeId: string): void {
+    const project = this.selectedProject();
+    if (!project || this.loadingProjectIssues() || assigneeId === this.projectIssueAssigneeId())
+      return;
+    this.projectIssueAssigneeId.set(assigneeId);
+    this.resetProjectIssuePage(project.id);
+  }
+
   protected projectIssueFilterCount(): number {
-    return Number(!!this.projectIssueStateId()) + Number(!!this.projectIssuePriority());
+    return (
+      Number(!!this.projectIssueStateId()) +
+      Number(!!this.projectIssuePriority()) +
+      Number(!!this.projectIssueAssigneeId())
+    );
   }
 
   private resetProjectIssuePage(projectId: string): void {
@@ -4987,6 +5020,7 @@ export class Linear {
         this.projectIssueSearchTerm(),
         this.projectIssueStateId() || undefined,
         this.projectIssuePriority() === '' ? undefined : Number(this.projectIssuePriority()),
+        this.projectIssueAssigneeId() || undefined,
       );
       if (request === this.projectIssuesRequest && this.selectedProject()?.id === projectId) {
         this.projectIssues.update((items) => (append ? [...items, ...page.issues] : page.issues));
