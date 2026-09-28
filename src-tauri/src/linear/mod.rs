@@ -895,6 +895,8 @@ pub async fn my_issues(
     search: Option<&str>,
     after: Option<&str>,
     include_archived: bool,
+    state_id: Option<&str>,
+    priority: Option<u8>,
 ) -> Result<IssuePage> {
     let connection = connections(app)?
         .into_iter()
@@ -906,6 +908,8 @@ pub async fn my_issues(
         search,
         after,
         include_archived,
+        state_id,
+        priority,
     )
     .await
 }
@@ -917,6 +921,8 @@ pub async fn team_issues(
     search: Option<&str>,
     after: Option<&str>,
     include_archived: bool,
+    state_id: Option<&str>,
+    priority: Option<u8>,
 ) -> Result<IssuePage> {
     api::team_issues(
         &access_token(app, organization_id).await?,
@@ -924,6 +930,8 @@ pub async fn team_issues(
         search,
         after,
         include_archived,
+        state_id,
+        priority,
     )
     .await
 }

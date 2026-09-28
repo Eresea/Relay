@@ -722,9 +722,11 @@ interface LinearIssueDraft {
                   {{
                     issueSearchTerm()
                       ? 'Search results'
-                      : issueTeamId()
-                        ? teamName(issueTeamId()) + ' issues'
-                        : 'My work'
+                      : issueFilterCount()
+                        ? 'Filtered issues'
+                        : issueTeamId()
+                          ? teamName(issueTeamId()) + ' issues'
+                          : 'My work'
                   }}
                 </h2>
                 <div class="issue-actions">
@@ -768,6 +770,45 @@ interface LinearIssueDraft {
                       }
                     </select>
                   </label>
+                  <details class="issue-filters">
+                    <summary>
+                      Filters{{ issueFilterCount() ? ' · ' + issueFilterCount() : '' }}
+                    </summary>
+                    <label>
+                      <span>Status</span>
+                      <select
+                        [value]="issueStateId()"
+                        [disabled]="loading()"
+                        (change)="setIssueStateFilter($any($event.target).value)"
+                      >
+                        <option value="">Any status</option>
+                        @for (team of teams(); track team.id) {
+                          @if (!issueTeamId() || issueTeamId() === team.id) {
+                            @for (state of statesForTeam(team.id); track state.id) {
+                              <option [value]="state.id">
+                                {{ issueTeamId() ? state.name : team.name + ' · ' + state.name }}
+                              </option>
+                            }
+                          }
+                        }
+                      </select>
+                    </label>
+                    <label>
+                      <span>Priority</span>
+                      <select
+                        [value]="issuePriority()"
+                        [disabled]="loading()"
+                        (change)="setIssuePriorityFilter($any($event.target).value)"
+                      >
+                        <option value="">Any priority</option>
+                        <option value="0">No priority</option>
+                        <option value="1">Urgent</option>
+                        <option value="2">High</option>
+                        <option value="3">Normal</option>
+                        <option value="4">Low</option>
+                      </select>
+                    </label>
+                  </details>
                   <umbra-button
                     size="sm"
                     variant="link"
@@ -2419,6 +2460,22 @@ interface LinearIssueDraft {
       flex-wrap: wrap;
       gap: var(--space-2);
     }
+    .issue-filters {
+      position: relative;
+    }
+    .issue-filters summary {
+      color: var(--text-muted);
+      cursor: pointer;
+      font-size: var(--text-12);
+      white-space: nowrap;
+    }
+    .issue-filters label {
+      display: grid;
+      gap: var(--space-1);
+      margin-top: var(--space-2);
+      color: var(--text-muted);
+      font-size: var(--text-12);
+    }
     .label-color {
       width: 0.8rem;
       height: 0.8rem;
@@ -2700,6 +2757,8 @@ export class Linear {
   protected readonly selected = signal<LinearConnection | null>(null);
   protected readonly issues = signal<readonly LinearIssue[]>([]);
   protected readonly includeArchivedIssues = signal(false);
+  protected readonly issueStateId = signal('');
+  protected readonly issuePriority = signal('');
   protected readonly confirmArchiveIssueId = signal<string | null>(null);
   protected readonly confirmArchiveIssueDetailId = signal<string | null>(null);
   protected readonly archivingIssueId = signal<string | null>(null);
@@ -2950,6 +3009,7 @@ export class Linear {
     this.projectIssuesRequest++;
     this.loadingProjectIssues.set(false);
     this.issueTeamId.set('');
+    this.issueStateId.set('');
     this.restoreIssueDraft(connection);
     this.restorePendingIssueUpdates(connection);
     this.issueCacheStale.set(false);
@@ -2976,11 +3036,38 @@ export class Linear {
   protected setIssueTeam(teamId: string): void {
     if (this.loading() || teamId === this.issueTeamId()) return;
     this.issueTeamId.set(teamId);
+    if (teamId && !this.statesForTeam(teamId).some((state) => state.id === this.issueStateId())) {
+      this.issueStateId.set('');
+    }
     this.confirmArchiveIssueId.set(null);
     this.nextCursor = null;
     this.hasNextPage.set(false);
     this.issues.set([]);
     void this.loadIssues();
+  }
+
+  protected setIssueStateFilter(stateId: string): void {
+    if (this.loading() || stateId === this.issueStateId()) return;
+    this.issueStateId.set(stateId);
+    this.resetIssuePage();
+    void this.loadIssues();
+  }
+
+  protected setIssuePriorityFilter(priority: string): void {
+    if (this.loading() || priority === this.issuePriority()) return;
+    this.issuePriority.set(priority);
+    this.resetIssuePage();
+    void this.loadIssues();
+  }
+
+  protected issueFilterCount(): number {
+    return Number(!!this.issueStateId()) + Number(!!this.issuePriority());
+  }
+
+  private resetIssuePage(): void {
+    this.issues.set([]);
+    this.nextCursor = null;
+    this.hasNextPage.set(false);
   }
 
   protected searchIssues(event: Event): void {
@@ -3632,7 +3719,9 @@ export class Linear {
       : `relay.linear.issues.${connection.organizationId}.${connection.viewerId}`;
     const archived = this.includeArchivedIssues() ? '.all' : '';
     const search = this.issueSearchTerm().trim();
-    return `${scope}${archived}${search ? `.search.${encodeURIComponent(search)}` : ''}`;
+    const state = this.issueStateId();
+    const priority = this.issuePriority();
+    return `${scope}${archived}${search ? `.search.${encodeURIComponent(search)}` : ''}${state ? `.state.${encodeURIComponent(state)}` : ''}${priority ? `.priority.${priority}` : ''}`;
   }
 
   private projectCacheKey(connection: LinearConnection, includeArchived = false): string {
@@ -3687,7 +3776,10 @@ export class Linear {
   private applyUpdatedIssue(organizationId: string, updated: LinearIssue): void {
     if (this.selected()?.organizationId !== organizationId) return;
     this.issues.update((items) =>
-      items.map((entry) => (entry.id === updated.id ? updated : entry)),
+      items.flatMap((entry) => {
+        if (entry.id !== updated.id) return [entry];
+        return this.matchesIssueQuery(updated) ? [updated] : [];
+      }),
     );
     this.projectIssues.update((items) =>
       items.map((entry) => (entry.id === updated.id ? updated : entry)),
@@ -3697,6 +3789,21 @@ export class Linear {
     );
     const connection = this.selected();
     if (connection) this.saveIssueCache(connection);
+  }
+
+  private matchesIssueQuery(issue: LinearIssue): boolean {
+    const connection = this.selected();
+    const search = this.issueSearchTerm().trim().toLowerCase();
+    return (
+      !!connection &&
+      (this.issueTeamId()
+        ? issue.team.id === this.issueTeamId()
+        : issue.assignee?.id === connection.viewerId) &&
+      (this.includeArchivedIssues() || !issue.archivedAt) &&
+      (!search || issue.title.toLowerCase().includes(search)) &&
+      (!this.issueStateId() || issue.state?.id === this.issueStateId()) &&
+      (this.issuePriority() === '' || issue.priority === Number(this.issuePriority()))
+    );
   }
 
   private saveIssueCache(connection: LinearConnection): void {
@@ -4812,7 +4919,10 @@ export class Linear {
       this.newStateId.set('');
       this.newCycleId.set('');
       this.writeLocal(this.issueDraftKey(connection.organizationId), null);
-      if (!this.issueTeamId() || this.issueTeamId() === created.team.id) {
+      if (
+        (!this.issueTeamId() || this.issueTeamId() === created.team.id) &&
+        this.matchesIssueQuery(created)
+      ) {
         this.issues.update((issues) => [created, ...issues]);
         this.saveIssueCache(connection);
       }
@@ -5160,12 +5270,16 @@ export class Linear {
           after,
           this.includeArchivedIssues(),
           this.issueSearchTerm(),
+          this.issueStateId() || undefined,
+          this.issuePriority() === '' ? undefined : Number(this.issuePriority()),
         )
       : this.tauri.linearMyIssues(
           organizationId,
           after,
           this.includeArchivedIssues(),
           this.issueSearchTerm(),
+          this.issueStateId() || undefined,
+          this.issuePriority() === '' ? undefined : Number(this.issuePriority()),
         );
   }
 

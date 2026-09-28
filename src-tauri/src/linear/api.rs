@@ -1202,6 +1202,8 @@ pub async fn project_issues(
         None,
         after,
         include_archived,
+        None,
+        None,
     )
     .await
 }
@@ -1712,6 +1714,8 @@ pub async fn my_issues(
     search: Option<&str>,
     after: Option<&str>,
     include_archived: bool,
+    state_id: Option<&str>,
+    priority: Option<u8>,
 ) -> Result<IssuePage> {
     issues(
         token,
@@ -1719,6 +1723,8 @@ pub async fn my_issues(
         search,
         after,
         include_archived,
+        state_id,
+        priority,
     )
     .await
 }
@@ -1729,6 +1735,8 @@ pub async fn team_issues(
     search: Option<&str>,
     after: Option<&str>,
     include_archived: bool,
+    state_id: Option<&str>,
+    priority: Option<u8>,
 ) -> Result<IssuePage> {
     issues(
         token,
@@ -1736,6 +1744,8 @@ pub async fn team_issues(
         search,
         after,
         include_archived,
+        state_id,
+        priority,
     )
     .await
 }
@@ -1746,13 +1756,15 @@ async fn issues(
     search: Option<&str>,
     after: Option<&str>,
     include_archived: bool,
+    state_id: Option<&str>,
+    priority: Option<u8>,
 ) -> Result<IssuePage> {
     #[derive(Deserialize)]
     struct Data {
         issues: IssueConnection,
     }
 
-    let filter = with_title_search(filter, search);
+    let filter = with_issue_filters(filter, search, state_id, priority);
     let data: Data = query(
         token,
         "query RelayIssues($filter: IssueFilter, $after: String, $includeArchived: Boolean!) { issues(filter: $filter, includeArchived: $includeArchived, first: 50, after: $after) { nodes { id identifier title description url priority updatedAt archivedAt state { id name type } assignee { id name } project { id name } cycle { id name number } labels { nodes { id name color } } team { id name key } } pageInfo { endCursor hasNextPage } } }",
@@ -1770,10 +1782,28 @@ async fn issues(
     })
 }
 
-fn with_title_search(filter: Value, search: Option<&str>) -> Value {
-    match search.map(str::trim).filter(|search| !search.is_empty()) {
-        Some(search) => json!({ "and": [filter, { "title": { "contains": search } }] }),
-        None => filter,
+fn with_issue_filters(
+    filter: Value,
+    search: Option<&str>,
+    state_id: Option<&str>,
+    priority: Option<u8>,
+) -> Value {
+    let mut filters = vec![filter];
+    if let Some(search) = search.map(str::trim).filter(|search| !search.is_empty()) {
+        filters.push(json!({ "title": { "contains": search } }));
+    }
+    if let Some(state_id) = state_id {
+        filters.push(json!({ "state": { "id": { "eq": state_id } } }));
+    }
+    if let Some(priority) = priority {
+        filters.push(json!({ "priority": { "eq": priority } }));
+    }
+    if filters.len() == 1 {
+        filters
+            .pop()
+            .expect("the base issue scope is always present")
+    } else {
+        json!({ "and": filters })
     }
 }
 
@@ -1919,15 +1949,17 @@ mod tests {
     }
 
     #[test]
-    fn issue_title_search_preserves_the_existing_scope_filter() {
+    fn issue_filters_preserve_scope_and_compose_search_status_and_priority() {
         let team = json!({ "team": { "id": { "eq": "team-1" } } });
-        assert_eq!(with_title_search(team.clone(), None), team);
+        assert_eq!(with_issue_filters(team.clone(), None, None, None), team);
         assert_eq!(
-            with_title_search(team, Some("  deploy  ")),
+            with_issue_filters(team, Some("  deploy  "), Some("state-1"), Some(1)),
             json!({
                 "and": [
                     { "team": { "id": { "eq": "team-1" } } },
-                    { "title": { "contains": "deploy" } }
+                    { "title": { "contains": "deploy" } },
+                    { "state": { "id": { "eq": "state-1" } } },
+                    { "priority": { "eq": 1 } }
                 ]
             })
         );

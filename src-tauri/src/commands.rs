@@ -1285,9 +1285,18 @@ pub async fn linear_my_issues(
     search: Option<String>,
     after: Option<String>,
     include_archived: Option<bool>,
+    state_id: Option<String>,
+    priority: Option<u8>,
 ) -> Result<IssuePage> {
     if search.as_deref().is_some_and(|query| query.len() > 255) {
         return Err(std::io::Error::other("Issue search is too long").into());
+    }
+    if state_id
+        .as_deref()
+        .is_some_and(|value| value.trim().is_empty())
+        || priority.is_some_and(|value| value > 4)
+    {
+        return Err(std::io::Error::other("Issue filters are invalid").into());
     }
     linear::my_issues(
         &app,
@@ -1298,6 +1307,8 @@ pub async fn linear_my_issues(
             .filter(|search| !search.is_empty()),
         after.as_deref(),
         include_archived.unwrap_or(false),
+        state_id.as_deref(),
+        priority,
     )
     .await
 }
@@ -1310,12 +1321,21 @@ pub async fn linear_team_issues(
     search: Option<String>,
     after: Option<String>,
     include_archived: Option<bool>,
+    state_id: Option<String>,
+    priority: Option<u8>,
 ) -> Result<IssuePage> {
     if team_id.trim().is_empty() {
         return Err(std::io::Error::other("A Linear team is required").into());
     }
     if search.as_deref().is_some_and(|query| query.len() > 255) {
         return Err(std::io::Error::other("Issue search is too long").into());
+    }
+    if state_id
+        .as_deref()
+        .is_some_and(|value| value.trim().is_empty())
+        || priority.is_some_and(|value| value > 4)
+    {
+        return Err(std::io::Error::other("Issue filters are invalid").into());
     }
     linear::team_issues(
         &app,
@@ -1327,6 +1347,8 @@ pub async fn linear_team_issues(
             .filter(|search| !search.is_empty()),
         after.as_deref(),
         include_archived.unwrap_or(false),
+        state_id.as_deref(),
+        priority,
     )
     .await
 }
