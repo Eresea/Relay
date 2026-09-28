@@ -1723,6 +1723,7 @@ pub async fn my_issues(
     include_archived: bool,
     state_id: Option<&str>,
     priority: Option<u8>,
+    label_id: Option<&str>,
 ) -> Result<IssuePage> {
     issues(
         token,
@@ -1733,7 +1734,7 @@ pub async fn my_issues(
         state_id,
         priority,
         None,
-        None,
+        label_id,
     )
     .await
 }
@@ -1747,6 +1748,7 @@ pub async fn team_issues(
     state_id: Option<&str>,
     priority: Option<u8>,
     assignee_id: Option<&str>,
+    label_id: Option<&str>,
 ) -> Result<IssuePage> {
     issues(
         token,
@@ -1757,7 +1759,7 @@ pub async fn team_issues(
         state_id,
         priority,
         assignee_id,
-        None,
+        label_id,
     )
     .await
 }

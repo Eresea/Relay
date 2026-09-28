@@ -824,6 +824,19 @@ interface LinearIssueDraft {
                         </select>
                       </label>
                     }
+                    <label>
+                      <span>Label</span>
+                      <select
+                        [value]="issueLabelId()"
+                        [disabled]="loading()"
+                        (change)="setIssueLabelFilter($any($event.target).value)"
+                      >
+                        <option value="">Any label</option>
+                        @for (label of issueFilterLabels(); track label.id) {
+                          <option [value]="label.id">{{ label.name }}</option>
+                        }
+                      </select>
+                    </label>
                   </details>
                   <umbra-button
                     size="sm"
@@ -2873,6 +2886,7 @@ export class Linear {
   protected readonly issueStateId = signal('');
   protected readonly issuePriority = signal('');
   protected readonly issueAssigneeId = signal('');
+  protected readonly issueLabelId = signal('');
   protected readonly confirmArchiveIssueId = signal<string | null>(null);
   protected readonly confirmArchiveIssueDetailId = signal<string | null>(null);
   protected readonly archivingIssueId = signal<string | null>(null);
@@ -3130,6 +3144,7 @@ export class Linear {
     this.loadingProjectIssues.set(false);
     this.issueTeamId.set('');
     this.issueAssigneeId.set('');
+    this.issueLabelId.set('');
     this.issueStateId.set('');
     this.restoreIssueDraft(connection);
     this.restorePendingIssueUpdates(connection);
@@ -3158,6 +3173,9 @@ export class Linear {
     if (this.loading() || teamId === this.issueTeamId()) return;
     this.issueTeamId.set(teamId);
     if (!teamId) this.issueAssigneeId.set('');
+    if (teamId && !this.labelsFor(teamId).some((label) => label.id === this.issueLabelId())) {
+      this.issueLabelId.set('');
+    }
     if (teamId && !this.statesForTeam(teamId).some((state) => state.id === this.issueStateId())) {
       this.issueStateId.set('');
     }
@@ -3189,11 +3207,19 @@ export class Linear {
     void this.loadIssues();
   }
 
+  protected setIssueLabelFilter(labelId: string): void {
+    if (this.loading() || labelId === this.issueLabelId()) return;
+    this.issueLabelId.set(labelId);
+    this.resetIssuePage();
+    void this.loadIssues();
+  }
+
   protected issueFilterCount(): number {
     return (
       Number(!!this.issueStateId()) +
       Number(!!this.issuePriority()) +
-      Number(!!this.issueTeamId() && !!this.issueAssigneeId())
+      Number(!!this.issueTeamId() && !!this.issueAssigneeId()) +
+      Number(!!this.issueLabelId())
     );
   }
 
@@ -3855,7 +3881,8 @@ export class Linear {
     const state = this.issueStateId();
     const priority = this.issuePriority();
     const assignee = this.issueAssigneeId();
-    return `${scope}${archived}${search ? `.search.${encodeURIComponent(search)}` : ''}${state ? `.state.${encodeURIComponent(state)}` : ''}${priority ? `.priority.${priority}` : ''}${assignee ? `.assignee.${encodeURIComponent(assignee)}` : ''}`;
+    const label = this.issueLabelId();
+    return `${scope}${archived}${search ? `.search.${encodeURIComponent(search)}` : ''}${state ? `.state.${encodeURIComponent(state)}` : ''}${priority ? `.priority.${priority}` : ''}${assignee ? `.assignee.${encodeURIComponent(assignee)}` : ''}${label ? `.label.${encodeURIComponent(label)}` : ''}`;
   }
 
   private projectCacheKey(connection: LinearConnection, includeArchived = false): string {
@@ -3944,7 +3971,8 @@ export class Linear {
         !this.issueAssigneeId() ||
         (this.issueAssigneeId() === 'unassigned'
           ? !issue.assignee
-          : issue.assignee?.id === this.issueAssigneeId()))
+          : issue.assignee?.id === this.issueAssigneeId())) &&
+      (!this.issueLabelId() || issue.labels.some((label) => label.id === this.issueLabelId()))
     );
   }
 
@@ -5304,6 +5332,10 @@ export class Linear {
     return this.labels().filter((label) => !label.team?.id || label.team.id === teamId);
   }
 
+  protected issueFilterLabels(): readonly LinearLabel[] {
+    return this.issueTeamId() ? this.labelsFor(this.issueTeamId()) : this.labels();
+  }
+
   protected editLabel(label: LinearLabel): void {
     this.error.set(null);
     this.editingLabelId.set(label.id);
@@ -5516,6 +5548,7 @@ export class Linear {
           this.issueStateId() || undefined,
           this.issuePriority() === '' ? undefined : Number(this.issuePriority()),
           this.issueAssigneeId() || undefined,
+          this.issueLabelId() || undefined,
         )
       : this.tauri.linearMyIssues(
           organizationId,
@@ -5524,6 +5557,7 @@ export class Linear {
           this.issueSearchTerm(),
           this.issueStateId() || undefined,
           this.issuePriority() === '' ? undefined : Number(this.issuePriority()),
+          this.issueLabelId() || undefined,
         );
   }
 
