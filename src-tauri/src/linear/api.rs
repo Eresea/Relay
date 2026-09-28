@@ -1196,6 +1196,8 @@ pub async fn project_issues(
     after: Option<&str>,
     include_archived: bool,
     search: Option<&str>,
+    state_id: Option<&str>,
+    priority: Option<u8>,
 ) -> Result<IssuePage> {
     issues(
         token,
@@ -1203,8 +1205,8 @@ pub async fn project_issues(
         search,
         after,
         include_archived,
-        None,
-        None,
+        state_id,
+        priority,
     )
     .await
 }
@@ -1968,13 +1970,15 @@ mod tests {
             with_issue_filters(
                 json!({ "project": { "id": { "eq": "project-1" } } }),
                 Some("release"),
-                None,
-                None,
+                Some("state-2"),
+                Some(2),
             ),
             json!({
                 "and": [
                     { "project": { "id": { "eq": "project-1" } } },
-                    { "title": { "contains": "release" } }
+                    { "title": { "contains": "release" } },
+                    { "state": { "id": { "eq": "state-2" } } },
+                    { "priority": { "eq": 2 } }
                 ]
             })
         );

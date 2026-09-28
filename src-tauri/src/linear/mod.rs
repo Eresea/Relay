@@ -951,6 +951,8 @@ pub async fn project_issues(
     after: Option<&str>,
     include_archived: bool,
     search: Option<&str>,
+    state_id: Option<&str>,
+    priority: Option<u8>,
 ) -> Result<IssuePage> {
     api::project_issues(
         &access_token(app, organization_id).await?,
@@ -958,6 +960,8 @@ pub async fn project_issues(
         after,
         include_archived,
         search,
+        state_id,
+        priority,
     )
     .await
 }

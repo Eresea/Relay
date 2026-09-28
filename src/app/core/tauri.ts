@@ -1178,6 +1178,8 @@ export class TauriBridge {
     after: string | null = null,
     includeArchived = false,
     search = '',
+    stateId?: string,
+    priority?: number,
   ): Promise<LinearIssuePage> {
     const result = await this.invoke<LinearIssuePage>('linear_project_issues', {
       organizationId,
@@ -1185,6 +1187,8 @@ export class TauriBridge {
       after,
       includeArchived,
       search,
+      stateId,
+      priority,
     });
     if (!result) throw new Error('Linear returned no project issues.');
     return result;

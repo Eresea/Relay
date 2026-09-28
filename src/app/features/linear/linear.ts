@@ -1536,6 +1536,43 @@ interface LinearIssueDraft {
                       Clear
                     </umbra-button>
                   }
+                  <details class="issue-filters">
+                    <summary>
+                      Filters{{
+                        projectIssueFilterCount() ? ' · ' + projectIssueFilterCount() : ''
+                      }}
+                    </summary>
+                    <label>
+                      <span>Status</span>
+                      <select
+                        [value]="projectIssueStateId()"
+                        [disabled]="loadingProjectIssues()"
+                        (change)="setProjectIssueStateFilter($any($event.target).value)"
+                      >
+                        <option value="">Any status</option>
+                        @for (team of teams(); track team.id) {
+                          @for (state of statesForTeam(team.id); track state.id) {
+                            <option [value]="state.id">{{ team.name }} · {{ state.name }}</option>
+                          }
+                        }
+                      </select>
+                    </label>
+                    <label>
+                      <span>Priority</span>
+                      <select
+                        [value]="projectIssuePriority()"
+                        [disabled]="loadingProjectIssues()"
+                        (change)="setProjectIssuePriorityFilter($any($event.target).value)"
+                      >
+                        <option value="">Any priority</option>
+                        <option value="0">No priority</option>
+                        <option value="1">Urgent</option>
+                        <option value="2">High</option>
+                        <option value="3">Normal</option>
+                        <option value="4">Low</option>
+                      </select>
+                    </label>
+                  </details>
                 </form>
                 @if (teams().length) {
                   <form class="create-form" (submit)="createProjectIssue($event)">
@@ -2816,6 +2853,8 @@ export class Linear {
   protected readonly projectIssues = signal<readonly LinearIssue[]>([]);
   protected readonly projectIssueSearchInput = signal('');
   protected readonly projectIssueSearchTerm = signal('');
+  protected readonly projectIssueStateId = signal('');
+  protected readonly projectIssuePriority = signal('');
   protected readonly includeArchivedProjectIssues = signal(false);
   protected readonly loadingProjectIssues = signal(false);
   protected readonly projectIssuesHasNextPage = signal(false);
@@ -3851,7 +3890,9 @@ export class Linear {
       !!project &&
       issue.project?.id === project.id &&
       (this.includeArchivedProjectIssues() || !issue.archivedAt) &&
-      (!search || issue.title.toLowerCase().includes(search))
+      (!search || issue.title.toLowerCase().includes(search)) &&
+      (!this.projectIssueStateId() || issue.state?.id === this.projectIssueStateId()) &&
+      (this.projectIssuePriority() === '' || issue.priority === Number(this.projectIssuePriority()))
     );
   }
 
@@ -4528,6 +4569,8 @@ export class Linear {
     this.includeArchivedProjectIssues.set(false);
     this.projectIssueSearchInput.set('');
     this.projectIssueSearchTerm.set('');
+    this.projectIssueStateId.set('');
+    this.projectIssuePriority.set('');
     this.selectedProject.set(project);
     this.projectIssues.set([]);
     this.nextProjectIssueCursor = null;
@@ -4581,6 +4624,31 @@ export class Linear {
     this.nextProjectIssueCursor = null;
     this.projectIssuesHasNextPage.set(false);
     void this.loadProjectIssues(project.id);
+  }
+
+  protected setProjectIssueStateFilter(stateId: string): void {
+    const project = this.selectedProject();
+    if (!project || this.loadingProjectIssues() || stateId === this.projectIssueStateId()) return;
+    this.projectIssueStateId.set(stateId);
+    this.resetProjectIssuePage(project.id);
+  }
+
+  protected setProjectIssuePriorityFilter(priority: string): void {
+    const project = this.selectedProject();
+    if (!project || this.loadingProjectIssues() || priority === this.projectIssuePriority()) return;
+    this.projectIssuePriority.set(priority);
+    this.resetProjectIssuePage(project.id);
+  }
+
+  protected projectIssueFilterCount(): number {
+    return Number(!!this.projectIssueStateId()) + Number(!!this.projectIssuePriority());
+  }
+
+  private resetProjectIssuePage(projectId: string): void {
+    this.projectIssues.set([]);
+    this.nextProjectIssueCursor = null;
+    this.projectIssuesHasNextPage.set(false);
+    void this.loadProjectIssues(projectId);
   }
 
   protected loadMoreProjectIssues(): void {
@@ -4917,6 +4985,8 @@ export class Linear {
         after,
         this.includeArchivedProjectIssues(),
         this.projectIssueSearchTerm(),
+        this.projectIssueStateId() || undefined,
+        this.projectIssuePriority() === '' ? undefined : Number(this.projectIssuePriority()),
       );
       if (request === this.projectIssuesRequest && this.selectedProject()?.id === projectId) {
         this.projectIssues.update((items) => (append ? [...items, ...page.issues] : page.issues));
