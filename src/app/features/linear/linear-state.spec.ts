@@ -2,10 +2,12 @@ import { describe, expect, it } from 'vitest';
 
 import {
   codexFailureRestoreTarget,
+  isLinearProjectDocumentDraft,
   linearCodexPrompt,
   linearEstimateOptions,
   linearIssueConflicts,
   linearIssueValues,
+  linearProjectDocumentDraftConflicts,
   mergeLinearIssueUpdates,
 } from './linear-state';
 
@@ -124,6 +126,16 @@ describe('Linear issue update drafts', () => {
       },
     ]);
     expect(linearIssueConflicts(issue, { title: 'Remote title' }, base)).toEqual([]);
+  });
+});
+
+describe('Linear project document drafts', () => {
+  it('validates saved drafts and detects remote version changes', () => {
+    const draft = { title: 'Plan', content: 'Draft body', updatedAt: 'v1' };
+    expect(isLinearProjectDocumentDraft(draft)).toBe(true);
+    expect(isLinearProjectDocumentDraft({ ...draft, updatedAt: '' })).toBe(false);
+    expect(linearProjectDocumentDraftConflicts(draft, 'v1')).toBe(false);
+    expect(linearProjectDocumentDraftConflicts(draft, 'v2')).toBe(true);
   });
 });
 

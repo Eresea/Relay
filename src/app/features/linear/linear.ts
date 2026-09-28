@@ -31,6 +31,7 @@ import {
   type LinearMilestone,
   type LinearProject,
   type LinearProjectHealth,
+  type LinearProjectResources,
   type LinearProjectStatus,
   type LinearProjectUpdate,
   type LinearPerson,
@@ -42,7 +43,9 @@ import {
 import { UmbraButtonComponent } from '@umbra/components/umbra-button/umbra-button.component';
 import {
   codexFailureRestoreTarget,
+  isLinearProjectDocumentDraft,
   isPendingLinearIssueUpdate,
+  linearProjectDocumentDraftConflicts,
   linearIssueConflicts,
   linearIssueValues,
   linearEstimateOptions,
@@ -50,6 +53,7 @@ import {
   mergeLinearIssueUpdates,
   type LinearIssueUpdate,
   type PendingLinearIssueUpdate,
+  type LinearProjectDocumentDraft,
 } from './linear-state';
 import { cycleDateInTimezone, cycleDateToIso, todayInTimezone } from './cycle-dates';
 
@@ -1424,13 +1428,18 @@ interface LinearIssueDraft {
                           Load latest version and replace draft
                         </umbra-button>
                       }
+                      @if (projectDocumentEditOffline()) {
+                        <p class="hint" role="status">
+                          Offline draft restored. Linear will check for newer changes when you save.
+                        </p>
+                      }
                       <label>
                         <span>Title</span>
                         <input
                           required
                           maxlength="255"
                           [value]="editProjectDocumentTitle()"
-                          (input)="editProjectDocumentTitle.set($any($event.target).value)"
+                          (input)="updateProjectDocumentDraft('title', $any($event.target).value)"
                         />
                       </label>
                       <label>
@@ -1439,7 +1448,7 @@ interface LinearIssueDraft {
                           maxlength="50000"
                           rows="8"
                           [value]="editProjectDocumentContent()"
-                          (input)="editProjectDocumentContent.set($any($event.target).value)"
+                          (input)="updateProjectDocumentDraft('content', $any($event.target).value)"
                         ></textarea>
                       </label>
                       <div class="issue-actions">
@@ -3431,16 +3440,17 @@ export class Linear {
   protected readonly loadingProjectIssues = signal(false);
   protected readonly projectIssuesHasNextPage = signal(false);
   protected readonly milestones = signal<readonly LinearMilestone[]>([]);
-  protected readonly projectResources = signal<{
-    documents: readonly LinearDocument[];
-    externalLinks: readonly LinearExternalLink[];
-  }>({ documents: [], externalLinks: [] });
+  protected readonly projectResources = signal<LinearProjectResources>({
+    documents: [],
+    externalLinks: [],
+  });
   protected readonly editingProjectDocumentId = signal<string | null>(null);
   protected readonly loadingProjectDocumentId = signal<string | null>(null);
   protected readonly editProjectDocumentTitle = signal('');
   protected readonly editProjectDocumentContent = signal('');
   protected readonly editProjectDocumentUpdatedAt = signal('');
   protected readonly projectDocumentEditConflict = signal(false);
+  protected readonly projectDocumentEditOffline = signal(false);
   protected readonly savingProjectDocument = signal(false);
   protected readonly newProjectDocumentTitle = signal('');
   protected readonly newProjectDocumentContent = signal('');
@@ -4574,6 +4584,37 @@ export class Linear {
   private projectCacheKey(connection: LinearConnection, includeArchived = false): string {
     const key = `relay.linear.projects.${connection.organizationId}.${connection.viewerId}`;
     return includeArchived ? `${key}.all` : key;
+  }
+
+  private projectResourcesCacheKey(connection: LinearConnection, projectId: string): string {
+    return `relay.linear.projectResources.${connection.organizationId}.${projectId}`;
+  }
+
+  private projectDocumentDraftKey(connection: LinearConnection, documentId: string): string {
+    return `relay.linear.projectDocumentDraft.${connection.organizationId}.${documentId}`;
+  }
+
+  private readProjectDocumentDraft(
+    connection: LinearConnection,
+    documentId: string,
+  ): LinearProjectDocumentDraft | null {
+    const value = this.readLocal<unknown>(this.projectDocumentDraftKey(connection, documentId));
+    return isLinearProjectDocumentDraft(value) ? value : null;
+  }
+
+  protected updateProjectDocumentDraft(field: 'title' | 'content', value: string): void {
+    if (field === 'title') this.editProjectDocumentTitle.set(value);
+    else this.editProjectDocumentContent.set(value);
+    const connection = this.selected();
+    const documentId = this.editingProjectDocumentId();
+    const updatedAt = this.editProjectDocumentUpdatedAt();
+    if (connection && documentId && updatedAt) {
+      this.writeLocal(this.projectDocumentDraftKey(connection, documentId), {
+        title: this.editProjectDocumentTitle(),
+        content: this.editProjectDocumentContent(),
+        updatedAt,
+      } satisfies LinearProjectDocumentDraft);
+    }
   }
 
   private pendingUpdatesKey(organizationId: string): string {
@@ -5873,14 +5914,39 @@ export class Linear {
   private async loadProjectResources(projectId: string): Promise<void> {
     const connection = this.selected();
     if (!connection) return;
+    const cacheKey = this.projectResourcesCacheKey(connection, projectId);
+    const cached = this.readLocal<LinearProjectResources>(cacheKey);
+    const hasCache = Array.isArray(cached?.documents) && Array.isArray(cached?.externalLinks);
+    if (hasCache && this.selectedProject()?.id === projectId) this.projectResources.set(cached);
     try {
       const resources = await this.tauri.linearProjectResources(
         connection.organizationId,
         projectId,
       );
-      if (this.selectedProject()?.id === projectId) this.projectResources.set(resources);
+      if (this.selectedProject()?.id === projectId) {
+        this.projectResources.set(resources);
+        this.writeLocal(cacheKey, resources);
+      }
     } catch (error) {
-      this.error.set(error instanceof Error ? error.message : String(error));
+      this.error.set(
+        hasCache
+          ? 'Linear is unavailable. Showing saved project resources.'
+          : error instanceof Error
+            ? error.message
+            : String(error),
+      );
+    }
+  }
+
+  private updateProjectResources(
+    projectId: string,
+    update: (resources: LinearProjectResources) => LinearProjectResources,
+  ): void {
+    const resources = update(this.projectResources());
+    this.projectResources.set(resources);
+    const connection = this.selected();
+    if (connection) {
+      this.writeLocal(this.projectResourcesCacheKey(connection, projectId), resources);
     }
   }
 
@@ -5893,13 +5959,30 @@ export class Linear {
     try {
       const detail = await this.tauri.linearProjectDocument(connection.organizationId, document.id);
       if (this.selectedProject()?.id !== project.id) return;
+      const draft = this.readProjectDocumentDraft(connection, document.id);
       this.editingProjectDocumentId.set(detail.id);
-      this.editProjectDocumentTitle.set(detail.title);
-      this.editProjectDocumentContent.set(detail.content ?? '');
-      this.editProjectDocumentUpdatedAt.set(detail.updatedAt);
-      this.projectDocumentEditConflict.set(false);
+      this.editProjectDocumentTitle.set(draft?.title ?? detail.title);
+      this.editProjectDocumentContent.set(draft?.content ?? detail.content ?? '');
+      this.editProjectDocumentUpdatedAt.set(draft?.updatedAt ?? detail.updatedAt);
+      this.projectDocumentEditConflict.set(
+        draft ? linearProjectDocumentDraftConflicts(draft, detail.updatedAt) : false,
+      );
+      this.projectDocumentEditOffline.set(false);
     } catch (error) {
-      this.error.set(error instanceof Error ? error.message : String(error));
+      const draft = this.readProjectDocumentDraft(connection, document.id);
+      const isCachedDocument = this.projectResources().documents.some(
+        (item) => item.id === document.id,
+      );
+      if (!draft || !isCachedDocument || this.selectedProject()?.id !== project.id) {
+        this.error.set(error instanceof Error ? error.message : String(error));
+        return;
+      }
+      this.editingProjectDocumentId.set(document.id);
+      this.editProjectDocumentTitle.set(draft.title);
+      this.editProjectDocumentContent.set(draft.content);
+      this.editProjectDocumentUpdatedAt.set(draft.updatedAt);
+      this.projectDocumentEditConflict.set(false);
+      this.projectDocumentEditOffline.set(true);
     } finally {
       this.loadingProjectDocumentId.set(null);
     }
@@ -5916,7 +5999,9 @@ export class Linear {
       this.editProjectDocumentTitle.set(detail.title);
       this.editProjectDocumentContent.set(detail.content ?? '');
       this.editProjectDocumentUpdatedAt.set(detail.updatedAt);
+      this.writeLocal(this.projectDocumentDraftKey(connection, documentId), null);
       this.projectDocumentEditConflict.set(false);
+      this.projectDocumentEditOffline.set(false);
       this.error.set(null);
     } catch (error) {
       this.error.set(error instanceof Error ? error.message : String(error));
@@ -5954,12 +6039,13 @@ export class Linear {
         content,
       );
       if (this.selectedProject()?.id !== project.id) return;
-      this.projectResources.update((resources) => ({
+      this.updateProjectResources(project.id, (resources) => ({
         ...resources,
         documents: resources.documents.map((document) =>
           document.id === updated.id ? { ...document, ...updated } : document,
         ),
       }));
+      this.writeLocal(this.projectDocumentDraftKey(connection, documentId), null);
       this.closeProjectDocumentEditor();
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
@@ -5976,6 +6062,7 @@ export class Linear {
     this.editProjectDocumentContent.set('');
     this.editProjectDocumentUpdatedAt.set('');
     this.projectDocumentEditConflict.set(false);
+    this.projectDocumentEditOffline.set(false);
   }
 
   protected async createProjectDocument(event: Event): Promise<void> {
@@ -5995,7 +6082,7 @@ export class Linear {
         content,
       );
       if (this.selectedProject()?.id !== project.id) return;
-      this.projectResources.update((resources) => ({
+      this.updateProjectResources(project.id, (resources) => ({
         ...resources,
         documents: [document, ...resources.documents],
       }));
@@ -6025,7 +6112,7 @@ export class Linear {
         url,
       );
       if (this.selectedProject()?.id !== project.id) return;
-      this.projectResources.update((resources) => ({
+      this.updateProjectResources(project.id, (resources) => ({
         ...resources,
         externalLinks: [link, ...resources.externalLinks],
       }));
@@ -6073,7 +6160,7 @@ export class Linear {
         repository.htmlUrl,
       );
       if (this.selectedProject()?.id !== project.id) return;
-      this.projectResources.update((resources) => ({
+      this.updateProjectResources(project.id, (resources) => ({
         ...resources,
         externalLinks: [link, ...resources.externalLinks],
       }));
@@ -6094,7 +6181,7 @@ export class Linear {
     try {
       await this.tauri.linearDeleteProjectExternalLink(connection.organizationId, link.id);
       if (this.selectedProject()?.id !== project.id) return;
-      this.projectResources.update((resources) => ({
+      this.updateProjectResources(project.id, (resources) => ({
         ...resources,
         externalLinks: resources.externalLinks.filter((item) => item.id !== link.id),
       }));

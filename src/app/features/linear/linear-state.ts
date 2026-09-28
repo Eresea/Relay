@@ -81,6 +81,30 @@ export interface PendingLinearIssueUpdate {
   conflicts?: readonly LinearIssueConflict[];
 }
 
+export interface LinearProjectDocumentDraft {
+  title: string;
+  content: string;
+  updatedAt: string;
+}
+
+export function isLinearProjectDocumentDraft(value: unknown): value is LinearProjectDocumentDraft {
+  if (!value || typeof value !== 'object') return false;
+  const draft = value as Partial<LinearProjectDocumentDraft>;
+  return (
+    typeof draft.title === 'string' &&
+    typeof draft.content === 'string' &&
+    typeof draft.updatedAt === 'string' &&
+    Boolean(draft.updatedAt)
+  );
+}
+
+export function linearProjectDocumentDraftConflicts(
+  draft: LinearProjectDocumentDraft,
+  currentUpdatedAt: string,
+): boolean {
+  return draft.updatedAt !== currentUpdatedAt;
+}
+
 export interface LinearIssueConflict {
   field: string;
   label: string;
