@@ -43,6 +43,7 @@ import {
 import { UmbraButtonComponent } from '@umbra/components/umbra-button/umbra-button.component';
 import {
   codexFailureRestoreTarget,
+  isLinearCycleDraft,
   isLinearCommentDraft,
   isLinearInitiativeDraft,
   isLinearInitiativeUpdateDraft,
@@ -59,6 +60,7 @@ import {
   isLinearProjectPlanningDraft,
   mergeLinearIssueUpdates,
   type LinearIssueUpdate,
+  type LinearCycleDraft,
   type PendingLinearIssueUpdate,
   type LinearProjectDocumentDraft,
   type LinearInitiativeDraft,
@@ -2464,7 +2466,7 @@ function isLinearTeamList(value: unknown): value is readonly LinearTeam[] {
                       <input
                         maxlength="255"
                         [value]="newCycleName()"
-                        (input)="newCycleName.set($any($event.target).value)"
+                        (input)="updateCycleDraft(team, 'name', $any($event.target).value)"
                         placeholder="Cycle name"
                       />
                     </label>
@@ -2475,7 +2477,7 @@ function isLinearTeamList(value: unknown): value is readonly LinearTeam[] {
                         required
                         [min]="todayForTeam(team)"
                         [value]="newCycleStartDate()"
-                        (input)="newCycleStartDate.set($any($event.target).value)"
+                        (input)="updateCycleDraft(team, 'startsAt', $any($event.target).value)"
                       />
                     </label>
                     <label>
@@ -2485,7 +2487,7 @@ function isLinearTeamList(value: unknown): value is readonly LinearTeam[] {
                         required
                         [min]="newCycleStartDate()"
                         [value]="newCycleEndDate()"
-                        (input)="newCycleEndDate.set($any($event.target).value)"
+                        (input)="updateCycleDraft(team, 'endsAt', $any($event.target).value)"
                       />
                     </label>
                     <div class="issue-actions">
@@ -5175,9 +5177,28 @@ export class Linear {
     }
     this.error.set(null);
     this.createCycleTeamId.set(team.id);
-    this.newCycleName.set('');
-    this.newCycleStartDate.set(this.todayForTeam(team));
-    this.newCycleEndDate.set('');
+    const connection = this.selected();
+    const stored = connection
+      ? this.readLocal<unknown>(this.cycleDraftKey(connection, team.id))
+      : null;
+    const draft = isLinearCycleDraft(stored) ? stored : null;
+    this.newCycleName.set(draft?.name ?? '');
+    this.newCycleStartDate.set(draft?.startsAt || this.todayForTeam(team));
+    this.newCycleEndDate.set(draft?.endsAt ?? '');
+  }
+
+  protected updateCycleDraft(team: LinearTeam, field: keyof LinearCycleDraft, value: string): void {
+    if (field === 'name') this.newCycleName.set(value);
+    else if (field === 'startsAt') this.newCycleStartDate.set(value);
+    else this.newCycleEndDate.set(value);
+    const connection = this.selected();
+    if (!connection) return;
+    const draft: LinearCycleDraft = {
+      name: this.newCycleName(),
+      startsAt: this.newCycleStartDate(),
+      endsAt: this.newCycleEndDate(),
+    };
+    this.writeLocal(this.cycleDraftKey(connection, team.id), draft);
   }
 
   protected async createCycle(event: Event, team: LinearTeam): Promise<void> {
@@ -5212,6 +5233,7 @@ export class Linear {
           (left.startsAt ?? '').localeCompare(right.startsAt ?? ''),
         ),
       }));
+      this.writeLocal(this.cycleDraftKey(connection, team.id), null);
       this.createCycleTeamId.set(null);
     } catch (error) {
       this.error.set(error instanceof Error ? error.message : String(error));
@@ -7334,6 +7356,10 @@ export class Linear {
 
   private cycleCacheKey(connection: LinearConnection, teamId: string): string {
     return `relay.linear.cycles.${connection.organizationId}.${connection.viewerId}.${teamId}`;
+  }
+
+  private cycleDraftKey(connection: LinearConnection, teamId: string): string {
+    return `relay.linear.cycleDraft.${connection.organizationId}.${connection.viewerId}.${teamId}`;
   }
 
   private initiativeCacheKey(

@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   codexFailureRestoreTarget,
+  isLinearCycleDraft,
   isLinearCommentDraft,
   isLinearInitiativeDraft,
   isLinearInitiativeUpdateDraft,
@@ -229,6 +230,15 @@ describe('Linear project planning drafts', () => {
 });
 
 describe('Linear roadmap drafts', () => {
+  it('validates cycle creation drafts before restoring them', () => {
+    expect(
+      isLinearCycleDraft({ name: 'Sprint 1', startsAt: '2026-10-01', endsAt: '2026-10-14' }),
+    ).toBe(true);
+    expect(isLinearCycleDraft({ name: 'Sprint 1', startsAt: '2026-10-01', endsAt: null })).toBe(
+      false,
+    );
+  });
+
   it('validates initiative creation and update drafts before restoring them', () => {
     expect(
       isLinearInitiativeDraft({ name: 'Roadmap', description: 'Q4', targetDate: '2026-12-31' }),

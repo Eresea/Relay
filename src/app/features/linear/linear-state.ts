@@ -38,6 +38,22 @@ export interface LinearInitiativeUpdateDraft {
   health: LinearProjectHealth;
 }
 
+export interface LinearCycleDraft {
+  name: string;
+  startsAt: string;
+  endsAt: string;
+}
+
+export function isLinearCycleDraft(value: unknown): value is LinearCycleDraft {
+  if (!value || typeof value !== 'object') return false;
+  const draft = value as Partial<LinearCycleDraft>;
+  return (
+    typeof draft.name === 'string' &&
+    typeof draft.startsAt === 'string' &&
+    typeof draft.endsAt === 'string'
+  );
+}
+
 export function isLinearInitiativeUpdateDraft(
   value: unknown,
 ): value is LinearInitiativeUpdateDraft {
@@ -62,6 +78,7 @@ export function isLinearProjectPlanningDraft(value: unknown): value is LinearPro
 
 const organizationCacheCategories = [
   'cycles',
+  'cycleDraft',
   'initiatives',
   'initiativeDraft',
   'initiativeUpdateDraft',
