@@ -119,14 +119,18 @@ export class UmbraTooltipDirective {
       disposeOnNavigation: true,
     });
 
-    const panel = this.overlayRef.attach(new ComponentPortal(UmbraTooltipPanelComponent));
+    const panel = this.overlayRef.attach(
+      new ComponentPortal(UmbraTooltipPanelComponent),
+    );
     panel.setInput('text', this.content());
     panel.setInput('html', this.tooltipHtml());
     panel.setInput('panelId', this.panelId);
 
     const host = this.element.nativeElement;
     this.originalDescribedBy = host.getAttribute('aria-describedby');
-    const describedBy = [this.originalDescribedBy, this.panelId].filter(Boolean).join(' ');
+    const describedBy = [this.originalDescribedBy, this.panelId]
+      .filter(Boolean)
+      .join(' ');
     this.renderer.setAttribute(host, 'aria-describedby', describedBy);
   }
 
@@ -152,7 +156,10 @@ export class UmbraTooltipDirective {
         this.originalDescribedBy,
       );
     } else {
-      this.renderer.removeAttribute(this.element.nativeElement, 'aria-describedby');
+      this.renderer.removeAttribute(
+        this.element.nativeElement,
+        'aria-describedby',
+      );
     }
     this.originalDescribedBy = null;
   }
