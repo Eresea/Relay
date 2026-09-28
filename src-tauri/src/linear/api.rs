@@ -2,7 +2,7 @@
 
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use std::collections::HashMap;
 
 use crate::error::{Error, Result};
@@ -218,6 +218,20 @@ pub struct LinearProject {
     pub status: Option<LinearProjectStatus>,
     #[serde(default)]
     pub lead: Option<Person>,
+    #[serde(default, deserialize_with = "deserialize_nodes")]
+    pub teams: Vec<Team>,
+}
+
+fn deserialize_nodes<'de, D, T>(deserializer: D) -> std::result::Result<Vec<T>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+    T: Deserialize<'de>,
+{
+    #[derive(Deserialize)]
+    struct Connection<T> {
+        nodes: Vec<T>,
+    }
+    Connection::deserialize(deserializer).map(|connection| connection.nodes)
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -453,7 +467,7 @@ pub async fn projects(token: &str, include_archived: bool) -> Result<Vec<LinearP
     loop {
         let data: Data = query(
             token,
-            "query RelayProjects($includeArchived: Boolean!, $after: String) { projects(first: 100, after: $after, includeArchived: $includeArchived) { nodes { id name description url startDate targetDate archivedAt status { id name type } lead { id name } } pageInfo { endCursor hasNextPage } } }",
+            "query RelayProjects($includeArchived: Boolean!, $after: String) { projects(first: 100, after: $after, includeArchived: $includeArchived) { nodes { id name description url startDate targetDate archivedAt status { id name type } lead { id name } teams { nodes { id name key } } } pageInfo { endCursor hasNextPage } } }",
             json!({ "includeArchived": include_archived, "after": after }),
         )
         .await?;
@@ -514,7 +528,7 @@ pub async fn unarchive_project(token: &str, project_id: &str) -> Result<()> {
 
 pub async fn create_project(
     token: &str,
-    team_id: &str,
+    team_ids: &[String],
     name: &str,
     description: Option<&str>,
     start_date: Option<&str>,
@@ -529,7 +543,7 @@ pub async fn create_project(
     }
     let mut input = serde_json::Map::from_iter([
         ("name".into(), json!(name)),
-        ("teamIds".into(), json!([team_id])),
+        ("teamIds".into(), json!(team_ids)),
     ]);
     if let Some(description) = description {
         input.insert("description".into(), json!(description));
@@ -548,7 +562,7 @@ pub async fn create_project(
     }
     let data: Data = query(
         token,
-        "mutation RelayProjectCreate($input: ProjectCreateInput!) { projectCreate(input: $input) { success project { id name description url startDate targetDate archivedAt status { id name type } lead { id name } } } }",
+        "mutation RelayProjectCreate($input: ProjectCreateInput!) { projectCreate(input: $input) { success project { id name description url startDate targetDate archivedAt status { id name type } lead { id name } teams { nodes { id name key } } } } }",
         json!({ "input": input }),
     )
     .await?;
@@ -565,6 +579,7 @@ pub async fn update_project(
     status_id: Option<&str>,
     lead_id: Option<&str>,
     clear_lead: bool,
+    team_ids: &[String],
 ) -> Result<LinearProject> {
     #[derive(Deserialize)]
     struct Data {
@@ -586,9 +601,10 @@ pub async fn update_project(
     if clear_lead {
         input.insert("leadId".into(), Value::Null);
     }
+    input.insert("teamIds".into(), json!(team_ids));
     let data: Data = query(
         token,
-        "mutation RelayProjectUpdate($id: String!, $input: ProjectUpdateInput!) { projectUpdate(id: $id, input: $input) { success project { id name description url startDate targetDate archivedAt status { id name type } lead { id name } } } }",
+        "mutation RelayProjectUpdate($id: String!, $input: ProjectUpdateInput!) { projectUpdate(id: $id, input: $input) { success project { id name description url startDate targetDate archivedAt status { id name type } lead { id name } teams { nodes { id name key } } } } }",
         json!({ "id": project_id, "input": input }),
     )
     .await?;
@@ -857,7 +873,7 @@ pub async fn initiatives(
     }
     let data = query::<Data>(
         token,
-        "query RelayInitiatives($includeArchived: Boolean!, $includeArchivedUpdates: Boolean!) { initiatives(first: 100, includeArchived: $includeArchived) { nodes { id name description targetDate archivedAt initiativeUpdates(first: 50, includeArchived: $includeArchivedUpdates) { nodes { id body health createdAt archivedAt user { id name } } } } } initiativeToProjects(first: 100, includeArchived: $includeArchived) { nodes { id initiative { id } project { id name } } } }",
+        "query RelayInitiatives($includeArchived: Boolean!, $includeArchivedUpdates: Boolean!) { initiatives(first: 100, includeArchived: $includeArchived) { nodes { id name description targetDate archivedAt initiativeUpdates(first: 50, includeArchived: $includeArchivedUpdates) { nodes { id body health createdAt archivedAt user { id name } } } } } initiativeToProjects(first: 100, includeArchived: $includeArchived) { nodes { id initiative { id } project { id name teams { nodes { id name key } } } } } }",
         json!({ "includeArchived": include_archived, "includeArchivedUpdates": include_archived_updates }),
     )
     .await?;
@@ -2115,7 +2131,11 @@ mod tests {
             "name": "Launch",
             "archivedAt": "2026-09-27T20:00:00.000Z",
             "status": { "id": "status-1", "name": "In Progress", "type": "started" },
-            "lead": { "id": "user-1", "name": "Alex" }
+            "lead": { "id": "user-1", "name": "Alex" },
+            "teams": { "nodes": [
+                { "id": "team-1", "name": "Engineering", "key": "ENG" },
+                { "id": "team-2", "name": "Design", "key": "DES" }
+            ] }
         }))
         .unwrap();
         assert_eq!(
@@ -2124,6 +2144,8 @@ mod tests {
         );
         assert_eq!(project.status.as_ref().unwrap().kind, "started");
         assert_eq!(project.lead.as_ref().unwrap().id, "user-1");
+        assert_eq!(project.teams.len(), 2);
+        assert_eq!(project.teams[1].key, "DES");
     }
 
     #[test]

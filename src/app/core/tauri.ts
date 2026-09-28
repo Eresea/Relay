@@ -632,7 +632,7 @@ export class TauriBridge {
 
   async linearCreateProject(
     organizationId: string,
-    teamId: string,
+    teamIds: readonly string[],
     name: string,
     description: string,
     startDate: string,
@@ -642,7 +642,7 @@ export class TauriBridge {
   ): Promise<LinearProject> {
     const project = await this.invoke<LinearProject>('linear_create_project', {
       organizationId,
-      teamId,
+      teamIds,
       name,
       description: description || null,
       startDate: startDate || null,
@@ -664,6 +664,7 @@ export class TauriBridge {
     statusId: string,
     leadId: string,
     clearLead: boolean,
+    teamIds: readonly string[],
   ): Promise<LinearProject> {
     const project = await this.invoke<LinearProject>('linear_update_project', {
       organizationId,
@@ -675,6 +676,7 @@ export class TauriBridge {
       statusId: statusId || null,
       leadId: leadId || null,
       clearLead,
+      teamIds,
     });
     if (!project) throw new Error('Linear returned no project.');
     return project;
@@ -1618,6 +1620,13 @@ export interface LinearProject {
   readonly archivedAt: string | null;
   readonly status: LinearProjectStatus | null;
   readonly lead: LinearPerson | null;
+  readonly teams: readonly LinearProjectTeam[];
+}
+
+export interface LinearProjectTeam {
+  readonly id: string;
+  readonly name: string;
+  readonly key: string;
 }
 
 export interface LinearProjectStatus {

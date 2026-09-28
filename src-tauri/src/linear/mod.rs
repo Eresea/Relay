@@ -314,7 +314,7 @@ pub async fn unarchive_project(
 pub async fn create_project(
     app: &AppHandle,
     organization_id: &str,
-    team_id: &str,
+    team_ids: &[String],
     name: &str,
     description: Option<&str>,
     start_date: Option<&str>,
@@ -324,7 +324,7 @@ pub async fn create_project(
 ) -> Result<LinearProject> {
     api::create_project(
         &access_token(app, organization_id).await?,
-        team_id,
+        team_ids,
         name,
         description,
         start_date,
@@ -346,6 +346,7 @@ pub async fn update_project(
     status_id: Option<&str>,
     lead_id: Option<&str>,
     clear_lead: bool,
+    team_ids: &[String],
 ) -> Result<LinearProject> {
     api::update_project(
         &access_token(app, organization_id).await?,
@@ -357,6 +358,7 @@ pub async fn update_project(
         status_id,
         lead_id,
         clear_lead,
+        team_ids,
     )
     .await
 }

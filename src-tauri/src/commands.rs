@@ -22,8 +22,8 @@ use crate::error::Result;
 use crate::events::UpdateSnapshot;
 use crate::events::{AppEvent, EventSink};
 use crate::github::{
-    self, client::HttpGitHubClient, client::RepositorySummary, oauth::DeviceAuthorization,
-    poll::PullRequestSnapshot, GithubStatus,
+    self, GithubStatus, client::HttpGitHubClient, client::RepositorySummary,
+    oauth::DeviceAuthorization, poll::PullRequestSnapshot,
 };
 use crate::gmail::{self, GmailSettings, GmailState, GmailStatus, HttpGoogleApi, OsKeyStore};
 use crate::jobs::{JobId, JobRegistry};
@@ -465,7 +465,7 @@ pub async fn linear_unarchive_project(
 pub async fn linear_create_project(
     app: AppHandle,
     organization_id: String,
-    team_id: String,
+    team_ids: Vec<String>,
     name: String,
     description: Option<String>,
     start_date: Option<String>,
@@ -475,7 +475,13 @@ pub async fn linear_create_project(
 ) -> Result<LinearProject> {
     if name.trim().is_empty()
         || name.chars().count() > 255
-        || team_id.trim().is_empty()
+        || team_ids.is_empty()
+        || team_ids.iter().any(|id| id.trim().is_empty())
+        || team_ids
+            .iter()
+            .collect::<std::collections::HashSet<_>>()
+            .len()
+            != team_ids.len()
         || status_id.as_ref().is_some_and(|id| id.trim().is_empty())
         || lead_id.as_ref().is_some_and(|id| id.trim().is_empty())
     {
@@ -484,7 +490,7 @@ pub async fn linear_create_project(
     linear::create_project(
         &app,
         &organization_id,
-        &team_id,
+        &team_ids,
         name.trim(),
         description.as_deref(),
         start_date.as_deref(),
@@ -507,9 +513,17 @@ pub async fn linear_update_project(
     status_id: Option<String>,
     lead_id: Option<String>,
     clear_lead: Option<bool>,
+    team_ids: Vec<String>,
 ) -> Result<LinearProject> {
     if project_id.trim().is_empty()
         || name.chars().count() > 255
+        || team_ids.is_empty()
+        || team_ids.iter().any(|id| id.trim().is_empty())
+        || team_ids
+            .iter()
+            .collect::<std::collections::HashSet<_>>()
+            .len()
+            != team_ids.len()
         || status_id.as_ref().is_some_and(|id| id.trim().is_empty())
         || lead_id.as_ref().is_some_and(|id| id.trim().is_empty())
         || (clear_lead.unwrap_or(false) && lead_id.is_some())
@@ -527,6 +541,7 @@ pub async fn linear_update_project(
         status_id.as_deref(),
         lead_id.as_deref(),
         clear_lead.unwrap_or(false),
+        &team_ids,
     )
     .await
 }

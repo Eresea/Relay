@@ -1155,11 +1155,7 @@ interface LinearIssueDraft {
                     <umbra-button size="sm" variant="link" (click)="toggleArchivedProjects()">
                       {{ showArchivedProjects() ? 'Hide archived' : 'Include archived' }}
                     </umbra-button>
-                    <umbra-button
-                      size="sm"
-                      variant="outline"
-                      (click)="createProjectOpen.set(!createProjectOpen())"
-                    >
+                    <umbra-button size="sm" variant="outline" (click)="toggleCreateProject()">
                       New project
                     </umbra-button>
                   </div>
@@ -1223,7 +1219,25 @@ interface LinearIssueDraft {
                       }
                     </select>
                   </label>
-                  <umbra-button size="sm" [disabled]="savingProject() || !editProjectName().trim()">
+                  <fieldset class="project-teams">
+                    <legend>Project teams</legend>
+                    @for (team of teams(); track team.id) {
+                      <label>
+                        <input
+                          type="checkbox"
+                          [checked]="editProjectTeamIds().includes(team.id)"
+                          (change)="toggleProjectTeam('edit', team.id, $event)"
+                        />
+                        {{ team.name }}
+                      </label>
+                    }
+                  </fieldset>
+                  <umbra-button
+                    size="sm"
+                    [disabled]="
+                      savingProject() || !editProjectName().trim() || !editProjectTeamIds().length
+                    "
+                  >
                     {{ savingProject() ? 'Saving' : 'Save project' }}
                   </umbra-button>
                 </form>
@@ -1680,7 +1694,7 @@ interface LinearIssueDraft {
                     </label>
                   </details>
                 </form>
-                @if (teams().length) {
+                @if ((selectedProject()?.teams ?? []).length) {
                   <form class="create-form" (submit)="createProjectIssue($event)">
                     <label>
                       <span>Team</span>
@@ -1688,7 +1702,7 @@ interface LinearIssueDraft {
                         [value]="createTeamId()"
                         (change)="setCreateTeam($any($event.target).value)"
                       >
-                        @for (team of teams(); track team.id) {
+                        @for (team of selectedProject()?.teams ?? []; track team.id) {
                           <option [value]="team.id">{{ team.name }}</option>
                         }
                       </select>
@@ -1917,17 +1931,19 @@ interface LinearIssueDraft {
               } @else {
                 @if (createProjectOpen()) {
                   <form class="create-form" (submit)="createProject($event)">
-                    <label>
-                      <span>Team</span>
-                      <select
-                        [value]="createTeamId()"
-                        (change)="setCreateTeam($any($event.target).value)"
-                      >
-                        @for (team of teams(); track team.id) {
-                          <option [value]="team.id">{{ team.name }}</option>
-                        }
-                      </select>
-                    </label>
+                    <fieldset class="project-teams">
+                      <legend>Project teams</legend>
+                      @for (team of teams(); track team.id) {
+                        <label>
+                          <input
+                            type="checkbox"
+                            [checked]="newProjectTeamIds().includes(team.id)"
+                            (change)="toggleProjectTeam('create', team.id, $event)"
+                          />
+                          {{ team.name }}
+                        </label>
+                      }
+                    </fieldset>
                     <label>
                       <span>Project name</span>
                       <input
@@ -1963,7 +1979,9 @@ interface LinearIssueDraft {
                     </label>
                     <umbra-button
                       size="sm"
-                      [disabled]="creatingProject() || !newProjectName().trim()"
+                      [disabled]="
+                        creatingProject() || !newProjectName().trim() || !newProjectTeamIds().length
+                      "
                     >
                       {{ creatingProject() ? 'Creating' : 'Create project' }}
                     </umbra-button>
@@ -1984,6 +2002,7 @@ interface LinearIssueDraft {
                       @if (project.lead) {
                         <span class="muted">Lead {{ project.lead.name }}</span>
                       }
+                      <span class="muted">{{ projectTeamNames(project) }}</span>
                     </div>
                     <umbra-button size="sm" variant="outline" (click)="openProject(project)">
                       View project
@@ -2805,6 +2824,28 @@ interface LinearIssueDraft {
       color: var(--text-muted);
       font-size: var(--text-12);
     }
+    .project-teams {
+      display: flex;
+      flex-wrap: wrap;
+      gap: var(--space-2) var(--space-4);
+      grid-column: 1 / -1;
+      margin: 0;
+      padding: var(--space-2) var(--space-3);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-md);
+    }
+    .project-teams legend {
+      padding-inline: var(--space-1);
+      color: var(--text-muted);
+      font-size: var(--text-12);
+    }
+    .project-teams label {
+      display: flex;
+      align-items: center;
+      gap: var(--space-1);
+      color: var(--text-muted);
+      font-size: var(--text-12);
+    }
 
     .issue-title {
       border: 0;
@@ -3037,12 +3078,14 @@ export class Linear {
   protected readonly newProjectTargetDate = signal('');
   protected readonly newProjectStatusId = signal('');
   protected readonly newProjectLeadId = signal('');
+  protected readonly newProjectTeamIds = signal<readonly string[]>([]);
   protected readonly editProjectName = signal('');
   protected readonly editProjectDescription = signal('');
   protected readonly editProjectStartDate = signal('');
   protected readonly editProjectTargetDate = signal('');
   protected readonly editProjectStatusId = signal('');
   protected readonly editProjectLeadId = signal('');
+  protected readonly editProjectTeamIds = signal<readonly string[]>([]);
   protected readonly newMilestoneName = signal('');
   protected readonly newMilestoneDescription = signal('');
   protected readonly newMilestoneDate = signal('');
@@ -3894,6 +3937,27 @@ export class Linear {
     this.saveProjectIssueDraft();
     const connection = this.selected();
     if (connection) void this.loadTeamCycles(connection, teamId);
+  }
+
+  protected toggleCreateProject(): void {
+    const opening = !this.createProjectOpen();
+    if (opening && !this.newProjectTeamIds().length) {
+      const teamId = this.createTeamId() || this.teams()[0]?.id;
+      if (teamId) this.newProjectTeamIds.set([teamId]);
+    }
+    this.createProjectOpen.set(opening);
+  }
+
+  protected toggleProjectTeam(which: 'create' | 'edit', teamId: string, event: Event): void {
+    const selected = which === 'create' ? this.newProjectTeamIds() : this.editProjectTeamIds();
+    const checked = (event.target as HTMLInputElement | null)?.checked ?? false;
+    const next = checked
+      ? selected.includes(teamId)
+        ? selected
+        : [...selected, teamId]
+      : selected.filter((id) => id !== teamId);
+    if (which === 'create') this.newProjectTeamIds.set(next);
+    else this.editProjectTeamIds.set(next);
   }
 
   protected updateIssueDraft(field: 'title' | 'description', value: string): void {
@@ -4754,6 +4818,9 @@ export class Linear {
     this.projectIssueAssigneeId.set('');
     this.projectIssueLabelId.set('');
     this.selectedProject.set(project);
+    if (project.teams?.length && !project.teams.some((team) => team.id === this.createTeamId())) {
+      this.setCreateTeam(project.teams[0].id);
+    }
     this.projectIssues.set([]);
     this.nextProjectIssueCursor = null;
     this.projectIssuesHasNextPage.set(false);
@@ -4765,6 +4832,7 @@ export class Linear {
     this.editProjectTargetDate.set(project.targetDate ?? '');
     this.editProjectStatusId.set(project.status?.id ?? '');
     this.editProjectLeadId.set(project.lead?.id ?? '');
+    this.editProjectTeamIds.set((project.teams ?? []).map((team) => team.id));
     this.projectUpdates.set([]);
     this.newProjectUpdateBody.set('');
     await Promise.all([
@@ -5054,7 +5122,7 @@ export class Linear {
     try {
       const project = await this.tauri.linearCreateProject(
         connection.organizationId,
-        this.createTeamId(),
+        this.newProjectTeamIds(),
         name,
         this.newProjectDescription().trim(),
         this.newProjectStartDate(),
@@ -5068,6 +5136,7 @@ export class Linear {
       this.newProjectTargetDate.set('');
       this.newProjectStatusId.set('');
       this.newProjectLeadId.set('');
+      this.newProjectTeamIds.set([]);
       this.createProjectOpen.set(false);
       this.projects.update((projects) => [project, ...projects]);
       this.writeLocal(
@@ -5101,8 +5170,12 @@ export class Linear {
         this.editProjectStatusId(),
         this.editProjectLeadId(),
         !this.editProjectLeadId(),
+        this.editProjectTeamIds(),
       );
       this.selectedProject.set(updated);
+      if (updated.teams.length && !updated.teams.some((team) => team.id === this.createTeamId())) {
+        this.setCreateTeam(updated.teams[0].id);
+      }
       this.projects.update((projects) =>
         projects.map((entry) => (entry.id === updated.id ? updated : entry)),
       );
@@ -5135,6 +5208,10 @@ export class Linear {
       this.section.set('projects');
       await this.openProject(project);
     }
+  }
+
+  protected projectTeamNames(project: LinearProject): string {
+    return (project.teams ?? []).map((team) => team.name).join(', ');
   }
 
   private async loadSection(connection: LinearConnection): Promise<void> {
