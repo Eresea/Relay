@@ -1199,6 +1199,7 @@ pub async fn project_issues(
     state_id: Option<&str>,
     priority: Option<u8>,
     assignee_id: Option<&str>,
+    label_id: Option<&str>,
 ) -> Result<IssuePage> {
     issues(
         token,
@@ -1209,6 +1210,7 @@ pub async fn project_issues(
         state_id,
         priority,
         assignee_id,
+        label_id,
     )
     .await
 }
@@ -1731,6 +1733,7 @@ pub async fn my_issues(
         state_id,
         priority,
         None,
+        None,
     )
     .await
 }
@@ -1754,6 +1757,7 @@ pub async fn team_issues(
         state_id,
         priority,
         assignee_id,
+        None,
     )
     .await
 }
@@ -1767,13 +1771,14 @@ async fn issues(
     state_id: Option<&str>,
     priority: Option<u8>,
     assignee_id: Option<&str>,
+    label_id: Option<&str>,
 ) -> Result<IssuePage> {
     #[derive(Deserialize)]
     struct Data {
         issues: IssueConnection,
     }
 
-    let filter = with_issue_filters(filter, search, state_id, priority, assignee_id);
+    let filter = with_issue_filters(filter, search, state_id, priority, assignee_id, label_id);
     let data: Data = query(
         token,
         "query RelayIssues($filter: IssueFilter, $after: String, $includeArchived: Boolean!) { issues(filter: $filter, includeArchived: $includeArchived, first: 50, after: $after) { nodes { id identifier title description url priority updatedAt archivedAt state { id name type } assignee { id name } project { id name } cycle { id name number } labels { nodes { id name color } } team { id name key } } pageInfo { endCursor hasNextPage } } }",
@@ -1797,6 +1802,7 @@ fn with_issue_filters(
     state_id: Option<&str>,
     priority: Option<u8>,
     assignee_id: Option<&str>,
+    label_id: Option<&str>,
 ) -> Value {
     let mut filters = vec![filter];
     if let Some(search) = search.map(str::trim).filter(|search| !search.is_empty()) {
@@ -1814,6 +1820,9 @@ fn with_issue_filters(
         } else {
             json!({ "assignee": { "id": { "eq": assignee_id } } })
         });
+    }
+    if let Some(label_id) = label_id {
+        filters.push(json!({ "labels": { "some": { "id": { "eq": label_id } } } }));
     }
     if filters.len() == 1 {
         filters
@@ -1969,11 +1978,18 @@ mod tests {
     fn issue_filters_preserve_scope_and_compose_search_status_and_priority() {
         let team = json!({ "team": { "id": { "eq": "team-1" } } });
         assert_eq!(
-            with_issue_filters(team.clone(), None, None, None, None),
+            with_issue_filters(team.clone(), None, None, None, None, None),
             team
         );
         assert_eq!(
-            with_issue_filters(team, Some("  deploy  "), Some("state-1"), Some(1), None),
+            with_issue_filters(
+                team,
+                Some("  deploy  "),
+                Some("state-1"),
+                Some(1),
+                None,
+                None,
+            ),
             json!({
                 "and": [
                     { "team": { "id": { "eq": "team-1" } } },
@@ -1990,6 +2006,7 @@ mod tests {
                 Some("state-2"),
                 Some(2),
                 Some("user-1"),
+                Some("label-1"),
             ),
             json!({
                 "and": [
@@ -1997,7 +2014,8 @@ mod tests {
                     { "title": { "contains": "release" } },
                     { "state": { "id": { "eq": "state-2" } } },
                     { "priority": { "eq": 2 } },
-                    { "assignee": { "id": { "eq": "user-1" } } }
+                    { "assignee": { "id": { "eq": "user-1" } } },
+                    { "labels": { "some": { "id": { "eq": "label-1" } } } }
                 ]
             })
         );
@@ -2008,6 +2026,7 @@ mod tests {
                 None,
                 None,
                 Some("unassigned"),
+                None,
             ),
             json!({
                 "and": [

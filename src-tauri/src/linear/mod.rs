@@ -956,6 +956,7 @@ pub async fn project_issues(
     state_id: Option<&str>,
     priority: Option<u8>,
     assignee_id: Option<&str>,
+    label_id: Option<&str>,
 ) -> Result<IssuePage> {
     api::project_issues(
         &access_token(app, organization_id).await?,
@@ -966,6 +967,7 @@ pub async fn project_issues(
         state_id,
         priority,
         assignee_id,
+        label_id,
     )
     .await
 }

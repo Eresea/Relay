@@ -1393,6 +1393,7 @@ pub async fn linear_project_issues(
     state_id: Option<String>,
     priority: Option<u8>,
     assignee_id: Option<String>,
+    label_id: Option<String>,
 ) -> Result<IssuePage> {
     if project_id.trim().is_empty() {
         return Err(std::io::Error::other("A Linear project is required").into());
@@ -1404,6 +1405,9 @@ pub async fn linear_project_issues(
         .as_deref()
         .is_some_and(|value| value.trim().is_empty())
         || assignee_id
+            .as_deref()
+            .is_some_and(|value| value.trim().is_empty())
+        || label_id
             .as_deref()
             .is_some_and(|value| value.trim().is_empty())
         || priority.is_some_and(|value| value > 4)
@@ -1423,6 +1427,7 @@ pub async fn linear_project_issues(
         state_id.as_deref(),
         priority,
         assignee_id.as_deref(),
+        label_id.as_deref(),
     )
     .await
 }
