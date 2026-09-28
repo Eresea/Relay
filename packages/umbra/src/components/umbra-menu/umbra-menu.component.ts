@@ -1,4 +1,12 @@
-import { ChangeDetectionStrategy, Component, ElementRef, QueryList, ViewChildren, input, output } from '@angular/core';
+import {
+  ChangeDetectionStrategy,
+  Component,
+  ElementRef,
+  QueryList,
+  ViewChildren,
+  input,
+  output,
+} from '@angular/core';
 
 export interface UmbraMenuItem {
   id: string;
@@ -24,7 +32,7 @@ export class UmbraMenuComponent {
   @ViewChildren('menuItem') private readonly menuItems!: QueryList<ElementRef<HTMLButtonElement>>;
 
   protected tabIndex(index: number): 0 | -1 {
-    return index === this.items().findIndex(item => !item.disabled) ? 0 : -1;
+    return index === this.items().findIndex((item) => !item.disabled) ? 0 : -1;
   }
 
   protected select(item: UmbraMenuItem): void {
@@ -34,7 +42,8 @@ export class UmbraMenuComponent {
   }
 
   protected handleKeydown(event: KeyboardEvent): void {
-    const buttons = this.menuItems?.toArray().filter(button => !button.nativeElement.disabled) ?? [];
+    const buttons =
+      this.menuItems?.toArray().filter((button) => !button.nativeElement.disabled) ?? [];
     if (event.key === 'Escape') {
       event.preventDefault();
       this.dismiss.emit();
@@ -42,14 +51,17 @@ export class UmbraMenuComponent {
     }
     if (!buttons.length || !['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)) return;
     event.preventDefault();
-    const current = buttons.findIndex(button => button.nativeElement === document.activeElement);
-    const next = event.key === 'Home'
-      ? 0
-      : event.key === 'End'
-        ? buttons.length - 1
-        : current < 0
-          ? event.key === 'ArrowDown' ? 0 : buttons.length - 1
-          : (current + (event.key === 'ArrowDown' ? 1 : -1) + buttons.length) % buttons.length;
+    const current = buttons.findIndex((button) => button.nativeElement === document.activeElement);
+    const next =
+      event.key === 'Home'
+        ? 0
+        : event.key === 'End'
+          ? buttons.length - 1
+          : current < 0
+            ? event.key === 'ArrowDown'
+              ? 0
+              : buttons.length - 1
+            : (current + (event.key === 'ArrowDown' ? 1 : -1) + buttons.length) % buttons.length;
     buttons[next].nativeElement.focus();
   }
 }

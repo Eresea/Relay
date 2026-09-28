@@ -78,21 +78,21 @@ input:focus-visible + .indicator {
   color: var(--danger);
 }
 
-:host(:hover:not([data-disabled="true"]))
-  input:not(:checked):not(:indeterminate):not([aria-invalid="true"])
+:host(:hover:not([data-disabled='true']))
+  input:not(:checked):not(:indeterminate):not([aria-invalid='true'])
   + .indicator {
   border-color: var(--border-strong);
 }
 
-input[aria-invalid="true"] + .indicator {
+input[aria-invalid='true'] + .indicator {
   border-color: var(--danger);
 }
 
-:host([data-disabled="true"]) {
+:host([data-disabled='true']) {
   cursor: not-allowed;
   opacity: 0.5;
 }
 
-:host([data-disabled="true"]) input {
+:host([data-disabled='true']) input {
   cursor: not-allowed;
 }

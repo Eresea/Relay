@@ -12,9 +12,9 @@ import {
   SimpleChanges,
   viewChild,
   WritableSignal,
-} from "@angular/core";
-import { NgTemplateOutlet } from "@angular/common";
-import { injectVirtualizer } from "@tanstack/angular-virtual";
+} from '@angular/core';
+import { NgTemplateOutlet } from '@angular/common';
+import { injectVirtualizer } from '@tanstack/angular-virtual';
 import {
   ColumnDef,
   ColumnFiltersState,
@@ -38,14 +38,14 @@ import {
   rowSelectionFeature,
   rowSortingFeature,
   tableFeatures,
-} from "@tanstack/angular-table";
+} from '@tanstack/angular-table';
 import {
   UmbraTableCellContent,
   UmbraTableCellContext,
   UmbraTableColumn,
   UmbraTableColumnPinning,
-} from "./umbra-table.types";
-import { UmbraSkeletonComponent } from "../umbra-skeleton/umbra-skeleton.component";
+} from './umbra-table.types';
+import { UmbraSkeletonComponent } from '../umbra-skeleton/umbra-skeleton.component';
 
 const umbraTableFeatures = tableFeatures({
   columnFilteringFeature,
@@ -66,35 +66,33 @@ type UmbraTableColumnInstance<T> = Column<UmbraTableFeatures, T, unknown>;
 type UmbraTableCell<T> = Cell<UmbraTableFeatures, T, unknown>;
 
 @Component({
-  selector: "umbra-table",
+  selector: 'umbra-table',
   standalone: true,
   imports: [UmbraSkeletonComponent, NgTemplateOutlet],
-  templateUrl: "./umbra-table.component.html",
-  styleUrl: "./umbra-table.component.scss",
+  templateUrl: './umbra-table.component.html',
+  styleUrl: './umbra-table.component.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,
   host: {
-    class: "umbra-table-host",
+    class: 'umbra-table-host',
   },
 })
 export class UmbraTableComponent<T> implements OnChanges {
   readonly rows = input<readonly T[]>([]);
   readonly columns = input<readonly UmbraTableColumn<T>[]>([]);
-  readonly rowId = input<(row: T, index: number) => string>((_row, index) =>
-    String(index),
-  );
+  readonly rowId = input<(row: T, index: number) => string>((_row, index) => String(index));
   readonly height = input.required<string>();
   readonly rowHeight = input(34);
   readonly overscan = input(6);
   readonly loading = input(false);
   readonly loadingRows = input(8);
   readonly selectable = input(false);
-  readonly selectionMode = input<"single" | "multiple">("multiple");
+  readonly selectionMode = input<'single' | 'multiple'>('multiple');
   readonly resizable = input(true);
   readonly ariaLabel = input.required<string>();
 
   readonly sorting = model<SortingState>([]);
   readonly columnFilters = model<ColumnFiltersState>([]);
-  readonly globalFilter = model("");
+  readonly globalFilter = model('');
   readonly columnVisibility = model<ColumnVisibilityState>({});
   readonly columnOrder = model<ColumnOrderState>([]);
   readonly columnSizing = model<Record<string, number>>({});
@@ -103,18 +101,14 @@ export class UmbraTableComponent<T> implements OnChanges {
     right: [],
   });
   readonly rowSelection = model<RowSelectionState>({});
-  readonly focusedCell = model<{ rowId: string; columnId: string } | null>(
-    null,
-  );
+  readonly focusedCell = model<{ rowId: string; columnId: string } | null>(null);
 
   private readonly destroyRef = inject(DestroyRef);
   private resizeCleanup?: () => void;
   private lastSelectedRowId?: string;
   private pendingShiftSelection = false;
 
-  readonly tanstackColumns = computed<
-    ColumnDef<UmbraTableFeatures, T, unknown>[]
-  >(() =>
+  readonly tanstackColumns = computed<ColumnDef<UmbraTableFeatures, T, unknown>[]>(() =>
     this.columns().map((definition) => ({
       id: definition.id,
       accessorFn: definition.accessor,
@@ -126,11 +120,8 @@ export class UmbraTableComponent<T> implements OnChanges {
       maxSize: definition.maxWidth,
       ...(definition.sorter
         ? {
-            sortFn: (
-              left: UmbraTableRow<T>,
-              right: UmbraTableRow<T>,
-              id: string,
-            ) => definition.sorter!(left.getValue(id), right.getValue(id)),
+            sortFn: (left: UmbraTableRow<T>, right: UmbraTableRow<T>, id: string) =>
+              definition.sorter!(left.getValue(id), right.getValue(id)),
           }
         : {}),
       ...(definition.filter
@@ -160,11 +151,9 @@ export class UmbraTableComponent<T> implements OnChanges {
       rowSelection: this.rowSelection(),
     },
     onSortingChange: (updater) => this.update(this.sorting, updater),
-    onColumnFiltersChange: (updater) =>
-      this.update(this.columnFilters, updater),
+    onColumnFiltersChange: (updater) => this.update(this.columnFilters, updater),
     onGlobalFilterChange: (updater) => this.update(this.globalFilter, updater),
-    onColumnVisibilityChange: (updater) =>
-      this.update(this.columnVisibility, updater),
+    onColumnVisibilityChange: (updater) => this.update(this.columnVisibility, updater),
     onColumnOrderChange: (updater) => this.update(this.columnOrder, updater),
     onColumnSizingChange: (updater) => this.update(this.columnSizing, updater),
     onColumnPinningChange: (updater) => {
@@ -172,21 +161,21 @@ export class UmbraTableComponent<T> implements OnChanges {
         start: [...(this.columnPinning().left ?? [])],
         end: [...(this.columnPinning().right ?? [])],
       };
-      const next = typeof updater === "function" ? updater(current) : updater;
+      const next = typeof updater === 'function' ? updater(current) : updater;
       this.columnPinning.set({ left: next.start ?? [], right: next.end ?? [] });
     },
     onRowSelectionChange: (updater) => this.update(this.rowSelection, updater),
     getRowId: (row, index) => this.rowId()(row, index),
     enableRowSelection: this.selectable(),
-    enableMultiRowSelection: this.selectionMode() === "multiple",
+    enableMultiRowSelection: this.selectionMode() === 'multiple',
     globalFilterFn: (row, _id, value) => {
-      const query = String(value ?? "")
+      const query = String(value ?? '')
         .trim()
         .toLocaleLowerCase();
       return (
         !query ||
         this.columns().some((definition) =>
-          String(definition.accessor(row.original) ?? "")
+          String(definition.accessor(row.original) ?? '')
             .toLocaleLowerCase()
             .includes(query),
         )
@@ -201,25 +190,14 @@ export class UmbraTableComponent<T> implements OnChanges {
 
   readonly tableRows = computed(() => this.tanstack.getRowModel().rows);
   readonly virtualRowCount = computed(
-    () =>
-      this.tableRows().length +
-      (this.loading() ? Math.max(0, this.loadingRows()) : 0),
+    () => this.tableRows().length + (this.loading() ? Math.max(0, this.loadingRows()) : 0),
   );
-  readonly visibleColumns = computed(() =>
-    this.tanstack.getVisibleLeafColumns(),
-  );
-  readonly leftColumns = computed(() =>
-    this.tanstack.getStartVisibleLeafColumns(),
-  );
-  readonly centerColumns = computed(() =>
-    this.tanstack.getCenterVisibleLeafColumns(),
-  );
-  readonly rightColumns = computed(() =>
-    this.tanstack.getEndVisibleLeafColumns(),
-  );
+  readonly visibleColumns = computed(() => this.tanstack.getVisibleLeafColumns());
+  readonly leftColumns = computed(() => this.tanstack.getStartVisibleLeafColumns());
+  readonly centerColumns = computed(() => this.tanstack.getCenterVisibleLeafColumns());
+  readonly rightColumns = computed(() => this.tanstack.getEndVisibleLeafColumns());
   readonly columnDefinitions = computed(
-    () =>
-      new Map(this.columns().map((definition) => [definition.id, definition])),
+    () => new Map(this.columns().map((definition) => [definition.id, definition])),
   );
   readonly selectionColumnWidth = computed(() => (this.selectable() ? 44 : 0));
   readonly leftWidth = computed(
@@ -233,9 +211,7 @@ export class UmbraTableComponent<T> implements OnChanges {
   readonly rightWidth = computed(() =>
     this.rightColumns().reduce((total, column) => total + column.getSize(), 0),
   );
-  readonly contentWidth = computed(
-    () => this.leftWidth() + this.centerWidth() + this.rightWidth(),
-  );
+  readonly contentWidth = computed(() => this.leftWidth() + this.centerWidth() + this.rightWidth());
   readonly leftOffsets = computed(() => {
     let offset = this.selectionColumnWidth();
     const result = new Map<string, number>();
@@ -255,7 +231,7 @@ export class UmbraTableComponent<T> implements OnChanges {
     return result;
   });
 
-  readonly viewport = viewChild<ElementRef<HTMLDivElement>>("viewport");
+  readonly viewport = viewChild<ElementRef<HTMLDivElement>>('viewport');
 
   readonly rowVirtualizer = injectVirtualizer(() => ({
     scrollElement: this.viewport(),
@@ -279,7 +255,7 @@ export class UmbraTableComponent<T> implements OnChanges {
   }
 
   ngOnChanges(changes: SimpleChanges): void {
-    if (changes["rows"] || changes["columns"] || changes["columnPinning"]) {
+    if (changes['rows'] || changes['columns'] || changes['columnPinning']) {
       this.tanstack.setOptions((previous) => ({
         ...previous,
         data: this.rows() as T[],
@@ -304,22 +280,18 @@ export class UmbraTableComponent<T> implements OnChanges {
     this.tanstack.setColumnPinning({ start: next.left, end: next.right });
   }
 
-  pinColumn(id: string, side: "left" | "right"): void {
+  pinColumn(id: string, side: 'left' | 'right'): void {
     const current = this.columnPinning();
     const left = (current.left ?? []).filter((columnId) => columnId !== id);
     const right = (current.right ?? []).filter((columnId) => columnId !== id);
-    (side === "left" ? left : right).push(id);
+    (side === 'left' ? left : right).push(id);
     this.setColumnPinning({ left, right });
   }
 
   unpinColumn(id: string): void {
     this.setColumnPinning({
-      left: (this.columnPinning().left ?? []).filter(
-        (columnId) => columnId !== id,
-      ),
-      right: (this.columnPinning().right ?? []).filter(
-        (columnId) => columnId !== id,
-      ),
+      left: (this.columnPinning().left ?? []).filter((columnId) => columnId !== id),
+      right: (this.columnPinning().right ?? []).filter((columnId) => columnId !== id),
     });
   }
 
@@ -335,10 +307,7 @@ export class UmbraTableComponent<T> implements OnChanges {
     return this.rightOffsets().get(column.id) ?? 0;
   }
 
-  cellFor(
-    row: UmbraTableRow<T>,
-    columnId: string,
-  ): UmbraTableCell<T> | undefined {
+  cellFor(row: UmbraTableRow<T>, columnId: string): UmbraTableCell<T> | undefined {
     return row.getVisibleCells().find((cell) => cell.column.id === columnId);
   }
 
@@ -367,9 +336,7 @@ export class UmbraTableComponent<T> implements OnChanges {
   }
 
   toggleAllRows(event: Event): void {
-    this.tanstack.toggleAllRowsSelected(
-      (event.target as HTMLInputElement).checked,
-    );
+    this.tanstack.toggleAllRowsSelected((event.target as HTMLInputElement).checked);
   }
 
   captureSelectionModifiers(event: MouseEvent): void {
@@ -391,8 +358,7 @@ export class UmbraTableComponent<T> implements OnChanges {
       const end = Math.max(previousIndex, currentIndex);
       this.rowSelection.update((selection) => {
         const next = { ...selection };
-        for (const selectedRow of rows.slice(start, end + 1))
-          next[selectedRow.id] = true;
+        for (const selectedRow of rows.slice(start, end + 1)) next[selectedRow.id] = true;
         return next;
       });
     } else {
@@ -410,10 +376,7 @@ export class UmbraTableComponent<T> implements OnChanges {
     const move = (moveEvent: PointerEvent) => {
       const nextSize = Math.max(
         column.columnDef.minSize ?? 40,
-        Math.min(
-          column.columnDef.maxSize ?? 1000,
-          startSize + moveEvent.clientX - startX,
-        ),
+        Math.min(column.columnDef.maxSize ?? 1000, startSize + moveEvent.clientX - startX),
       );
       this.columnSizing.update((sizing) => ({
         ...sizing,
@@ -421,21 +384,21 @@ export class UmbraTableComponent<T> implements OnChanges {
       }));
     };
     const stop = () => {
-      window.removeEventListener("pointermove", move);
-      window.removeEventListener("pointerup", stop);
-      window.removeEventListener("pointercancel", stop);
+      window.removeEventListener('pointermove', move);
+      window.removeEventListener('pointerup', stop);
+      window.removeEventListener('pointercancel', stop);
       this.resizeCleanup = undefined;
     };
     this.resizeCleanup = stop;
-    window.addEventListener("pointermove", move);
-    window.addEventListener("pointerup", stop, { once: true });
-    window.addEventListener("pointercancel", stop, { once: true });
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', stop, { once: true });
+    window.addEventListener('pointercancel', stop, { once: true });
   }
 
   resizeByKey(column: UmbraTableColumnInstance<T>, event: KeyboardEvent): void {
-    if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
+    if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return;
     event.preventDefault();
-    const direction = event.key === "ArrowRight" ? 1 : -1;
+    const direction = event.key === 'ArrowRight' ? 1 : -1;
     const nextSize = column.getSize() + direction * 10;
     this.columnSizing.update((sizing) => ({
       ...sizing,
@@ -452,44 +415,38 @@ export class UmbraTableComponent<T> implements OnChanges {
     column: UmbraTableColumnInstance<T>,
   ): void {
     const keys = [
-      "ArrowUp",
-      "ArrowDown",
-      "ArrowLeft",
-      "ArrowRight",
-      "Home",
-      "End",
-      "PageUp",
-      "PageDown",
+      'ArrowUp',
+      'ArrowDown',
+      'ArrowLeft',
+      'ArrowRight',
+      'Home',
+      'End',
+      'PageUp',
+      'PageDown',
     ];
     if (!keys.includes(event.key)) return;
     const rows = this.tableRows();
     const columns = this.visibleColumns();
     const rowIndex = rows.findIndex((candidate) => candidate.id === row.id);
-    const columnIndex = columns.findIndex(
-      (candidate) => candidate.id === column.id,
-    );
+    const columnIndex = columns.findIndex((candidate) => candidate.id === column.id);
     let nextRow = rowIndex;
     let nextColumn = columnIndex;
-    if (event.key === "ArrowUp") nextRow--;
-    if (event.key === "ArrowDown") nextRow++;
-    if (event.key === "PageUp")
+    if (event.key === 'ArrowUp') nextRow--;
+    if (event.key === 'ArrowDown') nextRow++;
+    if (event.key === 'PageUp')
       nextRow -= Math.max(
         1,
-        Math.floor(
-          this.viewport()?.nativeElement.clientHeight / this.rowHeight(),
-        ),
+        Math.floor(this.viewport()?.nativeElement.clientHeight / this.rowHeight()),
       );
-    if (event.key === "PageDown")
+    if (event.key === 'PageDown')
       nextRow += Math.max(
         1,
-        Math.floor(
-          this.viewport()?.nativeElement.clientHeight / this.rowHeight(),
-        ),
+        Math.floor(this.viewport()?.nativeElement.clientHeight / this.rowHeight()),
       );
-    if (event.key === "ArrowLeft") nextColumn--;
-    if (event.key === "ArrowRight") nextColumn++;
-    if (event.key === "Home") nextColumn = 0;
-    if (event.key === "End") nextColumn = columns.length - 1;
+    if (event.key === 'ArrowLeft') nextColumn--;
+    if (event.key === 'ArrowRight') nextColumn++;
+    if (event.key === 'Home') nextColumn = 0;
+    if (event.key === 'End') nextColumn = columns.length - 1;
     if (nextColumn < 0) {
       nextColumn = columns.length - 1;
       nextRow--;
@@ -509,47 +466,29 @@ export class UmbraTableComponent<T> implements OnChanges {
 
   private focusCell(rowIndex: number, columnId: string, rowId: string): void {
     this.focusedCell.set({ rowId, columnId });
-    this.rowVirtualizer.scrollToIndex(rowIndex, { align: "auto" });
-    const centerIndex = this.centerColumns().findIndex(
-      (column) => column.id === columnId,
-    );
-    if (centerIndex >= 0)
-      this.columnVirtualizer.scrollToIndex(centerIndex, { align: "auto" });
+    this.rowVirtualizer.scrollToIndex(rowIndex, { align: 'auto' });
+    const centerIndex = this.centerColumns().findIndex((column) => column.id === columnId);
+    if (centerIndex >= 0) this.columnVirtualizer.scrollToIndex(centerIndex, { align: 'auto' });
     queueMicrotask(() => {
       const target = [
-        ...(this.viewport()?.nativeElement.querySelectorAll<HTMLElement>(
-          "[data-umbra-cell]",
-        ) ?? []),
+        ...(this.viewport()?.nativeElement.querySelectorAll<HTMLElement>('[data-umbra-cell]') ??
+          []),
       ].find(
-        (element) =>
-          element.dataset["rowId"] === rowId &&
-          element.dataset["columnId"] === columnId,
+        (element) => element.dataset['rowId'] === rowId && element.dataset['columnId'] === columnId,
       );
       target?.focus();
     });
   }
 
-  isFocused(
-    row: UmbraTableRow<T>,
-    column: UmbraTableColumnInstance<T>,
-  ): boolean {
+  isFocused(row: UmbraTableRow<T>, column: UmbraTableColumnInstance<T>): boolean {
     const focused = this.focusedCell();
-    if (focused)
-      return focused.rowId === row.id && focused.columnId === column.id;
-    return (
-      this.tableRows()[0]?.id === row.id &&
-      this.visibleColumns()[0]?.id === column.id
-    );
+    if (focused) return focused.rowId === row.id && focused.columnId === column.id;
+    return this.tableRows()[0]?.id === row.id && this.visibleColumns()[0]?.id === column.id;
   }
 
-  private update<TValue>(
-    state: WritableSignal<TValue>,
-    updater: Updater<TValue>,
-  ): void {
+  private update<TValue>(state: WritableSignal<TValue>, updater: Updater<TValue>): void {
     state.set(
-      typeof updater === "function"
-        ? (updater as (value: TValue) => TValue)(state())
-        : updater,
+      typeof updater === 'function' ? (updater as (value: TValue) => TValue)(state()) : updater,
     );
   }
 }

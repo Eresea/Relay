@@ -13,8 +13,7 @@
   --blur-overlay: blur(8px);
   --transition-control:
     background-color var(--dur-fast) var(--ease-standard),
-    border-color var(--dur-fast) var(--ease-standard),
-    color var(--dur-fast) var(--ease-standard),
+    border-color var(--dur-fast) var(--ease-standard), color var(--dur-fast) var(--ease-standard),
     box-shadow var(--dur-fast) var(--ease-standard);
   /* indeterminate loops: slowed, never stopped, under reduced motion */
   --dur-indeterminate: 700ms;
@@ -22,13 +21,66 @@
   --control-press-offset: 0.5px;
 }
 
-@keyframes umbra-spin { to { transform: rotate(360deg); } }
-@keyframes umbra-fade-in { from { opacity: 0; transform: translateY(2px); } to { opacity: 1; transform: none; } }
-@keyframes umbra-scale-in { from { opacity: 0; transform: scale(0.97); } to { opacity: 1; transform: none; } }
-@keyframes umbra-slide-up { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
-@keyframes umbra-shimmer { from { background-position: -200% 0; } to { background-position: 200% 0; } }
-@keyframes umbra-indeterminate { 0% { left: -35%; } 100% { left: 100%; } }
-@keyframes umbra-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.45; } }
+@keyframes umbra-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@keyframes umbra-fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(2px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes umbra-scale-in {
+  from {
+    opacity: 0;
+    transform: scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes umbra-slide-up {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes umbra-shimmer {
+  from {
+    background-position: -200% 0;
+  }
+  to {
+    background-position: 200% 0;
+  }
+}
+@keyframes umbra-indeterminate {
+  0% {
+    left: -35%;
+  }
+  100% {
+    left: 100%;
+  }
+}
+@keyframes umbra-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.45;
+  }
+}
 
 @media (prefers-reduced-motion: reduce) {
   :root {
