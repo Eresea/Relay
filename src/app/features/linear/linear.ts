@@ -1723,8 +1723,24 @@ interface LinearIssueDraft {
                             [disabled]="busyProjectUpdateId() === update.id"
                             (click)="setProjectUpdateArchived(update, true)"
                           >
-                            {{ busyProjectUpdateId() === update.id ? 'Archiving' : 'Archive' }}
+                            {{
+                              busyProjectUpdateId() === update.id
+                                ? 'Archiving'
+                                : confirmArchiveProjectUpdateId() === update.id
+                                  ? 'Confirm archive'
+                                  : 'Archive'
+                            }}
                           </umbra-button>
+                          @if (confirmArchiveProjectUpdateId() === update.id) {
+                            <umbra-button
+                              size="sm"
+                              variant="link"
+                              type="button"
+                              (click)="confirmArchiveProjectUpdateId.set(null)"
+                            >
+                              Cancel
+                            </umbra-button>
+                          }
                         }
                       }
                     </article>
@@ -2448,17 +2464,35 @@ interface LinearIssueDraft {
                               {{ link.project.name }}
                             </button>
                             @if (!initiative.archivedAt) {
-                              <umbra-button
-                                size="sm"
-                                variant="link"
-                                [disabled]="savingInitiativeProjectId() === initiative.id"
-                                [ariaLabel]="
-                                  'Remove ' + link.project.name + ' from ' + initiative.name
-                                "
-                                (click)="removeInitiativeProject(initiative, link.id)"
-                              >
-                                Remove
-                              </umbra-button>
+                              @if (confirmRemoveInitiativeProjectId() === link.id) {
+                                <umbra-button
+                                  size="sm"
+                                  variant="link"
+                                  [disabled]="savingInitiativeProjectId() === initiative.id"
+                                  (click)="removeInitiativeProject(initiative, link.id)"
+                                >
+                                  Confirm remove
+                                </umbra-button>
+                                <umbra-button
+                                  size="sm"
+                                  variant="link"
+                                  (click)="confirmRemoveInitiativeProjectId.set(null)"
+                                >
+                                  Cancel
+                                </umbra-button>
+                              } @else {
+                                <umbra-button
+                                  size="sm"
+                                  variant="link"
+                                  [disabled]="savingInitiativeProjectId() === initiative.id"
+                                  [ariaLabel]="
+                                    'Remove ' + link.project.name + ' from ' + initiative.name
+                                  "
+                                  (click)="confirmRemoveInitiativeProjectId.set(link.id)"
+                                >
+                                  Remove
+                                </umbra-button>
+                              }
                             }
                           </div>
                         }
@@ -2514,9 +2548,21 @@ interface LinearIssueDraft {
                                     {{
                                       busyInitiativeUpdateId() === update.id
                                         ? 'Archiving'
-                                        : 'Archive'
+                                        : confirmArchiveInitiativeUpdateId() === update.id
+                                          ? 'Confirm archive'
+                                          : 'Archive'
                                     }}
                                   </umbra-button>
+                                  @if (confirmArchiveInitiativeUpdateId() === update.id) {
+                                    <umbra-button
+                                      size="sm"
+                                      variant="link"
+                                      type="button"
+                                      (click)="confirmArchiveInitiativeUpdateId.set(null)"
+                                    >
+                                      Cancel
+                                    </umbra-button>
+                                  }
                                 }
                               }
                             </article>
@@ -2648,8 +2694,23 @@ interface LinearIssueDraft {
                         [disabled]="busyInitiativeId() === initiative.id"
                         (click)="setInitiativeArchived(initiative, true)"
                       >
-                        {{ busyInitiativeId() === initiative.id ? 'Archiving' : 'Archive' }}
+                        {{
+                          busyInitiativeId() === initiative.id
+                            ? 'Archiving'
+                            : confirmArchiveInitiativeId() === initiative.id
+                              ? 'Confirm archive'
+                              : 'Archive'
+                        }}
                       </umbra-button>
+                      @if (confirmArchiveInitiativeId() === initiative.id) {
+                        <umbra-button
+                          size="sm"
+                          variant="link"
+                          (click)="confirmArchiveInitiativeId.set(null)"
+                        >
+                          Cancel
+                        </umbra-button>
+                      }
                     }
                   </div>
                 </article>
@@ -3282,6 +3343,7 @@ export class Linear {
   protected readonly savingProjectUpdate = signal(false);
   protected readonly includeArchivedProjectUpdates = signal(false);
   protected readonly busyProjectUpdateId = signal<string | null>(null);
+  protected readonly confirmArchiveProjectUpdateId = signal<string | null>(null);
   protected readonly projects = signal<readonly LinearProject[]>([]);
   protected readonly projectStatuses = signal<readonly LinearProjectStatus[]>([]);
   protected readonly initiatives = signal<readonly LinearInitiative[]>([]);
@@ -3294,9 +3356,11 @@ export class Linear {
   protected readonly editInitiativeUpdateHealth = signal<LinearProjectHealth>('onTrack');
   protected readonly savingInitiativeUpdate = signal(false);
   protected readonly busyInitiativeUpdateId = signal<string | null>(null);
+  protected readonly confirmArchiveInitiativeUpdateId = signal<string | null>(null);
   protected readonly includeArchivedInitiativeUpdates = signal(false);
   protected readonly includeArchivedInitiatives = signal(false);
   protected readonly busyInitiativeId = signal<string | null>(null);
+  protected readonly confirmArchiveInitiativeId = signal<string | null>(null);
   protected readonly newInitiativeName = signal('');
   protected readonly newInitiativeDescription = signal('');
   protected readonly newInitiativeTargetDate = signal('');
@@ -3307,6 +3371,7 @@ export class Linear {
   protected readonly savingInitiative = signal(false);
   protected readonly initiativeProjectSelection = signal<Readonly<Record<string, string>>>({});
   protected readonly savingInitiativeProjectId = signal<string | null>(null);
+  protected readonly confirmRemoveInitiativeProjectId = signal<string | null>(null);
   protected readonly cycles = signal<Readonly<Record<string, readonly LinearCycle[]>>>({});
   protected readonly createCycleTeamId = signal<string | null>(null);
   protected readonly newCycleName = signal('');
@@ -4810,6 +4875,10 @@ export class Linear {
     initiative: LinearInitiative,
     archived: boolean,
   ): Promise<void> {
+    if (archived && this.confirmArchiveInitiativeId() !== initiative.id) {
+      this.confirmArchiveInitiativeId.set(initiative.id);
+      return;
+    }
     const connection = this.selected();
     if (!connection || this.busyInitiativeId()) return;
     this.busyInitiativeId.set(initiative.id);
@@ -4820,6 +4889,7 @@ export class Linear {
       } else {
         await this.tauri.linearUnarchiveInitiative(connection.organizationId, initiative.id);
       }
+      this.confirmArchiveInitiativeId.set(null);
       this.editingInitiativeId.set(null);
       await this.loadInitiatives();
     } catch (error) {
@@ -4871,6 +4941,10 @@ export class Linear {
     update: LinearInitiativeUpdate,
     archived: boolean,
   ): Promise<void> {
+    if (archived && this.confirmArchiveInitiativeUpdateId() !== update.id) {
+      this.confirmArchiveInitiativeUpdateId.set(update.id);
+      return;
+    }
     const connection = this.selected();
     if (!connection || this.busyInitiativeUpdateId()) return;
     this.busyInitiativeUpdateId.set(update.id);
@@ -4881,6 +4955,7 @@ export class Linear {
       } else {
         await this.tauri.linearUnarchiveInitiativeUpdate(connection.organizationId, update.id);
       }
+      this.confirmArchiveInitiativeUpdateId.set(null);
       this.editingInitiativeUpdateId.set(null);
       await this.loadInitiatives();
     } catch (error) {
@@ -5000,6 +5075,10 @@ export class Linear {
     initiative: LinearInitiative,
     linkId: string,
   ): Promise<void> {
+    if (this.confirmRemoveInitiativeProjectId() !== linkId) {
+      this.confirmRemoveInitiativeProjectId.set(linkId);
+      return;
+    }
     const connection = this.selected();
     if (!connection || this.savingInitiativeProjectId()) return;
     this.savingInitiativeProjectId.set(initiative.id);
@@ -5013,6 +5092,7 @@ export class Linear {
             : item,
         ),
       );
+      this.confirmRemoveInitiativeProjectId.set(null);
     } catch (error) {
       this.error.set(error instanceof Error ? error.message : String(error));
     } finally {
@@ -5242,6 +5322,10 @@ export class Linear {
     update: LinearProjectUpdate,
     archived: boolean,
   ): Promise<void> {
+    if (archived && this.confirmArchiveProjectUpdateId() !== update.id) {
+      this.confirmArchiveProjectUpdateId.set(update.id);
+      return;
+    }
     const connection = this.selected();
     const project = this.selectedProject();
     if (!connection || !project || this.busyProjectUpdateId()) return;
@@ -5253,6 +5337,7 @@ export class Linear {
       } else {
         await this.tauri.linearUnarchiveProjectUpdate(connection.organizationId, update.id);
       }
+      this.confirmArchiveProjectUpdateId.set(null);
       await this.loadProjectUpdates(project.id);
       this.editingProjectUpdateId.set(null);
     } catch (error) {
