@@ -5444,6 +5444,23 @@ export class Linear {
     }
   }
 
+  private persistInitiativesCache(connection: LinearConnection): void {
+    if (
+      this.selected()?.organizationId !== connection.organizationId ||
+      this.selected()?.viewerId !== connection.viewerId
+    ) {
+      return;
+    }
+    this.writeLocal(
+      this.initiativeCacheKey(
+        connection,
+        this.includeArchivedInitiatives(),
+        this.includeArchivedInitiativeUpdates(),
+      ),
+      this.initiatives(),
+    );
+  }
+
   protected toggleInitiativeUpdate(initiative: LinearInitiative): void {
     if (this.initiativeUpdateId() === initiative.id) {
       this.initiativeUpdateId.set(null);
@@ -5578,6 +5595,7 @@ export class Linear {
           updates: initiative.updates.map((item) => (item.id === update.id ? update : item)),
         })),
       );
+      this.persistInitiativesCache(connection);
       this.editingInitiativeUpdateId.set(null);
     } catch (error) {
       this.error.set(error instanceof Error ? error.message : String(error));
@@ -5609,6 +5627,7 @@ export class Linear {
             item.id === initiative.id ? { ...item, updates: [update, ...item.updates] } : item,
           ),
         );
+        this.persistInitiativesCache(connection);
       }
       this.writeLocal(this.initiativeUpdateDraftKey(connection, initiative.id), null);
       if (this.initiativeUpdateId() === initiative.id) {
@@ -5659,6 +5678,7 @@ export class Linear {
           item.id === initiative.id ? { ...item, projects: [...item.projects, link] } : item,
         ),
       );
+      this.persistInitiativesCache(connection);
       this.initiativeProjectSelection.update(({ [initiative.id]: _, ...selection }) => selection);
     } catch (error) {
       this.error.set(error instanceof Error ? error.message : String(error));
@@ -5688,6 +5708,7 @@ export class Linear {
             : item,
         ),
       );
+      this.persistInitiativesCache(connection);
       this.confirmRemoveInitiativeProjectId.set(null);
     } catch (error) {
       this.error.set(error instanceof Error ? error.message : String(error));
@@ -5712,6 +5733,7 @@ export class Linear {
       );
       if (this.selected()?.organizationId === connection.organizationId) {
         this.initiatives.update((items) => [...items, initiative]);
+        this.persistInitiativesCache(connection);
         this.newInitiativeName.set('');
         this.newInitiativeDescription.set('');
         this.newInitiativeTargetDate.set('');
@@ -5751,6 +5773,7 @@ export class Linear {
           item.id === updated.id ? { ...updated, projects: item.projects } : item,
         ),
       );
+      this.persistInitiativesCache(connection);
       this.editingInitiativeId.set(null);
     } catch (error) {
       this.error.set(error instanceof Error ? error.message : String(error));
