@@ -47,6 +47,7 @@ import {
   isLinearCommentDraft,
   isLinearInitiativeDraft,
   isLinearInitiativeUpdateDraft,
+  isLinearProjectDraft,
   isLinearOrganizationCacheKey,
   isLinearProjectDocumentDraft,
   isPendingLinearIssueUpdate,
@@ -65,6 +66,7 @@ import {
   type LinearProjectDocumentDraft,
   type LinearInitiativeDraft,
   type LinearInitiativeUpdateDraft,
+  type LinearProjectDraft,
   type LinearProjectPlanningDraft,
 } from './linear-state';
 import { cycleDateInTimezone, cycleDateToIso, todayInTimezone } from './cycle-dates';
@@ -2367,6 +2369,14 @@ function isLinearTeamList(value: unknown): value is readonly LinearTeam[] {
                 }
               } @else {
                 @if (createProjectOpen()) {
+                  @if (
+                    newProjectName() ||
+                    newProjectDescription() ||
+                    newProjectStartDate() ||
+                    newProjectTargetDate()
+                  ) {
+                    <p class="hint">Project draft saved on this device.</p>
+                  }
                   <form class="create-form" (submit)="createProject($event)">
                     <fieldset class="project-teams">
                       <legend>Project teams</legend>
@@ -2387,7 +2397,7 @@ function isLinearTeamList(value: unknown): value is readonly LinearTeam[] {
                         required
                         maxlength="255"
                         [value]="newProjectName()"
-                        (input)="newProjectName.set($any($event.target).value)"
+                        (input)="updateProjectDraft('name', $any($event.target).value)"
                       />
                     </label>
                     <label class="description-field">
@@ -2395,7 +2405,7 @@ function isLinearTeamList(value: unknown): value is readonly LinearTeam[] {
                       <textarea
                         rows="2"
                         [value]="newProjectDescription()"
-                        (input)="newProjectDescription.set($any($event.target).value)"
+                        (input)="updateProjectDraft('description', $any($event.target).value)"
                       ></textarea>
                     </label>
                     <label>
@@ -2403,7 +2413,7 @@ function isLinearTeamList(value: unknown): value is readonly LinearTeam[] {
                       <input
                         type="date"
                         [value]="newProjectStartDate()"
-                        (input)="newProjectStartDate.set($any($event.target).value)"
+                        (input)="updateProjectDraft('startDate', $any($event.target).value)"
                       />
                     </label>
                     <label>
@@ -2411,7 +2421,7 @@ function isLinearTeamList(value: unknown): value is readonly LinearTeam[] {
                       <input
                         type="date"
                         [value]="newProjectTargetDate()"
-                        (input)="newProjectTargetDate.set($any($event.target).value)"
+                        (input)="updateProjectDraft('targetDate', $any($event.target).value)"
                       />
                     </label>
                     <umbra-button
@@ -3853,6 +3863,7 @@ export class Linear {
     this.issueDetailRequest++;
     this.selected.set(connection);
     this.selectedProject.set(null);
+    this.createProjectOpen.set(false);
     this.projectIssues.set([]);
     this.nextProjectIssueCursor = null;
     this.projectIssuesHasNextPage.set(false);
@@ -4678,11 +4689,51 @@ export class Linear {
 
   protected toggleCreateProject(): void {
     const opening = !this.createProjectOpen();
-    if (opening && !this.newProjectTeamIds().length) {
-      const teamId = this.createTeamId() || this.teams()[0]?.id;
-      if (teamId) this.newProjectTeamIds.set([teamId]);
+    if (opening) {
+      const connection = this.selected();
+      if (connection) this.restoreProjectDraft(connection);
     }
     this.createProjectOpen.set(opening);
+  }
+
+  protected updateProjectDraft(
+    field: keyof Omit<LinearProjectDraft, 'teamIds'>,
+    value: string,
+  ): void {
+    if (field === 'name') this.newProjectName.set(value);
+    else if (field === 'description') this.newProjectDescription.set(value);
+    else if (field === 'startDate') this.newProjectStartDate.set(value);
+    else this.newProjectTargetDate.set(value);
+    this.saveProjectDraft();
+  }
+
+  private restoreProjectDraft(connection: LinearConnection): void {
+    const stored = this.readLocal<unknown>(this.projectDraftKey(connection));
+    const draft = isLinearProjectDraft(stored) ? stored : null;
+    this.newProjectName.set(draft?.name ?? '');
+    this.newProjectDescription.set(draft?.description ?? '');
+    this.newProjectStartDate.set(draft?.startDate ?? '');
+    this.newProjectTargetDate.set(draft?.targetDate ?? '');
+    const defaultTeam = this.createTeamId() || this.teams()[0]?.id;
+    this.newProjectTeamIds.set(draft?.teamIds ?? (defaultTeam ? [defaultTeam] : []));
+  }
+
+  private saveProjectDraft(): void {
+    const connection = this.selected();
+    if (!connection) return;
+    const draft: LinearProjectDraft = {
+      name: this.newProjectName(),
+      description: this.newProjectDescription(),
+      startDate: this.newProjectStartDate(),
+      targetDate: this.newProjectTargetDate(),
+      teamIds: this.newProjectTeamIds(),
+    };
+    this.writeLocal(
+      this.projectDraftKey(connection),
+      draft.name || draft.description || draft.startDate || draft.targetDate || draft.teamIds.length
+        ? draft
+        : null,
+    );
   }
 
   protected toggleProjectTeam(which: 'create' | 'edit', teamId: string, event: Event): void {
@@ -4695,6 +4746,7 @@ export class Linear {
       : selected.filter((id) => id !== teamId);
     if (which === 'create') this.newProjectTeamIds.set(next);
     else this.editProjectTeamIds.set(next);
+    if (which === 'create') this.saveProjectDraft();
   }
 
   protected updateIssueDraft(field: 'title' | 'description', value: string): void {
@@ -4766,6 +4818,10 @@ export class Linear {
   private projectCacheKey(connection: LinearConnection, includeArchived = false): string {
     const key = `relay.linear.projects.${connection.organizationId}.${connection.viewerId}`;
     return includeArchived ? `${key}.all` : key;
+  }
+
+  private projectDraftKey(connection: LinearConnection): string {
+    return `relay.linear.projectDraft.${connection.organizationId}.${connection.viewerId}`;
   }
 
   private projectIssueCacheKey(connection: LinearConnection, projectId: string): string {
@@ -6223,6 +6279,13 @@ export class Linear {
         this.newProjectStatusId(),
         this.newProjectLeadId(),
       );
+      this.writeLocal(this.projectDraftKey(connection), null);
+      if (
+        this.selected()?.organizationId !== connection.organizationId ||
+        this.selected()?.viewerId !== connection.viewerId
+      ) {
+        return;
+      }
       this.newProjectName.set('');
       this.newProjectDescription.set('');
       this.newProjectStartDate.set('');

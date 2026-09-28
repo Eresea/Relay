@@ -8,6 +8,7 @@ import {
   isLinearInitiativeUpdateDraft,
   isLinearOrganizationCacheKey,
   isLinearProjectPlanningDraft,
+  isLinearProjectDraft,
   isLinearProjectDocumentDraft,
   linearCodexPrompt,
   linearCommentDraftConflicts,
@@ -194,6 +195,7 @@ describe('Linear organization cache cleanup', () => {
       'relay.linear.issueDetail.org.viewer.issue',
       'relay.linear.projectIssues.org.viewer.project',
       'relay.linear.projectPlanningDraft.org.viewer.project',
+      'relay.linear.projectDraft.org.viewer',
       'relay.linear.initiatives.org.viewer',
       'relay.linear.cycles.org.viewer.team',
     ]) {
@@ -207,6 +209,27 @@ describe('Linear organization cache cleanup', () => {
 });
 
 describe('Linear project planning drafts', () => {
+  it('validates saved project creation drafts before restoring them', () => {
+    expect(
+      isLinearProjectDraft({
+        name: 'Release',
+        description: 'Desktop app',
+        startDate: '2026-09-01',
+        targetDate: '2026-09-30',
+        teamIds: ['team-1'],
+      }),
+    ).toBe(true);
+    expect(
+      isLinearProjectDraft({
+        name: 'Release',
+        description: 'Desktop app',
+        startDate: '',
+        targetDate: '',
+        teamIds: [3],
+      }),
+    ).toBe(false);
+  });
+
   it('restores only well-formed status update and milestone drafts', () => {
     expect(
       isLinearProjectPlanningDraft({

@@ -17,6 +17,27 @@ export interface LinearProjectPlanningDraft {
   milestoneDate: string;
 }
 
+export interface LinearProjectDraft {
+  name: string;
+  description: string;
+  startDate: string;
+  targetDate: string;
+  teamIds: readonly string[];
+}
+
+export function isLinearProjectDraft(value: unknown): value is LinearProjectDraft {
+  if (!value || typeof value !== 'object') return false;
+  const draft = value as Partial<LinearProjectDraft>;
+  return (
+    typeof draft.name === 'string' &&
+    typeof draft.description === 'string' &&
+    typeof draft.startDate === 'string' &&
+    typeof draft.targetDate === 'string' &&
+    Array.isArray(draft.teamIds) &&
+    draft.teamIds.every((teamId) => typeof teamId === 'string')
+  );
+}
+
 export interface LinearInitiativeDraft {
   name: string;
   description: string;
@@ -88,6 +109,7 @@ const organizationCacheCategories = [
   'issues',
   'milestones',
   'projectDocumentDraft',
+  'projectDraft',
   'projectIssues',
   'projectPlanningDraft',
   'projectResources',
