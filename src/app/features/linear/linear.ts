@@ -49,6 +49,7 @@ import {
   isLinearInitiativeUpdateDraft,
   isLinearIssueRelationDraft,
   isLinearIssueLabelDraft,
+  isLinearIssueDetailsDraft,
   isLinearProjectDraft,
   isLinearOrganizationCacheKey,
   isLinearProjectDocumentDraft,
@@ -56,6 +57,7 @@ import {
   isLinearProjectLinkDraft,
   isPendingLinearIssueUpdate,
   linearCommentDraftConflicts,
+  linearIssueDetailsDraftConflicts,
   linearProjectDocumentDraftConflicts,
   linearIssueConflicts,
   linearIssueValues,
@@ -74,6 +76,7 @@ import {
   type LinearInitiativeUpdateDraft,
   type LinearIssueRelationDraft,
   type LinearIssueLabelDraft,
+  type LinearIssueDetailsDraft,
   type LinearProjectDraft,
   type LinearProjectPlanningDraft,
 } from './linear-state';
@@ -296,20 +299,60 @@ function isLinearTeamList(value: unknown): value is readonly LinearTeam[] {
                         <input
                           required
                           maxlength="255"
+                          [disabled]="savingIssueDetails()"
                           [value]="editIssueTitle()"
-                          (input)="editIssueTitle.set($any($event.target).value)"
+                          (input)="
+                            updateIssueDetailsDraft(
+                              detail.issue,
+                              'title',
+                              $any($event.target).value
+                            )
+                          "
                         />
                       </label>
                       <label>
                         <span>Description</span>
                         <textarea
                           rows="4"
+                          [disabled]="savingIssueDetails()"
                           [value]="editIssueDescription()"
-                          (input)="editIssueDescription.set($any($event.target).value)"
+                          (input)="
+                            updateIssueDetailsDraft(
+                              detail.issue,
+                              'description',
+                              $any($event.target).value
+                            )
+                          "
                         ></textarea>
                       </label>
+                      @if (issueDetailsDraftConflict()) {
+                        <div class="issue-conflicts" role="alert">
+                          <span>This draft overlaps newer issue details in Linear.</span>
+                          <umbra-button
+                            size="sm"
+                            variant="outline"
+                            type="button"
+                            (click)="resolveIssueDetailsDraftConflict(detail.issue, true)"
+                          >
+                            Keep draft
+                          </umbra-button>
+                          <umbra-button
+                            size="sm"
+                            variant="outline"
+                            type="button"
+                            (click)="resolveIssueDetailsDraftConflict(detail.issue, false)"
+                          >
+                            Use Linear's version
+                          </umbra-button>
+                        </div>
+                      } @else if (hasIssueDetailsDraft()) {
+                        <p class="hint">Issue detail draft saved on this device.</p>
+                      }
                       <div class="issue-actions">
-                        <umbra-button size="sm" [disabled]="savingIssueDetails()">
+                        <umbra-button
+                          size="sm"
+                          [disabled]="savingIssueDetails() || issueDetailsDraftConflict()"
+                        >
                           {{ savingIssueDetails() ? 'Saving' : 'Save details' }}
                         </umbra-button>
                         <umbra-button
@@ -3560,6 +3603,8 @@ export class Linear {
   protected readonly editingIssueDetailsId = signal<string | null>(null);
   protected readonly editIssueTitle = signal('');
   protected readonly editIssueDescription = signal('');
+  protected readonly issueDetailsDraftConflict = signal(false);
+  protected readonly hasIssueDetailsDraft = signal(false);
   protected readonly savingIssueDetails = signal(false);
   protected readonly codexContext = signal<LinearCodexContext | null>(null);
   protected readonly codexRequest = signal<{
@@ -3774,6 +3819,7 @@ export class Linear {
   private projectOpenRequest = 0;
   private projectsRequest = 0;
   private issueDetailRequest = 0;
+  private issueDetailsEditRequest = 0;
   private initiativeRequest = 0;
   private projectUpdatesRequest = 0;
   private milestoneRequest = 0;
@@ -4242,22 +4288,93 @@ export class Linear {
     }
   }
 
-  protected editIssueDetails(issue: LinearIssue): void {
+  protected async editIssueDetails(issue: LinearIssue): Promise<void> {
+    const connection = this.selected();
+    if (!connection) return;
+    const requestId = ++this.issueDetailsEditRequest;
     this.error.set(null);
+    let currentIssue = issue;
+    try {
+      const detail = await this.tauri.linearIssueDetail(connection.organizationId, issue.id);
+      if (requestId !== this.issueDetailsEditRequest || this.issueDetail()?.issue.id !== issue.id) {
+        return;
+      }
+      currentIssue = detail.issue;
+      this.issueDetail.set(detail);
+      this.issueDetailStale.set(false);
+    } catch {
+      if (requestId !== this.issueDetailsEditRequest || this.issueDetail()?.issue.id !== issue.id) {
+        return;
+      }
+      this.issueDetailStale.set(true);
+    }
+    const draft = this.readIssueDetailsDraft(connection, issue.id);
     this.editingIssueDetailsId.set(issue.id);
-    this.editIssueTitle.set(issue.title);
-    this.editIssueDescription.set(issue.description ?? '');
+    this.editIssueTitle.set(draft?.title ?? currentIssue.title);
+    this.editIssueDescription.set(draft?.description ?? currentIssue.description ?? '');
+    this.issueDetailsDraftConflict.set(
+      draft ? linearIssueDetailsDraftConflicts(draft, currentIssue) : false,
+    );
+    this.hasIssueDetailsDraft.set(!!draft);
+  }
+
+  protected updateIssueDetailsDraft(
+    issue: LinearIssue,
+    field: 'title' | 'description',
+    value: string,
+  ): void {
+    if (field === 'title') this.editIssueTitle.set(value);
+    else this.editIssueDescription.set(value);
+    const connection = this.selected();
+    if (!connection) return;
+    const original = this.readIssueDetailsDraft(connection, issue.id);
+    const draft: LinearIssueDetailsDraft = {
+      title: this.editIssueTitle(),
+      description: this.editIssueDescription(),
+      baseTitle: original?.baseTitle ?? issue.title,
+      baseDescription: original?.baseDescription ?? issue.description ?? '',
+    };
+    const hasDraft = draft.title !== draft.baseTitle || draft.description !== draft.baseDescription;
+    this.writeLocal(this.issueDetailsDraftKey(connection, issue.id), hasDraft ? draft : null);
+    this.hasIssueDetailsDraft.set(hasDraft);
+  }
+
+  protected resolveIssueDetailsDraftConflict(issue: LinearIssue, keepDraft: boolean): void {
+    const connection = this.selected();
+    if (!connection) return;
+    if (keepDraft) {
+      const draft = this.readIssueDetailsDraft(connection, issue.id);
+      if (draft) {
+        this.writeLocal(this.issueDetailsDraftKey(connection, issue.id), {
+          ...draft,
+          baseTitle: issue.title,
+          baseDescription: issue.description ?? '',
+        } satisfies LinearIssueDetailsDraft);
+      }
+    } else {
+      this.editIssueTitle.set(issue.title);
+      this.editIssueDescription.set(issue.description ?? '');
+      this.writeLocal(this.issueDetailsDraftKey(connection, issue.id), null);
+      this.hasIssueDetailsDraft.set(false);
+    }
+    this.issueDetailsDraftConflict.set(false);
   }
 
   protected async saveIssueDetails(event: Event, issue: LinearIssue): Promise<void> {
     event.preventDefault();
     const title = this.editIssueTitle().trim();
-    if (!title || this.savingIssueDetails()) return;
+    if (!title || this.savingIssueDetails() || this.issueDetailsDraftConflict()) return;
+    const connection = this.selected();
+    if (!connection) return;
     this.savingIssueDetails.set(true);
     const saved = await this.saveIssueUpdate(issue, {
       title,
       description: this.editIssueDescription(),
     });
+    if (saved || this.pendingIssueUpdates().some((pending) => pending.issueId === issue.id)) {
+      this.writeLocal(this.issueDetailsDraftKey(connection, issue.id), null);
+      this.hasIssueDetailsDraft.set(false);
+    }
     if (saved) this.editingIssueDetailsId.set(null);
     this.savingIssueDetails.set(false);
   }
@@ -4967,6 +5084,18 @@ export class Linear {
 
   private issueDetailCacheKey(connection: LinearConnection, issueId: string): string {
     return `relay.linear.issueDetail.${connection.organizationId}.${connection.viewerId}.${issueId}`;
+  }
+
+  private issueDetailsDraftKey(connection: LinearConnection, issueId: string): string {
+    return `relay.linear.issueDetailsDraft.${connection.organizationId}.${connection.viewerId}.${issueId}`;
+  }
+
+  private readIssueDetailsDraft(
+    connection: LinearConnection,
+    issueId: string,
+  ): LinearIssueDetailsDraft | null {
+    const value = this.readLocal<unknown>(this.issueDetailsDraftKey(connection, issueId));
+    return isLinearIssueDetailsDraft(value) ? value : null;
   }
 
   private issueCommentDraftKey(connection: LinearConnection, issueId: string): string {

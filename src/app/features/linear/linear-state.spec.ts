@@ -8,6 +8,8 @@ import {
   isLinearInitiativeUpdateDraft,
   isLinearIssueRelationDraft,
   isLinearIssueLabelDraft,
+  isLinearIssueDetailsDraft,
+  linearIssueDetailsDraftConflicts,
   isLinearOrganizationCacheKey,
   isLinearProjectPlanningDraft,
   isLinearProjectDraft,
@@ -152,6 +154,31 @@ describe('Linear comment edit drafts', () => {
   });
 });
 
+describe('Linear issue detail drafts', () => {
+  it('validates saved details and detects overlapping remote edits', () => {
+    const draft = {
+      title: 'Offline title',
+      description: 'Offline description',
+      baseTitle: 'Original title',
+      baseDescription: 'Original description',
+    };
+    expect(isLinearIssueDetailsDraft(draft)).toBe(true);
+    expect(isLinearIssueDetailsDraft({ ...draft, baseTitle: 3 })).toBe(false);
+    expect(
+      linearIssueDetailsDraftConflicts(draft, {
+        title: 'Remote title',
+        description: 'Original description',
+      }),
+    ).toBe(true);
+    expect(
+      linearIssueDetailsDraftConflicts(draft, {
+        title: 'Offline title',
+        description: 'Original description',
+      }),
+    ).toBe(false);
+  });
+});
+
 describe('Linear project issue cache keys', () => {
   it('separates project results by every active filter', () => {
     const base = {
@@ -197,6 +224,7 @@ describe('Linear organization cache cleanup', () => {
       'relay.linear.pendingIssueUpdates.org',
       'relay.linear.projectIssueDraft.org.project',
       'relay.linear.issueDetail.org.viewer.issue',
+      'relay.linear.issueDetailsDraft.org.viewer.issue',
       'relay.linear.issueRelationDraft.org.viewer.issue',
       'relay.linear.issueLabelDraft.org.viewer',
       'relay.linear.subIssueDraft.org.viewer.issue',

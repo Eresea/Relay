@@ -51,6 +51,35 @@ export interface LinearIssueLabelDraft {
   color: string;
 }
 
+export interface LinearIssueDetailsDraft {
+  title: string;
+  description: string;
+  baseTitle: string;
+  baseDescription: string;
+}
+
+export function isLinearIssueDetailsDraft(value: unknown): value is LinearIssueDetailsDraft {
+  if (!value || typeof value !== 'object') return false;
+  const draft = value as Partial<LinearIssueDetailsDraft>;
+  return (
+    typeof draft.title === 'string' &&
+    typeof draft.description === 'string' &&
+    typeof draft.baseTitle === 'string' &&
+    typeof draft.baseDescription === 'string'
+  );
+}
+
+export function linearIssueDetailsDraftConflicts(
+  draft: LinearIssueDetailsDraft,
+  current: Pick<LinearIssue, 'title' | 'description'>,
+): boolean {
+  const description = current.description ?? '';
+  return (
+    (draft.baseTitle !== current.title && draft.title !== current.title) ||
+    (draft.baseDescription !== description && draft.description !== description)
+  );
+}
+
 export function isLinearIssueLabelDraft(value: unknown): value is LinearIssueLabelDraft {
   if (!value || typeof value !== 'object') return false;
   const draft = value as Partial<LinearIssueLabelDraft>;
@@ -164,6 +193,7 @@ const organizationCacheCategories = [
   'initiativeUpdateDraft',
   'issueCommentDraft',
   'issueCommentEditDraft',
+  'issueDetailsDraft',
   'issueDetail',
   'issueLabelDraft',
   'issueRelationDraft',
