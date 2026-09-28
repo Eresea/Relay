@@ -1738,6 +1738,7 @@ export interface LinearProject {
   readonly status: LinearProjectStatus | null;
   readonly lead: LinearPerson | null;
   readonly teams: readonly LinearProjectTeam[];
+  readonly externalLinks: readonly LinearExternalLink[];
 }
 
 export interface LinearProjectTeam {

@@ -220,6 +220,8 @@ pub struct LinearProject {
     pub lead: Option<Person>,
     #[serde(default, deserialize_with = "deserialize_nodes")]
     pub teams: Vec<Team>,
+    #[serde(default, deserialize_with = "deserialize_nodes")]
+    pub external_links: Vec<LinearExternalLink>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -495,7 +497,7 @@ pub async fn projects(token: &str, include_archived: bool) -> Result<Vec<LinearP
     loop {
         let data: Data = query(
             token,
-            "query RelayProjects($includeArchived: Boolean!, $after: String) { projects(first: 100, after: $after, includeArchived: $includeArchived) { nodes { id name description url startDate targetDate archivedAt status { id name type } lead { id name } teams { nodes { id name key } } } pageInfo { endCursor hasNextPage } } }",
+            "query RelayProjects($includeArchived: Boolean!, $after: String) { projects(first: 100, after: $after, includeArchived: $includeArchived) { nodes { id name description url startDate targetDate archivedAt status { id name type } lead { id name } teams { nodes { id name key } } externalLinks(first: 100) { nodes { id label url } } } pageInfo { endCursor hasNextPage } } }",
             json!({ "includeArchived": include_archived, "after": after }),
         )
         .await?;
@@ -2338,6 +2340,25 @@ mod tests {
         }))
         .unwrap();
         assert_eq!(link.into_value("failed").unwrap().label, "Design");
+    }
+
+    #[test]
+    fn linear_project_decodes_explicit_repository_links() {
+        let project: LinearProject = serde_json::from_value(json!({
+            "id": "project-1",
+            "name": "Relay release",
+            "externalLinks": { "nodes": [{
+                "id": "link-1",
+                "label": "GitHub: openai/relay",
+                "url": "https://github.com/openai/relay"
+            }] }
+        }))
+        .unwrap();
+
+        assert_eq!(
+            project.external_links[0].url,
+            "https://github.com/openai/relay"
+        );
     }
 
     #[test]

@@ -5,13 +5,21 @@ import {
   TauriBridge,
   type GithubPullRequestSummary,
   type GithubRepositorySummary,
+  type LinearConnection,
+  type LinearProject,
 } from '@core/tauri';
 import { Icon } from '@shared/icon';
 import { IconPicker } from '@shared/icon-picker';
 import { UmbraButtonComponent } from '@umbra/components/umbra-button/umbra-button.component';
 
 import { ProjectActionsMenu, type ProjectAction } from './project-actions-menu';
-import { mergeProjectSummaries, projectKey, type ProjectSummary } from './project-summary';
+import {
+  mergeProjectSummaries,
+  projectKey,
+  type LinkedLinearProject,
+  type LinearProjectWithOrganization,
+  type ProjectSummary,
+} from './project-summary';
 
 @Component({
   selector: 'rl-projects',
@@ -23,7 +31,9 @@ import { mergeProjectSummaries, projectKey, type ProjectSummary } from './projec
         <div>
           <p class="u-caption">Workspace</p>
           <h1 id="projects-title">Projects</h1>
-          <p class="page-description">Local clones and recent GitHub repositories.</p>
+          <p class="page-description">
+            Local projects, GitHub repositories, and linked Linear projects.
+          </p>
         </div>
         <umbra-button size="sm" [disabled]="loading() || syncing()" (click)="sync()">
           <rl-icon umbraButtonIcon [name]="syncing() ? 'loader-circle' : 'search'" [size]="14" />
@@ -70,6 +80,20 @@ import { mergeProjectSummaries, projectKey, type ProjectSummary } from './projec
                 <p class="project-path">{{ project.path ?? 'No local workspace' }}</p>
                 @if (project.githubRepo) {
                   <p class="project-remote">github.com/{{ project.githubRepo }}</p>
+                }
+                @for (
+                  linearProject of project.linearProjects;
+                  track linearProject.organizationId + ':' + linearProject.id
+                ) {
+                  <umbra-button
+                    class="linear-project-link"
+                    size="sm"
+                    variant="link"
+                    [ariaLabel]="'Open Linear project ' + linearProject.name"
+                    (click)="openLinearProject(linearProject)"
+                  >
+                    {{ linearProject.organizationName }} · {{ linearProject.name }}
+                  </umbra-button>
                 }
                 @if (project.sizeKb !== null || project.pushedAt || project.visibility) {
                   <p class="project-remote">
@@ -348,7 +372,9 @@ export class Projects {
   private async restore(): Promise<void> {
     try {
       const saved = await this.tauri.getSetting<readonly ProjectSummary[]>(Projects.CACHE_KEY, []);
-      if (Array.isArray(saved)) this.projects.set(saved);
+      this.projects.set(
+        saved.map((project) => ({ ...project, linearProjects: project.linearProjects ?? [] })),
+      );
     } catch {
       this.error.set('Could not load saved projects.');
     } finally {
@@ -362,21 +388,61 @@ export class Projects {
     this.error.set('');
     try {
       const workspaces = await this.tauri.scanWorkspaces();
+      const warnings: string[] = [];
       let repositories: readonly GithubRepositorySummary[] = [];
       let pullRequests: readonly GithubPullRequestSummary[] = [];
       try {
         repositories = await this.tauri.githubRepositories();
         pullRequests = await this.tauri.githubPullRequests();
       } catch {
-        this.error.set('GitHub sync failed. Local clones are still shown.');
+        warnings.push('GitHub sync failed. Local projects are still shown.');
+      }
+      const savedProjects = new Map(
+        this.projects().map((project) => [projectKey(project), project]),
+      );
+      const linearProjects: LinearProjectWithOrganization[] = [];
+      let linearSyncFailed = false;
+      try {
+        const connections = await this.tauri.linearStatus();
+        const activeConnections = connections.filter((connection) => !connection.pausedOnDevice);
+        const results = await Promise.allSettled(
+          activeConnections.map(async (connection) => ({
+            connection,
+            projects: await this.tauri.linearProjects(connection.organizationId),
+          })),
+        );
+        for (const result of results) {
+          if (result.status === 'rejected') {
+            linearSyncFailed = true;
+            continue;
+          }
+          linearProjects.push(...withOrganization(result.value.connection, result.value.projects));
+        }
+        if (linearSyncFailed) warnings.push('Some Linear projects could not be synced.');
+      } catch {
+        linearSyncFailed = true;
+        warnings.push('Linear sync failed. Saved project links are still shown.');
       }
       const savedIcons = new Map(
         this.projects().map((project) => [projectKey(project), project.icon ?? 'folder']),
       );
-      const projects = mergeProjectSummaries(workspaces, repositories, pullRequests).map(
-        (project) => ({ ...project, icon: savedIcons.get(projectKey(project)) ?? 'folder' }),
-      );
+      const projects = mergeProjectSummaries(
+        workspaces,
+        repositories,
+        pullRequests,
+        linearProjects,
+      ).map((project) => {
+        const saved = savedProjects.get(projectKey(project));
+        return {
+          ...project,
+          icon: savedIcons.get(projectKey(project)) ?? 'folder',
+          linearProjects: linearSyncFailed
+            ? mergeLinearProjects(project.linearProjects, saved?.linearProjects ?? [])
+            : project.linearProjects,
+        };
+      });
       this.projects.set(projects);
+      this.error.set(warnings.join(' '));
       try {
         await this.tauri.setSetting(Projects.CACHE_KEY, projects);
       } catch {
@@ -404,6 +470,10 @@ export class Projects {
 
   protected openTerminal(project: ProjectSummary): void {
     if (project.path) void this.tauri.openTerminal(project.path);
+  }
+
+  protected openLinearProject(project: LinkedLinearProject): void {
+    void this.tauri.openUrl(project.url);
   }
 
   protected runProjectAction(project: ProjectSummary, action: ProjectAction): void {
@@ -493,4 +563,32 @@ export class Projects {
     }
     return null;
   }
+}
+
+function withOrganization(
+  connection: LinearConnection,
+  projects: readonly LinearProject[],
+): LinearProjectWithOrganization[] {
+  return projects.map((project) => ({
+    ...project,
+    organizationId: connection.organizationId,
+    organizationName: connection.organizationName,
+  }));
+}
+
+function mergeLinearProjects(
+  current: ProjectSummary['linearProjects'],
+  cached: ProjectSummary['linearProjects'],
+): ProjectSummary['linearProjects'] {
+  return [
+    ...current,
+    ...cached.filter(
+      (cachedProject) =>
+        !current.some(
+          (project) =>
+            project.organizationId === cachedProject.organizationId &&
+            project.id === cachedProject.id,
+        ),
+    ),
+  ];
 }
