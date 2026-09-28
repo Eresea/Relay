@@ -9,21 +9,25 @@ import {
   viewChild,
 } from '@angular/core';
 import { mountChart } from '@tanstack/charts/dom';
-import type {
-  ChartHost,
-  ChartHostOptions,
-  ChartPoint,
-  DomChartDefinition,
-} from '@tanstack/charts';
+import type { ChartHost, ChartHostOptions, ChartPoint, DomChartDefinition } from '@tanstack/charts';
 
 @Component({
   selector: 'umbra-chart',
   standalone: true,
   template: '<div #host class="umbra-chart-host"></div>',
   styles: `
-    :host { display: block; min-width: 0; }
-    .umbra-chart-host { min-width: 0; width: 100%; }
-    .umbra-chart-host svg { display: block; max-width: 100%; }
+    :host {
+      display: block;
+      min-width: 0;
+    }
+    .umbra-chart-host {
+      min-width: 0;
+      width: 100%;
+    }
+    .umbra-chart-host svg {
+      display: block;
+      max-width: 100%;
+    }
   `,
   changeDetection: ChangeDetectionStrategy.OnPush,
 })

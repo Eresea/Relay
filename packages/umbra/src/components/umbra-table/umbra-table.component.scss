@@ -140,15 +140,15 @@
   color: var(--text-subtle);
 }
 
-.umbra-table__sort-indicator[data-direction="asc"] {
+.umbra-table__sort-indicator[data-direction='asc'] {
   transform: rotate(-45deg);
 }
 
-.umbra-table__sort-indicator[data-direction="desc"] {
+.umbra-table__sort-indicator[data-direction='desc'] {
   transform: rotate(135deg);
 }
 
-.umbra-table__sort-indicator[data-direction="false"] {
+.umbra-table__sort-indicator[data-direction='false'] {
   visibility: hidden;
 }
 

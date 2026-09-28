@@ -1,4 +1,4 @@
-import { TemplateRef } from "@angular/core";
+import { TemplateRef } from '@angular/core';
 
 export type UmbraTablePath<T> = T extends object
   ? {
@@ -10,13 +10,9 @@ export type UmbraTablePath<T> = T extends object
     }[keyof T & string]
   : never;
 
-export type UmbraTablePrimitive =
-  string | number | boolean | bigint | null | undefined;
+export type UmbraTablePrimitive = string | number | boolean | bigint | null | undefined;
 
-export type UmbraTablePathValue<
-  T,
-  P extends string,
-> = P extends `${infer K}.${infer Rest}`
+export type UmbraTablePathValue<T, P extends string> = P extends `${infer K}.${infer Rest}`
   ? K extends keyof T
     ? UmbraTablePathValue<T[K], Rest>
     : never
@@ -31,18 +27,13 @@ export interface UmbraTableCellContext<T, TValue> {
 }
 
 export type UmbraTableCellContent<T, TValue> =
-  | TValue
-  | UmbraTablePrimitive
-  | TemplateRef<{ $implicit: UmbraTableCellContext<T, TValue> }>;
+  TValue | UmbraTablePrimitive | TemplateRef<{ $implicit: UmbraTableCellContext<T, TValue> }>;
 
 export type UmbraTableCellRenderer<T, TValue> = (
   context: UmbraTableCellContext<T, TValue>,
 ) => UmbraTableCellContent<T, TValue>;
 
-export type UmbraTableFilter<TValue> = (
-  value: TValue,
-  filterValue: unknown,
-) => boolean;
+export type UmbraTableFilter<TValue> = (value: TValue, filterValue: unknown) => boolean;
 
 export interface UmbraTableColumnOptions<T, TValue> {
   readonly id?: string;
@@ -72,10 +63,7 @@ export interface UmbraTableColumnDefinition<T, TValue> {
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-export type UmbraTableColumn<T, TValue = any> = UmbraTableColumnDefinition<
-  T,
-  TValue
->;
+export type UmbraTableColumn<T, TValue = any> = UmbraTableColumnDefinition<T, TValue>;
 
 export interface UmbraTableColumnPinning {
   readonly left?: readonly string[];
@@ -83,9 +71,9 @@ export interface UmbraTableColumnPinning {
 }
 
 function titleFromPath(path: string): string {
-  const value = path.split(".").at(-1) ?? path;
+  const value = path.split('.').at(-1) ?? path;
   return value
-    .replace(/([a-z])([A-Z])/g, "$1 $2")
+    .replace(/([a-z])([A-Z])/g, '$1 $2')
     .replace(/^./, (character) => character.toUpperCase());
 }
 
@@ -97,9 +85,8 @@ export function column<T, P extends UmbraTablePath<T> = UmbraTablePath<T>>(
     id: options.id ?? path,
     title: options.title ?? titleFromPath(path),
     accessor: (row) =>
-      path.split(".").reduce<unknown>((value, key) => {
-        if (value == null || typeof value !== "object" || !(key in value))
-          return undefined;
+      path.split('.').reduce<unknown>((value, key) => {
+        if (value == null || typeof value !== 'object' || !(key in value)) return undefined;
         return (value as Record<string, unknown>)[key];
       }, row) as UmbraTablePathValue<T, P>,
     width: options.width ?? 160,
@@ -116,7 +103,7 @@ export function column<T, P extends UmbraTablePath<T> = UmbraTablePath<T>>(
 export function accessorColumn<T, TValue>(
   id: string,
   accessor: (row: T) => TValue,
-  options: Omit<UmbraTableColumnOptions<T, TValue>, "id"> = {},
+  options: Omit<UmbraTableColumnOptions<T, TValue>, 'id'> = {},
 ): UmbraTableColumnDefinition<T, TValue> {
   return {
     id,
@@ -141,9 +128,9 @@ export function defineColumns<T>(
 
 export function textFilter(): UmbraTableFilter<unknown> {
   return (value, filterValue) =>
-    String(value ?? "")
+    String(value ?? '')
       .toLocaleLowerCase()
-      .includes(String(filterValue ?? "").toLocaleLowerCase());
+      .includes(String(filterValue ?? '').toLocaleLowerCase());
 }
 
 export function equalsFilter<TValue>(): UmbraTableFilter<TValue> {
@@ -151,21 +138,20 @@ export function equalsFilter<TValue>(): UmbraTableFilter<TValue> {
 }
 
 export function numberFilter(
-  operator: "eq" | "gt" | "gte" | "lt" | "lte" = "eq",
+  operator: 'eq' | 'gt' | 'gte' | 'lt' | 'lte' = 'eq',
 ): UmbraTableFilter<number | null | undefined> {
   return (value, filterValue) => {
-    if (value == null || filterValue == null || filterValue === "")
-      return false;
+    if (value == null || filterValue == null || filterValue === '') return false;
     const left = Number(value);
     const right = Number(filterValue);
     if (!Number.isFinite(left) || !Number.isFinite(right)) return false;
-    return operator === "gt"
+    return operator === 'gt'
       ? left > right
-      : operator === "gte"
+      : operator === 'gte'
         ? left >= right
-        : operator === "lt"
+        : operator === 'lt'
           ? left < right
-          : operator === "lte"
+          : operator === 'lte'
             ? left <= right
             : left === right;
   };

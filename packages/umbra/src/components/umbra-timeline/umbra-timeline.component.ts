@@ -33,9 +33,7 @@ export interface UmbraTimelineEntry<T> {
   context: UmbraTimelineTemplateContext<T>;
 }
 
-export function defaultUmbraTimelineGroupLabel(
-  group: UmbraTimelineGroupValue,
-): string {
+export function defaultUmbraTimelineGroupLabel(group: UmbraTimelineGroupValue): string {
   if (group instanceof Date) {
     return new Intl.DateTimeFormat(undefined, {
       month: 'long',
@@ -110,15 +108,13 @@ function timelineGroupKey(group: UmbraTimelineGroupValue): string {
 })
 export class UmbraTimelineComponent<T> {
   readonly items = input<readonly T[]>([]);
-  readonly trackBy = input<(item: T, index: number) => string | number>(
-    (_item, index) => index,
+  readonly trackBy = input<(item: T, index: number) => string | number>((_item, index) => index);
+  readonly groupBy = input<((item: T, index: number) => UmbraTimelineGroupValue | null) | null>(
+    null,
   );
-  readonly groupBy = input<
-    ((item: T, index: number) => UmbraTimelineGroupValue | null) | null
-  >(null);
-  readonly groupLabel = input<
-    (group: UmbraTimelineGroupValue, index: number) => string
-  >((group) => defaultUmbraTimelineGroupLabel(group));
+  readonly groupLabel = input<(group: UmbraTimelineGroupValue, index: number) => string>((group) =>
+    defaultUmbraTimelineGroupLabel(group),
+  );
   readonly headerData = input<readonly UmbraTimelineHeaderData[]>([]);
   readonly ariaLabel = input('Timeline');
   readonly emptyMessage = input('No items yet');
@@ -142,12 +138,7 @@ export class UmbraTimelineComponent<T> {
   groupTemplate?: TemplateRef<UmbraTimelineGroupTemplateContext>;
 
   readonly entries = computed(() =>
-    buildUmbraTimelineEntries(
-      this.items(),
-      this.trackBy(),
-      this.groupBy(),
-      this.groupLabel(),
-    ),
+    buildUmbraTimelineEntries(this.items(), this.trackBy(), this.groupBy(), this.groupLabel()),
   );
   readonly loadingIndexes = computed(() =>
     Array.from({ length: Math.max(0, this.loadingRows()) }, (_, index) => index),
@@ -186,11 +177,7 @@ export class UmbraTimelineComponent<T> {
       ([entry]) => {
         if (
           entry &&
-          shouldUmbraTimelineLoadMore(
-            this.hasMore(),
-            this.loading(),
-            entry.isIntersecting,
-          )
+          shouldUmbraTimelineLoadMore(this.hasMore(), this.loading(), entry.isIntersecting)
         ) {
           this.loadMore.emit();
         }
