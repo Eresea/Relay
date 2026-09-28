@@ -9,6 +9,8 @@ import {
   isLinearOrganizationCacheKey,
   isLinearProjectPlanningDraft,
   isLinearProjectDraft,
+  isLinearProjectDocumentCreateDraft,
+  isLinearProjectLinkDraft,
   isLinearProjectDocumentDraft,
   linearCodexPrompt,
   linearCommentDraftConflicts,
@@ -196,6 +198,8 @@ describe('Linear organization cache cleanup', () => {
       'relay.linear.projectIssues.org.viewer.project',
       'relay.linear.projectPlanningDraft.org.viewer.project',
       'relay.linear.projectDraft.org.viewer',
+      'relay.linear.projectDocumentCreateDraft.org.viewer.project',
+      'relay.linear.projectLinkDraft.org.viewer.project',
       'relay.linear.initiatives.org.viewer',
       'relay.linear.cycles.org.viewer.team',
     ]) {
@@ -249,6 +253,20 @@ describe('Linear project planning drafts', () => {
         milestoneDate: '2026-10-10',
       }),
     ).toBe(false);
+  });
+});
+
+describe('Linear project document creation drafts', () => {
+  it('validates title and markdown content before restoring them', () => {
+    expect(isLinearProjectDocumentCreateDraft({ title: 'Plan', content: '# Next' })).toBe(true);
+    expect(isLinearProjectDocumentCreateDraft({ title: 'Plan', content: null })).toBe(false);
+  });
+});
+
+describe('Linear project link drafts', () => {
+  it('validates external link fields before restoring them', () => {
+    expect(isLinearProjectLinkDraft({ label: 'Design', url: 'https://example.com' })).toBe(true);
+    expect(isLinearProjectLinkDraft({ label: 'Design', url: 9 })).toBe(false);
   });
 });
 

@@ -50,6 +50,8 @@ import {
   isLinearProjectDraft,
   isLinearOrganizationCacheKey,
   isLinearProjectDocumentDraft,
+  isLinearProjectDocumentCreateDraft,
+  isLinearProjectLinkDraft,
   isPendingLinearIssueUpdate,
   linearCommentDraftConflicts,
   linearProjectDocumentDraftConflicts,
@@ -64,6 +66,8 @@ import {
   type LinearCycleDraft,
   type PendingLinearIssueUpdate,
   type LinearProjectDocumentDraft,
+  type LinearProjectDocumentCreateDraft,
+  type LinearProjectLinkDraft,
   type LinearInitiativeDraft,
   type LinearInitiativeUpdateDraft,
   type LinearProjectDraft,
@@ -1575,13 +1579,18 @@ function isLinearTeamList(value: unknown): value is readonly LinearTeam[] {
                   }
                   @if (!selectedProject()!.archivedAt) {
                     <form class="project-edit" (submit)="createProjectDocument($event)">
+                      @if (newProjectDocumentTitle() || newProjectDocumentContent()) {
+                        <p class="hint">Document draft saved on this device.</p>
+                      }
                       <label>
                         <span>New document</span>
                         <input
                           required
                           maxlength="255"
                           [value]="newProjectDocumentTitle()"
-                          (input)="newProjectDocumentTitle.set($any($event.target).value)"
+                          (input)="
+                            updateProjectDocumentCreateDraft('title', $any($event.target).value)
+                          "
                           placeholder="Document title"
                         />
                       </label>
@@ -1592,7 +1601,9 @@ function isLinearTeamList(value: unknown): value is readonly LinearTeam[] {
                           maxlength="50000"
                           rows="4"
                           [value]="newProjectDocumentContent()"
-                          (input)="newProjectDocumentContent.set($any($event.target).value)"
+                          (input)="
+                            updateProjectDocumentCreateDraft('content', $any($event.target).value)
+                          "
                         ></textarea>
                       </label>
                       <umbra-button
@@ -1607,13 +1618,16 @@ function isLinearTeamList(value: unknown): value is readonly LinearTeam[] {
                       </umbra-button>
                     </form>
                     <form class="project-edit" (submit)="createProjectLink($event)">
+                      @if (newProjectLinkLabel() || newProjectLinkUrl()) {
+                        <p class="hint">Link draft saved on this device.</p>
+                      }
                       <label>
                         <span>Add external link</span>
                         <input
                           required
                           maxlength="255"
                           [value]="newProjectLinkLabel()"
-                          (input)="newProjectLinkLabel.set($any($event.target).value)"
+                          (input)="updateProjectLinkDraft('label', $any($event.target).value)"
                           placeholder="Link name"
                         />
                       </label>
@@ -1624,7 +1638,7 @@ function isLinearTeamList(value: unknown): value is readonly LinearTeam[] {
                           type="url"
                           maxlength="2048"
                           [value]="newProjectLinkUrl()"
-                          (input)="newProjectLinkUrl.set($any($event.target).value)"
+                          (input)="updateProjectLinkDraft('url', $any($event.target).value)"
                           placeholder="https://"
                         />
                       </label>
@@ -4855,6 +4869,65 @@ export class Linear {
     return `relay.linear.projectDocumentDraft.${connection.organizationId}.${documentId}`;
   }
 
+  private projectDocumentCreateDraftKey(connection: LinearConnection, projectId: string): string {
+    return `relay.linear.projectDocumentCreateDraft.${connection.organizationId}.${connection.viewerId}.${projectId}`;
+  }
+
+  private projectLinkDraftKey(connection: LinearConnection, projectId: string): string {
+    return `relay.linear.projectLinkDraft.${connection.organizationId}.${connection.viewerId}.${projectId}`;
+  }
+
+  protected updateProjectDocumentCreateDraft(
+    field: keyof LinearProjectDocumentCreateDraft,
+    value: string,
+  ): void {
+    if (field === 'title') this.newProjectDocumentTitle.set(value);
+    else this.newProjectDocumentContent.set(value);
+    const connection = this.selected();
+    const projectId = this.selectedProject()?.id;
+    if (!connection || !projectId) return;
+    const draft: LinearProjectDocumentCreateDraft = {
+      title: this.newProjectDocumentTitle(),
+      content: this.newProjectDocumentContent(),
+    };
+    this.writeLocal(
+      this.projectDocumentCreateDraftKey(connection, projectId),
+      draft.title || draft.content ? draft : null,
+    );
+  }
+
+  private restoreProjectDocumentCreateDraft(connection: LinearConnection, projectId: string): void {
+    const stored = this.readLocal<unknown>(
+      this.projectDocumentCreateDraftKey(connection, projectId),
+    );
+    const draft = isLinearProjectDocumentCreateDraft(stored) ? stored : null;
+    this.newProjectDocumentTitle.set(draft?.title ?? '');
+    this.newProjectDocumentContent.set(draft?.content ?? '');
+  }
+
+  protected updateProjectLinkDraft(field: keyof LinearProjectLinkDraft, value: string): void {
+    if (field === 'label') this.newProjectLinkLabel.set(value);
+    else this.newProjectLinkUrl.set(value);
+    const connection = this.selected();
+    const projectId = this.selectedProject()?.id;
+    if (!connection || !projectId) return;
+    const draft: LinearProjectLinkDraft = {
+      label: this.newProjectLinkLabel(),
+      url: this.newProjectLinkUrl(),
+    };
+    this.writeLocal(
+      this.projectLinkDraftKey(connection, projectId),
+      draft.label || draft.url ? draft : null,
+    );
+  }
+
+  private restoreProjectLinkDraft(connection: LinearConnection, projectId: string): void {
+    const stored = this.readLocal<unknown>(this.projectLinkDraftKey(connection, projectId));
+    const draft = isLinearProjectLinkDraft(stored) ? stored : null;
+    this.newProjectLinkLabel.set(draft?.label ?? '');
+    this.newProjectLinkUrl.set(draft?.url ?? '');
+  }
+
   private issueDetailCacheKey(connection: LinearConnection, issueId: string): string {
     return `relay.linear.issueDetail.${connection.organizationId}.${connection.viewerId}.${issueId}`;
   }
@@ -5891,6 +5964,8 @@ export class Linear {
     if (connection) {
       this.restoreProjectIssueDraft(connection, project.id);
       this.restoreProjectPlanningDraft(connection, project.id);
+      this.restoreProjectDocumentCreateDraft(connection, project.id);
+      this.restoreProjectLinkDraft(connection, project.id);
     }
     this.editProjectName.set(project.name);
     this.editProjectDescription.set(project.description ?? '');
@@ -5905,10 +5980,6 @@ export class Linear {
     this.confirmDeleteProjectLinkId.set(null);
     this.githubRepositoriesForLink.set(null);
     this.selectedGithubRepository.set('');
-    this.newProjectDocumentTitle.set('');
-    this.newProjectDocumentContent.set('');
-    this.newProjectLinkLabel.set('');
-    this.newProjectLinkUrl.set('');
     await Promise.all([
       this.loadProjectIssues(project.id),
       this.loadMilestones(project.id),
@@ -6672,7 +6743,14 @@ export class Linear {
         title,
         content,
       );
-      if (this.selectedProject()?.id !== project.id) return;
+      this.writeLocal(this.projectDocumentCreateDraftKey(connection, project.id), null);
+      if (
+        this.selected()?.organizationId !== connection.organizationId ||
+        this.selected()?.viewerId !== connection.viewerId ||
+        this.selectedProject()?.id !== project.id
+      ) {
+        return;
+      }
       this.updateProjectResources(project.id, (resources) => ({
         ...resources,
         documents: [document, ...resources.documents],
@@ -6702,7 +6780,14 @@ export class Linear {
         label,
         url,
       );
-      if (this.selectedProject()?.id !== project.id) return;
+      this.writeLocal(this.projectLinkDraftKey(connection, project.id), null);
+      if (
+        this.selected()?.organizationId !== connection.organizationId ||
+        this.selected()?.viewerId !== connection.viewerId ||
+        this.selectedProject()?.id !== project.id
+      ) {
+        return;
+      }
       this.updateProjectResources(project.id, (resources) => ({
         ...resources,
         externalLinks: [link, ...resources.externalLinks],

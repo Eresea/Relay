@@ -25,6 +25,30 @@ export interface LinearProjectDraft {
   teamIds: readonly string[];
 }
 
+export interface LinearProjectDocumentCreateDraft {
+  title: string;
+  content: string;
+}
+
+export interface LinearProjectLinkDraft {
+  label: string;
+  url: string;
+}
+
+export function isLinearProjectLinkDraft(value: unknown): value is LinearProjectLinkDraft {
+  if (!value || typeof value !== 'object') return false;
+  const draft = value as Partial<LinearProjectLinkDraft>;
+  return typeof draft.label === 'string' && typeof draft.url === 'string';
+}
+
+export function isLinearProjectDocumentCreateDraft(
+  value: unknown,
+): value is LinearProjectDocumentCreateDraft {
+  if (!value || typeof value !== 'object') return false;
+  const draft = value as Partial<LinearProjectDocumentCreateDraft>;
+  return typeof draft.title === 'string' && typeof draft.content === 'string';
+}
+
 export function isLinearProjectDraft(value: unknown): value is LinearProjectDraft {
   if (!value || typeof value !== 'object') return false;
   const draft = value as Partial<LinearProjectDraft>;
@@ -109,8 +133,10 @@ const organizationCacheCategories = [
   'issues',
   'milestones',
   'projectDocumentDraft',
+  'projectDocumentCreateDraft',
   'projectDraft',
   'projectIssues',
+  'projectLinkDraft',
   'projectPlanningDraft',
   'projectResources',
   'projectUpdates',
