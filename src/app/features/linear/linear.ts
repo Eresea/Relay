@@ -2001,6 +2001,11 @@ function isLinearTeamList(value: unknown): value is readonly LinearTeam[] {
                     {{ includeArchivedProjectIssues() ? 'Hide archived' : 'Include archived' }}
                   </umbra-button>
                 </div>
+                @if (projectIssueCacheStale()) {
+                  <p class="hint" role="status">
+                    Linear is unavailable. Showing saved issues for these project filters.
+                  </p>
+                }
                 <form class="issue-actions" role="search" (submit)="searchProjectIssues($event)">
                   <label>
                     <span class="sr-only">Search project issue titles</span>
@@ -3480,6 +3485,7 @@ export class Linear {
   protected readonly selectedCodexWorkspacePath = signal('');
   protected readonly selectedCodexProjectRepo = signal('');
   protected readonly projectIssues = signal<readonly LinearIssue[]>([]);
+  protected readonly projectIssueCacheStale = signal(false);
   protected readonly projectIssueSearchInput = signal('');
   protected readonly projectIssueSearchTerm = signal('');
   protected readonly projectIssueStateId = signal('');
@@ -4718,6 +4724,16 @@ export class Linear {
     return includeArchived ? `${key}.all` : key;
   }
 
+  private projectIssueCacheKey(connection: LinearConnection, projectId: string): string {
+    const archived = this.includeArchivedProjectIssues() ? '.all' : '';
+    const search = this.projectIssueSearchTerm().trim();
+    const state = this.projectIssueStateId();
+    const priority = this.projectIssuePriority();
+    const assignee = this.projectIssueAssigneeId();
+    const label = this.projectIssueLabelId();
+    return `relay.linear.projectIssues.${connection.organizationId}.${connection.viewerId}.${projectId}${archived}${search ? `.search.${encodeURIComponent(search)}` : ''}${state ? `.state.${encodeURIComponent(state)}` : ''}${priority ? `.priority.${priority}` : ''}${assignee ? `.assignee.${encodeURIComponent(assignee)}` : ''}${label ? `.label.${encodeURIComponent(label)}` : ''}`;
+  }
+
   private projectResourcesCacheKey(connection: LinearConnection, projectId: string): string {
     return `relay.linear.projectResources.${connection.organizationId}.${projectId}`;
   }
@@ -5599,6 +5615,7 @@ export class Linear {
       this.setCreateTeam(project.teams[0].id);
     }
     this.projectIssues.set([]);
+    this.projectIssueCacheStale.set(false);
     this.nextProjectIssueCursor = null;
     this.projectIssuesHasNextPage.set(false);
     const connection = this.selected();
@@ -6049,27 +6066,55 @@ export class Linear {
     const connection = this.selected();
     if (!connection) return;
     const request = ++this.projectIssuesRequest;
+    const includeArchived = this.includeArchivedProjectIssues();
+    const search = this.projectIssueSearchTerm();
+    const stateId = this.projectIssueStateId() || undefined;
+    const priority =
+      this.projectIssuePriority() === '' ? undefined : Number(this.projectIssuePriority());
+    const assigneeId = this.projectIssueAssigneeId() || undefined;
+    const labelId = this.projectIssueLabelId() || undefined;
+    const cacheKey = this.projectIssueCacheKey(connection, projectId);
+    const cached = this.readLocal<LinearIssuePage>(cacheKey);
+    const hasCache = !!cached && Array.isArray(cached.issues);
+    if (!append) this.projectIssueCacheStale.set(false);
+    if (!append && hasCache && cached && this.selectedProject()?.id === projectId) {
+      this.projectIssues.set(cached.issues);
+      this.nextProjectIssueCursor = cached.endCursor;
+      this.projectIssuesHasNextPage.set(cached.hasNextPage === true);
+      this.projectIssueCacheStale.set(true);
+    }
     this.loadingProjectIssues.set(true);
     try {
       const page = await this.tauri.linearProjectIssues(
         connection.organizationId,
         projectId,
         after,
-        this.includeArchivedProjectIssues(),
-        this.projectIssueSearchTerm(),
-        this.projectIssueStateId() || undefined,
-        this.projectIssuePriority() === '' ? undefined : Number(this.projectIssuePriority()),
-        this.projectIssueAssigneeId() || undefined,
-        this.projectIssueLabelId() || undefined,
+        includeArchived,
+        search,
+        stateId,
+        priority,
+        assigneeId,
+        labelId,
       );
       if (request === this.projectIssuesRequest && this.selectedProject()?.id === projectId) {
-        this.projectIssues.update((items) => (append ? [...items, ...page.issues] : page.issues));
+        const issues = append ? [...this.projectIssues(), ...page.issues] : page.issues;
+        this.projectIssues.set(issues);
         this.nextProjectIssueCursor = page.endCursor;
         this.projectIssuesHasNextPage.set(page.hasNextPage);
+        this.projectIssueCacheStale.set(false);
+        this.writeLocal(cacheKey, { ...page, issues } satisfies LinearIssuePage);
       }
     } catch (error) {
       if (request === this.projectIssuesRequest) {
-        this.error.set(error instanceof Error ? error.message : String(error));
+        const hasVisibleIssues = this.projectIssues().length > 0;
+        this.projectIssueCacheStale.set(hasCache || (append && hasVisibleIssues));
+        this.error.set(
+          hasCache || (append && hasVisibleIssues)
+            ? 'Linear is unavailable. Showing saved project issues.'
+            : error instanceof Error
+              ? error.message
+              : String(error),
+        );
       }
     } finally {
       if (request === this.projectIssuesRequest) this.loadingProjectIssues.set(false);
