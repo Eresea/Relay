@@ -1510,6 +1510,33 @@ interface LinearIssueDraft {
                     {{ includeArchivedProjectIssues() ? 'Hide archived' : 'Include archived' }}
                   </umbra-button>
                 </div>
+                <form class="issue-actions" role="search" (submit)="searchProjectIssues($event)">
+                  <label>
+                    <span class="sr-only">Search project issue titles</span>
+                    <input
+                      type="search"
+                      maxlength="255"
+                      [value]="projectIssueSearchInput()"
+                      [disabled]="loadingProjectIssues()"
+                      (input)="projectIssueSearchInput.set($any($event.target).value)"
+                      placeholder="Search project issues"
+                    />
+                  </label>
+                  <umbra-button size="sm" [disabled]="loadingProjectIssues()">
+                    {{ loadingProjectIssues() ? 'Searching' : 'Search' }}
+                  </umbra-button>
+                  @if (projectIssueSearchTerm()) {
+                    <umbra-button
+                      size="sm"
+                      variant="link"
+                      type="button"
+                      [disabled]="loadingProjectIssues()"
+                      (click)="clearProjectIssueSearch()"
+                    >
+                      Clear
+                    </umbra-button>
+                  }
+                </form>
                 @if (teams().length) {
                   <form class="create-form" (submit)="createProjectIssue($event)">
                     <label>
@@ -1726,7 +1753,13 @@ interface LinearIssueDraft {
                     </div>
                   </article>
                 } @empty {
-                  <p class="hint">No issues are linked to this project.</p>
+                  <p class="hint">
+                    {{
+                      projectIssueSearchTerm()
+                        ? 'No project issues match your search.'
+                        : 'No issues are linked to this project.'
+                    }}
+                  </p>
                 }
                 @if (projectIssuesHasNextPage()) {
                   <umbra-button
@@ -2781,6 +2814,8 @@ export class Linear {
   protected readonly selectedCodexWorkspacePath = signal('');
   protected readonly selectedCodexProjectRepo = signal('');
   protected readonly projectIssues = signal<readonly LinearIssue[]>([]);
+  protected readonly projectIssueSearchInput = signal('');
+  protected readonly projectIssueSearchTerm = signal('');
   protected readonly includeArchivedProjectIssues = signal(false);
   protected readonly loadingProjectIssues = signal(false);
   protected readonly projectIssuesHasNextPage = signal(false);
@@ -3782,7 +3817,10 @@ export class Linear {
       }),
     );
     this.projectIssues.update((items) =>
-      items.map((entry) => (entry.id === updated.id ? updated : entry)),
+      items.flatMap((entry) => {
+        if (entry.id !== updated.id) return [entry];
+        return this.matchesProjectIssueQuery(updated) ? [updated] : [];
+      }),
     );
     this.issueDetail.update((detail) =>
       detail?.issue.id === updated.id ? { ...detail, issue: updated } : detail,
@@ -3803,6 +3841,17 @@ export class Linear {
       (!search || issue.title.toLowerCase().includes(search)) &&
       (!this.issueStateId() || issue.state?.id === this.issueStateId()) &&
       (this.issuePriority() === '' || issue.priority === Number(this.issuePriority()))
+    );
+  }
+
+  private matchesProjectIssueQuery(issue: LinearIssue): boolean {
+    const project = this.selectedProject();
+    const search = this.projectIssueSearchTerm().trim().toLowerCase();
+    return (
+      !!project &&
+      issue.project?.id === project.id &&
+      (this.includeArchivedProjectIssues() || !issue.archivedAt) &&
+      (!search || issue.title.toLowerCase().includes(search))
     );
   }
 
@@ -4477,6 +4526,8 @@ export class Linear {
     this.confirmArchiveIssueId.set(null);
     this.confirmDeleteMilestoneId.set(null);
     this.includeArchivedProjectIssues.set(false);
+    this.projectIssueSearchInput.set('');
+    this.projectIssueSearchTerm.set('');
     this.selectedProject.set(project);
     this.projectIssues.set([]);
     this.nextProjectIssueCursor = null;
@@ -4503,6 +4554,29 @@ export class Linear {
     const project = this.selectedProject();
     if (!project || this.loadingProjectIssues()) return;
     this.includeArchivedProjectIssues.update((value) => !value);
+    this.projectIssues.set([]);
+    this.nextProjectIssueCursor = null;
+    this.projectIssuesHasNextPage.set(false);
+    void this.loadProjectIssues(project.id);
+  }
+
+  protected searchProjectIssues(event: Event): void {
+    event.preventDefault();
+    const project = this.selectedProject();
+    const search = this.projectIssueSearchInput().trim();
+    if (!project || this.loadingProjectIssues() || search === this.projectIssueSearchTerm()) return;
+    this.projectIssueSearchTerm.set(search);
+    this.projectIssues.set([]);
+    this.nextProjectIssueCursor = null;
+    this.projectIssuesHasNextPage.set(false);
+    void this.loadProjectIssues(project.id);
+  }
+
+  protected clearProjectIssueSearch(): void {
+    const project = this.selectedProject();
+    if (!project || this.loadingProjectIssues() || !this.projectIssueSearchTerm()) return;
+    this.projectIssueSearchInput.set('');
+    this.projectIssueSearchTerm.set('');
     this.projectIssues.set([]);
     this.nextProjectIssueCursor = null;
     this.projectIssuesHasNextPage.set(false);
@@ -4842,6 +4916,7 @@ export class Linear {
         projectId,
         after,
         this.includeArchivedProjectIssues(),
+        this.projectIssueSearchTerm(),
       );
       if (request === this.projectIssuesRequest && this.selectedProject()?.id === projectId) {
         this.projectIssues.update((items) => (append ? [...items, ...page.issues] : page.issues));
@@ -4960,7 +5035,9 @@ export class Linear {
         this.newProjectIssueStateId() || undefined,
         this.newProjectIssueCycleId() || undefined,
       );
-      this.projectIssues.update((issues) => [issue, ...issues]);
+      if (this.matchesProjectIssueQuery(issue)) {
+        this.projectIssues.update((issues) => [issue, ...issues]);
+      }
       this.newProjectIssueTitle.set('');
       this.newProjectIssueDescription.set('');
       this.newProjectIssueMilestoneId.set('');

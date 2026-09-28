@@ -1177,12 +1177,14 @@ export class TauriBridge {
     projectId: string,
     after: string | null = null,
     includeArchived = false,
+    search = '',
   ): Promise<LinearIssuePage> {
     const result = await this.invoke<LinearIssuePage>('linear_project_issues', {
       organizationId,
       projectId,
       after,
       includeArchived,
+      search,
     });
     if (!result) throw new Error('Linear returned no project issues.');
     return result;

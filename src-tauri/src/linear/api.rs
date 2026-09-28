@@ -1195,11 +1195,12 @@ pub async fn project_issues(
     project_id: &str,
     after: Option<&str>,
     include_archived: bool,
+    search: Option<&str>,
 ) -> Result<IssuePage> {
     issues(
         token,
         json!({ "project": { "id": { "eq": project_id } } }),
-        None,
+        search,
         after,
         include_archived,
         None,
@@ -1960,6 +1961,20 @@ mod tests {
                     { "title": { "contains": "deploy" } },
                     { "state": { "id": { "eq": "state-1" } } },
                     { "priority": { "eq": 1 } }
+                ]
+            })
+        );
+        assert_eq!(
+            with_issue_filters(
+                json!({ "project": { "id": { "eq": "project-1" } } }),
+                Some("release"),
+                None,
+                None,
+            ),
+            json!({
+                "and": [
+                    { "project": { "id": { "eq": "project-1" } } },
+                    { "title": { "contains": "release" } }
                 ]
             })
         );

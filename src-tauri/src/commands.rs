@@ -1384,13 +1384,24 @@ pub async fn linear_project_issues(
     project_id: String,
     after: Option<String>,
     include_archived: Option<bool>,
+    search: Option<String>,
 ) -> Result<IssuePage> {
+    if project_id.trim().is_empty() {
+        return Err(std::io::Error::other("A Linear project is required").into());
+    }
+    if search.as_deref().is_some_and(|query| query.len() > 255) {
+        return Err(std::io::Error::other("Issue search is too long").into());
+    }
     linear::project_issues(
         &app,
         &organization_id,
         &project_id,
         after.as_deref(),
         include_archived.unwrap_or(false),
+        search
+            .as_deref()
+            .map(str::trim)
+            .filter(|search| !search.is_empty()),
     )
     .await
 }
