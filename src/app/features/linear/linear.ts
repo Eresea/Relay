@@ -3683,6 +3683,8 @@ export class Linear {
   private projectOpenRequest = 0;
   private issueDetailRequest = 0;
   private initiativeRequest = 0;
+  private projectUpdatesRequest = 0;
+  private milestoneRequest = 0;
 
   protected pageTitle(): string {
     return {
@@ -5786,6 +5788,8 @@ export class Linear {
       this.projectUpdates.update((updates) =>
         updates.map((update) => (update.id === updated.id ? updated : update)),
       );
+      const projectId = this.selectedProject()?.id;
+      if (projectId) this.saveProjectUpdatesCache(projectId, this.includeArchivedProjectUpdates());
       this.editingProjectUpdateId.set(null);
     } catch (error) {
       this.error.set(error instanceof Error ? error.message : String(error));
@@ -5810,6 +5814,7 @@ export class Linear {
         this.newProjectUpdateHealth(),
       );
       this.projectUpdates.update((updates) => [update, ...updates]);
+      this.saveProjectUpdatesCache(project.id, this.includeArchivedProjectUpdates());
       this.newProjectUpdateBody.set('');
     } catch (error) {
       this.error.set(error instanceof Error ? error.message : String(error));
@@ -5835,6 +5840,7 @@ export class Linear {
         this.newMilestoneDate(),
       );
       this.milestones.update((items) => [...items, milestone]);
+      this.saveMilestoneCache(project.id);
       this.newMilestoneName.set('');
       this.newMilestoneDescription.set('');
       this.newMilestoneDate.set('');
@@ -5870,6 +5876,8 @@ export class Linear {
       this.milestones.update((items) =>
         items.map((item) => (item.id === updated.id ? updated : item)),
       );
+      const projectId = this.selectedProject()?.id;
+      if (projectId) this.saveMilestoneCache(projectId);
       this.editingMilestoneId.set(null);
     } catch (error) {
       this.error.set(error instanceof Error ? error.message : String(error));
@@ -5893,6 +5901,8 @@ export class Linear {
     try {
       await this.tauri.linearDeleteMilestone(connection.organizationId, milestone.id);
       this.milestones.update((items) => items.filter((item) => item.id !== milestone.id));
+      const projectId = this.selectedProject()?.id;
+      if (projectId) this.saveMilestoneCache(projectId);
       if (this.editingMilestoneId() === milestone.id) this.editingMilestoneId.set(null);
       this.confirmDeleteMilestoneId.set(null);
     } catch (error) {
@@ -6069,13 +6079,43 @@ export class Linear {
   private async loadMilestones(projectId: string): Promise<void> {
     const connection = this.selected();
     if (!connection) return;
+    const requestId = ++this.milestoneRequest;
+    const cacheKey = this.milestoneCacheKey(connection, projectId);
+    const cached = this.readLocal<readonly LinearMilestone[]>(cacheKey);
+    const hasCache = Array.isArray(cached);
+    const isVisible = () =>
+      this.selected()?.organizationId === connection.organizationId &&
+      (this.selectedProject()?.id === projectId ||
+        this.issueDetail()?.issue.project?.id === projectId);
+    if (hasCache && isVisible()) this.milestones.set(cached);
     try {
-      this.milestones.set(
-        await this.tauri.linearProjectMilestones(connection.organizationId, projectId),
+      const milestones = await this.tauri.linearProjectMilestones(
+        connection.organizationId,
+        projectId,
       );
+      if (requestId !== this.milestoneRequest || !isVisible()) return;
+      this.milestones.set(milestones);
+      this.writeLocal(cacheKey, milestones);
     } catch (error) {
-      this.error.set(error instanceof Error ? error.message : String(error));
+      if (requestId !== this.milestoneRequest || !isVisible()) return;
+      this.error.set(
+        hasCache
+          ? 'Linear is unavailable. Showing saved milestones.'
+          : error instanceof Error
+            ? error.message
+            : String(error),
+      );
     }
+  }
+
+  private saveMilestoneCache(projectId: string): void {
+    const connection = this.selected();
+    if (connection)
+      this.writeLocal(this.milestoneCacheKey(connection, projectId), this.milestones());
+  }
+
+  private milestoneCacheKey(connection: LinearConnection, projectId: string): string {
+    return `relay.linear.milestones.${connection.organizationId}.${connection.viewerId}.${projectId}`;
   }
 
   private async loadProjectResources(projectId: string): Promise<void> {
@@ -6375,17 +6415,56 @@ export class Linear {
   private async loadProjectUpdates(projectId: string): Promise<void> {
     const connection = this.selected();
     if (!connection) return;
+    const requestId = ++this.projectUpdatesRequest;
+    const includeArchived = this.includeArchivedProjectUpdates();
+    const cacheKey = this.projectUpdatesCacheKey(connection, projectId, includeArchived);
+    const cached = this.readLocal<readonly LinearProjectUpdate[]>(cacheKey);
+    const hasCache = Array.isArray(cached);
+    if (hasCache && this.selectedProject()?.id === projectId) this.projectUpdates.set(cached);
     try {
-      this.projectUpdates.set(
-        await this.tauri.linearProjectUpdates(
-          connection.organizationId,
-          projectId,
-          this.includeArchivedProjectUpdates(),
-        ),
+      const updates = await this.tauri.linearProjectUpdates(
+        connection.organizationId,
+        projectId,
+        includeArchived,
       );
+      if (
+        requestId !== this.projectUpdatesRequest ||
+        this.selected()?.organizationId !== connection.organizationId ||
+        this.selectedProject()?.id !== projectId
+      ) {
+        return;
+      }
+      this.projectUpdates.set(updates);
+      this.writeLocal(cacheKey, updates);
     } catch (error) {
-      this.error.set(error instanceof Error ? error.message : String(error));
+      if (requestId !== this.projectUpdatesRequest) return;
+      this.error.set(
+        hasCache
+          ? 'Linear is unavailable. Showing saved project updates.'
+          : error instanceof Error
+            ? error.message
+            : String(error),
+      );
     }
+  }
+
+  private saveProjectUpdatesCache(projectId: string, includeArchived: boolean): void {
+    const connection = this.selected();
+    if (connection) {
+      this.writeLocal(
+        this.projectUpdatesCacheKey(connection, projectId, includeArchived),
+        this.projectUpdates(),
+      );
+    }
+  }
+
+  private projectUpdatesCacheKey(
+    connection: LinearConnection,
+    projectId: string,
+    includeArchived: boolean,
+  ): string {
+    const archived = includeArchived ? '.all' : '';
+    return `relay.linear.projectUpdates.${connection.organizationId}.${connection.viewerId}.${projectId}${archived}`;
   }
 
   protected async createIssue(event: Event): Promise<void> {
