@@ -45,6 +45,22 @@ export interface LinearIssueRelationDraft {
   type: LinearIssueRelationType;
 }
 
+export interface LinearIssueLabelDraft {
+  name: string;
+  teamId: string;
+  color: string;
+}
+
+export function isLinearIssueLabelDraft(value: unknown): value is LinearIssueLabelDraft {
+  if (!value || typeof value !== 'object') return false;
+  const draft = value as Partial<LinearIssueLabelDraft>;
+  return (
+    typeof draft.name === 'string' &&
+    typeof draft.teamId === 'string' &&
+    typeof draft.color === 'string'
+  );
+}
+
 export function isLinearIssueRelationDraft(value: unknown): value is LinearIssueRelationDraft {
   if (!value || typeof value !== 'object') return false;
   const draft = value as Partial<LinearIssueRelationDraft>;
@@ -149,6 +165,7 @@ const organizationCacheCategories = [
   'issueCommentDraft',
   'issueCommentEditDraft',
   'issueDetail',
+  'issueLabelDraft',
   'issueRelationDraft',
   'issues',
   'milestones',

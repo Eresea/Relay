@@ -7,6 +7,7 @@ import {
   isLinearInitiativeDraft,
   isLinearInitiativeUpdateDraft,
   isLinearIssueRelationDraft,
+  isLinearIssueLabelDraft,
   isLinearOrganizationCacheKey,
   isLinearProjectPlanningDraft,
   isLinearProjectDraft,
@@ -197,6 +198,7 @@ describe('Linear organization cache cleanup', () => {
       'relay.linear.projectIssueDraft.org.project',
       'relay.linear.issueDetail.org.viewer.issue',
       'relay.linear.issueRelationDraft.org.viewer.issue',
+      'relay.linear.issueLabelDraft.org.viewer',
       'relay.linear.subIssueDraft.org.viewer.issue',
       'relay.linear.projectIssues.org.viewer.project',
       'relay.linear.projectPlanningDraft.org.viewer.project',
@@ -277,6 +279,17 @@ describe('Linear issue relation drafts', () => {
   it('validates the identifier and supported relationship type', () => {
     expect(isLinearIssueRelationDraft({ identifier: 'ENG-123', type: 'blocks' })).toBe(true);
     expect(isLinearIssueRelationDraft({ identifier: 'ENG-123', type: 'unknown' })).toBe(false);
+  });
+});
+
+describe('Linear issue label drafts', () => {
+  it('validates the label name, team scope, and color before restoring them', () => {
+    expect(
+      isLinearIssueLabelDraft({ name: 'Needs review', teamId: 'team-1', color: '#123456' }),
+    ).toBe(true);
+    expect(isLinearIssueLabelDraft({ name: 'Needs review', teamId: 'team-1', color: 3 })).toBe(
+      false,
+    );
   });
 });
 

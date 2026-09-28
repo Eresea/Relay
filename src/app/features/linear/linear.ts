@@ -48,6 +48,7 @@ import {
   isLinearInitiativeDraft,
   isLinearInitiativeUpdateDraft,
   isLinearIssueRelationDraft,
+  isLinearIssueLabelDraft,
   isLinearProjectDraft,
   isLinearOrganizationCacheKey,
   isLinearProjectDocumentDraft,
@@ -72,6 +73,7 @@ import {
   type LinearInitiativeDraft,
   type LinearInitiativeUpdateDraft,
   type LinearIssueRelationDraft,
+  type LinearIssueLabelDraft,
   type LinearProjectDraft,
   type LinearProjectPlanningDraft,
 } from './linear-state';
@@ -3042,20 +3044,23 @@ function isLinearTeamList(value: unknown): value is readonly LinearTeam[] {
           } @else {
             <section class="issues" aria-label="Linear issue labels">
               <form class="project-edit" (submit)="createLabel($event)">
+                @if (newLabelName()) {
+                  <p class="hint">Label draft saved on this device.</p>
+                }
                 <label>
                   <span>Label name</span>
                   <input
                     required
                     maxlength="255"
                     [value]="newLabelName()"
-                    (input)="newLabelName.set($any($event.target).value)"
+                    (input)="updateIssueLabelDraft('name', $any($event.target).value)"
                   />
                 </label>
                 <label>
                   <span>Scope</span>
                   <select
                     [value]="newLabelTeamId()"
-                    (change)="newLabelTeamId.set($any($event.target).value)"
+                    (change)="updateIssueLabelDraft('teamId', $any($event.target).value)"
                   >
                     <option value="">Workspace</option>
                     @for (team of teams(); track team.id) {
@@ -3068,7 +3073,7 @@ function isLinearTeamList(value: unknown): value is readonly LinearTeam[] {
                   <input
                     type="color"
                     [value]="newLabelColor()"
-                    (input)="newLabelColor.set($any($event.target).value)"
+                    (input)="updateIssueLabelDraft('color', $any($event.target).value)"
                   />
                 </label>
                 <umbra-button size="sm" [disabled]="creatingLabel() || !newLabelName().trim()">
@@ -3907,6 +3912,7 @@ export class Linear {
     this.cycles.set({});
     this.restoreIssueDraft(connection);
     this.restoreInitiativeDraft(connection);
+    this.restoreIssueLabelDraft(connection);
     this.restorePendingIssueUpdates(connection);
     this.issueCacheStale.set(false);
     this.projectCacheStale.set(false);
@@ -3915,7 +3921,6 @@ export class Linear {
     this.confirmArchiveIssueId.set(null);
     this.confirmArchiveIssueDetailId.set(null);
     this.confirmDeleteIssueRelationId.set(null);
-    this.newLabelTeamId.set('');
     this.editingLabelId.set(null);
     this.confirmDeleteLabelId.set(null);
     this.codexContext.set(null);
@@ -4976,6 +4981,10 @@ export class Linear {
     return `relay.linear.issueRelationDraft.${connection.organizationId}.${connection.viewerId}.${issueId}`;
   }
 
+  private issueLabelDraftKey(connection: LinearConnection): string {
+    return `relay.linear.issueLabelDraft.${connection.organizationId}.${connection.viewerId}`;
+  }
+
   private subIssueDraftKey(connection: LinearConnection, issueId: string): string {
     return `relay.linear.subIssueDraft.${connection.organizationId}.${connection.viewerId}.${issueId}`;
   }
@@ -5010,6 +5019,35 @@ export class Linear {
     if (connection) {
       this.writeLocal(this.subIssueDraftKey(connection, parent.id), title || null);
     }
+  }
+
+  protected updateIssueLabelDraft(field: keyof LinearIssueLabelDraft, value: string): void {
+    if (field === 'name') this.newLabelName.set(value);
+    else if (field === 'teamId') this.newLabelTeamId.set(value);
+    else this.newLabelColor.set(value);
+    this.saveIssueLabelDraft();
+  }
+
+  private saveIssueLabelDraft(): void {
+    const connection = this.selected();
+    if (!connection) return;
+    const draft: LinearIssueLabelDraft = {
+      name: this.newLabelName(),
+      teamId: this.newLabelTeamId(),
+      color: this.newLabelColor(),
+    };
+    this.writeLocal(
+      this.issueLabelDraftKey(connection),
+      draft.name || draft.teamId || draft.color !== '#6b7280' ? draft : null,
+    );
+  }
+
+  private restoreIssueLabelDraft(connection: LinearConnection): void {
+    const stored = this.readLocal<unknown>(this.issueLabelDraftKey(connection));
+    const draft = isLinearIssueLabelDraft(stored) ? stored : null;
+    this.newLabelName.set(draft?.name ?? '');
+    this.newLabelTeamId.set(draft?.teamId ?? '');
+    this.newLabelColor.set(draft?.color ?? '#6b7280');
   }
 
   private readProjectDocumentDraft(
@@ -7224,10 +7262,16 @@ export class Linear {
         this.newLabelColor(),
         this.newLabelTeamId() || null,
       );
-      if (this.selected()?.organizationId === connection.organizationId) {
+      this.writeLocal(this.issueLabelDraftKey(connection), null);
+      if (
+        this.selected()?.organizationId === connection.organizationId &&
+        this.selected()?.viewerId === connection.viewerId
+      ) {
         this.labels.update((items) => [...items, label]);
+        this.newLabelName.set('');
+        this.newLabelTeamId.set('');
+        this.newLabelColor.set('#6b7280');
       }
-      this.newLabelName.set('');
     } catch (error) {
       this.error.set(error instanceof Error ? error.message : String(error));
     } finally {
