@@ -81,9 +81,32 @@ import { UmbraButtonComponent } from '@umbra/components/umbra-button/umbra-butto
             >
               {{ connection.pausedOnDevice ? 'Resume on this device' : 'Pause on this device' }}
             </umbra-button>
-            <umbra-button size="sm" variant="outline" (click)="disconnect(connection)">
-              Disconnect everywhere
-            </umbra-button>
+            @if (confirmDisconnectId() === connection.organizationId) {
+              <span class="hint">Revoke Linear access on all devices?</span>
+              <umbra-button
+                size="sm"
+                variant="destructive"
+                [disabled]="disconnectingId() === connection.organizationId"
+                (click)="disconnect(connection)"
+              >
+                {{
+                  disconnectingId() === connection.organizationId
+                    ? 'Disconnecting'
+                    : 'Confirm disconnect'
+                }}
+              </umbra-button>
+              <umbra-button size="sm" variant="link" (click)="confirmDisconnectId.set(null)">
+                Cancel
+              </umbra-button>
+            } @else {
+              <umbra-button
+                size="sm"
+                variant="outline"
+                (click)="confirmDisconnectId.set(connection.organizationId)"
+              >
+                Disconnect everywhere
+              </umbra-button>
+            }
           </div>
         </div>
       } @empty {
@@ -146,6 +169,8 @@ export class LinearSettings {
   protected readonly connections = signal<readonly LinearConnection[]>([]);
   protected readonly oauthConfigured = signal(false);
   protected readonly pending = signal(false);
+  protected readonly confirmDisconnectId = signal<string | null>(null);
+  protected readonly disconnectingId = signal<string | null>(null);
   protected readonly error = signal<string | null>(null);
 
   constructor() {
@@ -186,12 +211,19 @@ export class LinearSettings {
   }
 
   protected async disconnect(connection: LinearConnection): Promise<void> {
+    if (this.confirmDisconnectId() !== connection.organizationId || this.disconnectingId()) {
+      return;
+    }
+    this.disconnectingId.set(connection.organizationId);
     try {
       await this.tauri.linearDisconnect(connection.organizationId);
+      this.confirmDisconnectId.set(null);
       await this.refresh();
     } catch (error) {
       this.error.set(error instanceof Error ? error.message : String(error));
       await this.refresh();
+    } finally {
+      this.disconnectingId.set(null);
     }
   }
 

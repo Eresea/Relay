@@ -923,9 +923,38 @@ interface LinearIssueDraft {
                   >
                     {{ includeArchivedIssues() ? 'Hide archived' : 'Include archived' }}
                   </umbra-button>
-                  <umbra-button size="sm" variant="outline" (click)="disconnectSelected()">
-                    Disconnect everywhere
-                  </umbra-button>
+                  @if (confirmDisconnectOrganizationId() === selected()?.organizationId) {
+                    <span class="hint">Revoke Linear access on all devices?</span>
+                    <umbra-button
+                      size="sm"
+                      variant="destructive"
+                      [disabled]="disconnectingOrganizationId() === selected()?.organizationId"
+                      (click)="disconnectSelected()"
+                    >
+                      {{
+                        disconnectingOrganizationId() === selected()?.organizationId
+                          ? 'Disconnecting'
+                          : 'Confirm disconnect'
+                      }}
+                    </umbra-button>
+                    <umbra-button
+                      size="sm"
+                      variant="link"
+                      (click)="confirmDisconnectOrganizationId.set(null)"
+                    >
+                      Cancel
+                    </umbra-button>
+                  } @else {
+                    <umbra-button
+                      size="sm"
+                      variant="outline"
+                      (click)="
+                        confirmDisconnectOrganizationId.set(selected()?.organizationId ?? null)
+                      "
+                    >
+                      Disconnect everywhere
+                    </umbra-button>
+                  }
                 </div>
               </div>
               @if (teams().length) {
@@ -3343,6 +3372,8 @@ export class Linear {
 
   protected readonly connections = signal<readonly LinearConnection[]>([]);
   protected readonly selected = signal<LinearConnection | null>(null);
+  protected readonly confirmDisconnectOrganizationId = signal<string | null>(null);
+  protected readonly disconnectingOrganizationId = signal<string | null>(null);
   protected readonly issues = signal<readonly LinearIssue[]>([]);
   protected readonly includeArchivedIssues = signal(false);
   protected readonly issueStateId = signal('');
@@ -6111,7 +6142,14 @@ export class Linear {
 
   protected async disconnectSelected(): Promise<void> {
     const connection = this.selected();
-    if (!connection) return;
+    if (
+      !connection ||
+      this.confirmDisconnectOrganizationId() !== connection.organizationId ||
+      this.disconnectingOrganizationId()
+    ) {
+      return;
+    }
+    this.disconnectingOrganizationId.set(connection.organizationId);
     try {
       const warning = await this.tauri.linearDisconnect(connection.organizationId);
       this.writeLocal(this.issueCacheKey(connection), null);
@@ -6121,6 +6159,7 @@ export class Linear {
         (entry) => entry.organizationId !== connection.organizationId,
       );
       this.connections.set(connections);
+      this.confirmDisconnectOrganizationId.set(null);
       const next = connections.find((entry) => !entry.pausedOnDevice) ?? null;
       this.selected.set(next);
       this.issues.set([]);
@@ -6129,6 +6168,8 @@ export class Linear {
     } catch (error) {
       this.error.set(error instanceof Error ? error.message : String(error));
       await this.refreshConnections();
+    } finally {
+      this.disconnectingOrganizationId.set(null);
     }
   }
 
