@@ -43,8 +43,10 @@ import {
 import { UmbraButtonComponent } from '@umbra/components/umbra-button/umbra-button.component';
 import {
   codexFailureRestoreTarget,
+  isLinearCommentDraft,
   isLinearProjectDocumentDraft,
   isPendingLinearIssueUpdate,
+  linearCommentDraftConflicts,
   linearProjectDocumentDraftConflicts,
   linearIssueConflicts,
   linearIssueValues,
@@ -689,13 +691,43 @@ interface LinearIssueDraft {
                             maxlength="10000"
                             rows="3"
                             [value]="editCommentBody()"
-                            (input)="editCommentBody.set($any($event.target).value)"
+                            (input)="updateCommentEditDraft(comment, $any($event.target).value)"
                           ></textarea>
                         </label>
+                        @if (commentEditConflict()) {
+                          <div
+                            class="issue-conflicts"
+                            role="group"
+                            aria-label="Comment draft conflict"
+                          >
+                            <p class="hint">
+                              This comment changed in Linear while your draft was saved.
+                            </p>
+                            <div class="issue-actions">
+                              <umbra-button
+                                size="sm"
+                                variant="outline"
+                                type="button"
+                                (click)="resolveCommentEditConflict(comment, false)"
+                              >
+                                Use Linear’s version
+                              </umbra-button>
+                              <umbra-button
+                                size="sm"
+                                type="button"
+                                (click)="resolveCommentEditConflict(comment, true)"
+                              >
+                                Keep my edit
+                              </umbra-button>
+                            </div>
+                          </div>
+                        }
                         <div class="issue-actions">
                           <umbra-button
                             size="sm"
-                            [disabled]="savingComment() || !editCommentBody().trim()"
+                            [disabled]="
+                              savingComment() || commentEditConflict() || !editCommentBody().trim()
+                            "
                           >
                             {{ savingComment() ? 'Saving' : 'Save comment' }}
                           </umbra-button>
@@ -703,7 +735,7 @@ interface LinearIssueDraft {
                             size="sm"
                             variant="link"
                             type="button"
-                            (click)="editingCommentId.set(null)"
+                            (click)="cancelCommentEdit()"
                           >
                             Cancel
                           </umbra-button>
@@ -3574,6 +3606,7 @@ export class Linear {
   protected readonly newComment = signal('');
   protected readonly editingCommentId = signal<string | null>(null);
   protected readonly editCommentBody = signal('');
+  protected readonly commentEditConflict = signal(false);
   protected readonly savingComment = signal(false);
   protected readonly deletingCommentId = signal<string | null>(null);
   protected readonly confirmDeleteCommentId = signal<string | null>(null);
@@ -3968,6 +4001,8 @@ export class Linear {
     this.confirmArchiveIssueDetailId.set(null);
     this.confirmDeleteIssueRelationId.set(null);
     this.editingIssueDetailsId.set(null);
+    this.editingCommentId.set(null);
+    this.commentEditConflict.set(false);
     this.codexRequest.set(null);
     this.error.set(null);
     try {
@@ -4389,9 +4424,47 @@ export class Linear {
   }
 
   protected editComment(comment: LinearComment): void {
+    const connection = this.selected();
+    const draft = connection
+      ? this.readLocal<unknown>(this.issueCommentEditDraftKey(connection, comment.id))
+      : null;
     this.editingCommentId.set(comment.id);
-    this.editCommentBody.set(comment.body);
+    this.editCommentBody.set(isLinearCommentDraft(draft) ? draft.body : comment.body);
+    this.commentEditConflict.set(
+      isLinearCommentDraft(draft) && linearCommentDraftConflicts(draft, comment.body),
+    );
     this.confirmDeleteCommentId.set(null);
+  }
+
+  protected updateCommentEditDraft(comment: LinearComment, body: string): void {
+    this.editCommentBody.set(body);
+    const connection = this.selected();
+    if (connection) {
+      this.writeLocal(this.issueCommentEditDraftKey(connection, comment.id), {
+        body,
+        originalBody: comment.body,
+      });
+    }
+  }
+
+  protected resolveCommentEditConflict(comment: LinearComment, keepDraft: boolean): void {
+    const connection = this.selected();
+    if (!connection) return;
+    if (keepDraft) {
+      this.writeLocal(this.issueCommentEditDraftKey(connection, comment.id), {
+        body: this.editCommentBody(),
+        originalBody: comment.body,
+      });
+    } else {
+      this.editCommentBody.set(comment.body);
+      this.writeLocal(this.issueCommentEditDraftKey(connection, comment.id), null);
+    }
+    this.commentEditConflict.set(false);
+  }
+
+  protected cancelCommentEdit(): void {
+    this.editingCommentId.set(null);
+    this.commentEditConflict.set(false);
   }
 
   protected async saveComment(event: Event, current: LinearComment): Promise<void> {
@@ -4399,7 +4472,8 @@ export class Linear {
     const connection = this.selected();
     const detail = this.issueDetail();
     const body = this.editCommentBody().trim();
-    if (!connection || !detail || !body || this.savingComment()) return;
+    if (!connection || !detail || !body || this.savingComment() || this.commentEditConflict())
+      return;
     this.savingComment.set(true);
     this.error.set(null);
     try {
@@ -4416,7 +4490,9 @@ export class Linear {
             }
           : item,
       );
+      this.writeLocal(this.issueCommentEditDraftKey(connection, current.id), null);
       this.editingCommentId.set(null);
+      this.commentEditConflict.set(false);
     } catch (error) {
       this.error.set(error instanceof Error ? error.message : String(error));
     } finally {
@@ -4639,6 +4715,10 @@ export class Linear {
 
   private issueCommentDraftKey(connection: LinearConnection, issueId: string): string {
     return `relay.linear.issueCommentDraft.${connection.organizationId}.${connection.viewerId}.${issueId}`;
+  }
+
+  private issueCommentEditDraftKey(connection: LinearConnection, commentId: string): string {
+    return `relay.linear.issueCommentEditDraft.${connection.organizationId}.${connection.viewerId}.${commentId}`;
   }
 
   private readProjectDocumentDraft(

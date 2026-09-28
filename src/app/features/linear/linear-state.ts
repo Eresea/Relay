@@ -87,6 +87,24 @@ export interface LinearProjectDocumentDraft {
   updatedAt: string;
 }
 
+export interface LinearCommentDraft {
+  body: string;
+  originalBody: string;
+}
+
+export function isLinearCommentDraft(value: unknown): value is LinearCommentDraft {
+  if (!value || typeof value !== 'object') return false;
+  const draft = value as Partial<LinearCommentDraft>;
+  return typeof draft.body === 'string' && typeof draft.originalBody === 'string';
+}
+
+export function linearCommentDraftConflicts(
+  draft: LinearCommentDraft,
+  currentBody: string,
+): boolean {
+  return draft.originalBody !== currentBody;
+}
+
 export function isLinearProjectDocumentDraft(value: unknown): value is LinearProjectDocumentDraft {
   if (!value || typeof value !== 'object') return false;
   const draft = value as Partial<LinearProjectDocumentDraft>;

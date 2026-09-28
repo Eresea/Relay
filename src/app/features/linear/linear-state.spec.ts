@@ -2,8 +2,10 @@ import { describe, expect, it } from 'vitest';
 
 import {
   codexFailureRestoreTarget,
+  isLinearCommentDraft,
   isLinearProjectDocumentDraft,
   linearCodexPrompt,
+  linearCommentDraftConflicts,
   linearEstimateOptions,
   linearIssueConflicts,
   linearIssueValues,
@@ -126,6 +128,16 @@ describe('Linear issue update drafts', () => {
       },
     ]);
     expect(linearIssueConflicts(issue, { title: 'Remote title' }, base)).toEqual([]);
+  });
+});
+
+describe('Linear comment edit drafts', () => {
+  it('validates saved drafts and detects remote changes against their original body', () => {
+    const draft = { body: 'Offline edit', originalBody: 'Original comment' };
+    expect(isLinearCommentDraft(draft)).toBe(true);
+    expect(isLinearCommentDraft({ body: 42, originalBody: 'Original comment' })).toBe(false);
+    expect(linearCommentDraftConflicts(draft, 'Original comment')).toBe(false);
+    expect(linearCommentDraftConflicts(draft, 'Remote edit')).toBe(true);
   });
 });
 
