@@ -4736,6 +4736,14 @@ export class Linear {
     });
   }
 
+  private saveProjectIssueCache(connection: LinearConnection, projectId: string): void {
+    this.writeLocal(this.projectIssueCacheKey(connection, projectId), {
+      issues: this.projectIssues(),
+      endCursor: this.nextProjectIssueCursor,
+      hasNextPage: this.projectIssuesHasNextPage(),
+    } satisfies LinearIssuePage);
+  }
+
   private projectResourcesCacheKey(connection: LinearConnection, projectId: string): string {
     return `relay.linear.projectResources.${connection.organizationId}.${projectId}`;
   }
@@ -4842,7 +4850,11 @@ export class Linear {
       detail?.issue.id === updated.id ? { ...detail, issue: updated } : detail,
     );
     const connection = this.selected();
-    if (connection) this.saveIssueCache(connection);
+    if (connection) {
+      this.saveIssueCache(connection);
+      const project = this.selectedProject();
+      if (project) this.saveProjectIssueCache(connection, project.id);
+    }
   }
 
   private matchesIssueQuery(issue: LinearIssue): boolean {
@@ -6589,8 +6601,11 @@ export class Linear {
         this.newProjectIssueStateId() || undefined,
         this.newProjectIssueCycleId() || undefined,
       );
-      if (this.matchesProjectIssueQuery(issue)) {
-        this.projectIssues.update((issues) => [issue, ...issues]);
+      if (this.selectedProject()?.id === project.id) {
+        if (this.matchesProjectIssueQuery(issue)) {
+          this.projectIssues.update((issues) => [issue, ...issues]);
+        }
+        this.saveProjectIssueCache(connection, project.id);
       }
       this.newProjectIssueTitle.set('');
       this.newProjectIssueDescription.set('');
