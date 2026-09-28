@@ -12,6 +12,7 @@ describe('Projects', () => {
     scanWorkspaces: vi.fn(),
     githubRepositories: vi.fn(),
     githubPullRequests: vi.fn(),
+    openUrl: vi.fn(),
     linearStatus: vi.fn(),
     linearProjects: vi.fn(),
   };
@@ -148,6 +149,16 @@ describe('Projects', () => {
         }),
       ]),
     );
+
+    let requestedProject: { organizationId: string; projectId: string } | undefined;
+    fixture.componentInstance.linearProjectSelected.subscribe((request) => {
+      requestedProject = request;
+    });
+    (fixture.nativeElement as HTMLElement)
+      .querySelector<HTMLButtonElement>('.linear-project-link')!
+      .click();
+    expect(requestedProject).toEqual({ organizationId: 'org-1', projectId: 'linear-project-1' });
+    expect(bridge.openUrl).not.toHaveBeenCalled();
   });
 
   it('keeps a custom icon when the project is rescanned', async () => {

@@ -466,13 +466,16 @@ const RAIL_EXPANDED_SETTING_KEY = 'rail.expanded';
             (threadHandled)="requestedAgentThreadId.set(null)"
           />
         } @else if (view() === 'linear') {
-          <rl-linear />
+          <rl-linear
+            [projectRequest]="linearProjectRequest()"
+            (projectRequestHandled)="handleLinearProjectRequest($event)"
+          />
         } @else if (view() === 'vault') {
           <rl-vault />
         } @else if (view() === 'runtime') {
           <rl-runtime />
         } @else {
-          <rl-projects />
+          <rl-projects (linearProjectSelected)="openLinearProject($event)" />
         }
       </main>
     </div>
@@ -1142,6 +1145,10 @@ export class Home {
     'home' | 'linear' | 'settings' | 'vault' | 'runtime' | 'codex' | 'account'
   >('home');
   protected readonly requestedAgentThreadId = signal<string | null>(null);
+  protected readonly linearProjectRequest = signal<{
+    organizationId: string;
+    projectId: string;
+  } | null>(null);
   /** Starts collapsed — the safe default while the persisted value (below) is
    * still loading — then reconciles with whatever the user last left it as. */
   protected readonly railExpanded = signal(false);
@@ -1155,6 +1162,23 @@ export class Home {
     this.authView.set('social');
     this.account.error.set('');
     this.accountDialogOpen.set(true);
+  }
+
+  protected openLinearProject(request: { organizationId: string; projectId: string }): void {
+    this.linearProjectRequest.set(request);
+    this.view.set('linear');
+  }
+
+  protected handleLinearProjectRequest(
+    request: { organizationId: string; projectId: string },
+  ): void {
+    const current = this.linearProjectRequest();
+    if (
+      current?.organizationId === request.organizationId &&
+      current.projectId === request.projectId
+    ) {
+      this.linearProjectRequest.set(null);
+    }
   }
 
   protected closeNexusDialog(): void {

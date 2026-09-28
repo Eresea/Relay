@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, inject, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, inject, output, signal } from '@angular/core';
 
 import { BackgroundTasks } from '@core/background-tasks';
 import {
@@ -357,6 +357,11 @@ import {
   `,
 })
 export class Projects {
+  readonly linearProjectSelected = output<{
+    organizationId: string;
+    projectId: string;
+  }>();
+
   private static readonly CACHE_KEY = 'projects.scan';
   private readonly tauri = inject(TauriBridge);
   private readonly backgroundTasks = inject(BackgroundTasks);
@@ -473,7 +478,10 @@ export class Projects {
   }
 
   protected openLinearProject(project: LinkedLinearProject): void {
-    void this.tauri.openUrl(project.url);
+    this.linearProjectSelected.emit({
+      organizationId: project.organizationId,
+      projectId: project.id,
+    });
   }
 
   protected runProjectAction(project: ProjectSummary, action: ProjectAction): void {

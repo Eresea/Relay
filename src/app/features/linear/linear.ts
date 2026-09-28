@@ -5,6 +5,8 @@ import {
   computed,
   effect,
   inject,
+  input,
+  output,
   signal,
 } from '@angular/core';
 
@@ -3366,6 +3368,9 @@ interface LinearIssueDraft {
   `,
 })
 export class Linear {
+  readonly projectRequest = input<{ organizationId: string; projectId: string } | null>(null);
+  readonly projectRequestHandled = output<{ organizationId: string; projectId: string }>();
+
   private readonly tauri = inject(TauriBridge);
   protected readonly nexus = inject(NexusAccount);
   private readonly destroyRef = inject(DestroyRef);
@@ -3602,6 +3607,7 @@ export class Linear {
   private nextCursor: string | null = null;
   private nextProjectIssueCursor: string | null = null;
   private projectIssuesRequest = 0;
+  private projectOpenRequest = 0;
 
   protected pageTitle(): string {
     return {
@@ -3627,9 +3633,11 @@ export class Linear {
     void this.tauri
       .linearOauthConfigured()
       .then((configured) => this.oauthConfigured.set(configured));
-    void this.refreshConnections();
     effect(() => {
-      if (this.nexus.status().connected) void this.refreshConnections();
+      this.nexus.status();
+      const request = this.projectRequest();
+      if (request) void this.openRequestedProject(request);
+      else void this.refreshConnections();
     });
     void this.tauri
       .onLinearAuth((event) => {
@@ -3661,6 +3669,32 @@ export class Linear {
       this.pending.set(false);
     } catch (error) {
       this.error.set(error instanceof Error ? error.message : String(error));
+    }
+  }
+
+  private async openRequestedProject(request: { organizationId: string; projectId: string }) {
+    const requestId = ++this.projectOpenRequest;
+    this.error.set(null);
+    try {
+      await this.refreshConnections(request.organizationId);
+      if (requestId !== this.projectOpenRequest) return;
+      const connection = this.selected();
+      if (!connection || connection.organizationId !== request.organizationId) {
+        throw new Error('Reconnect this Linear workspace on this device to open the project.');
+      }
+      const project = (await this.tauri.linearProjects(connection.organizationId, true)).find(
+        (item) => item.id === request.projectId,
+      );
+      if (!project) throw new Error('This Linear project is no longer available.');
+      if (requestId !== this.projectOpenRequest) return;
+      this.section.set('projects');
+      await this.openProject(project);
+    } catch (error) {
+      if (requestId === this.projectOpenRequest) {
+        this.error.set(error instanceof Error ? error.message : String(error));
+      }
+    } finally {
+      if (requestId === this.projectOpenRequest) this.projectRequestHandled.emit(request);
     }
   }
 
