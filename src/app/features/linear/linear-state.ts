@@ -17,6 +17,37 @@ export interface LinearProjectPlanningDraft {
   milestoneDate: string;
 }
 
+export interface LinearInitiativeDraft {
+  name: string;
+  description: string;
+  targetDate: string;
+}
+
+export function isLinearInitiativeDraft(value: unknown): value is LinearInitiativeDraft {
+  if (!value || typeof value !== 'object') return false;
+  const draft = value as Partial<LinearInitiativeDraft>;
+  return (
+    typeof draft.name === 'string' &&
+    typeof draft.description === 'string' &&
+    typeof draft.targetDate === 'string'
+  );
+}
+
+export interface LinearInitiativeUpdateDraft {
+  body: string;
+  health: LinearProjectHealth;
+}
+
+export function isLinearInitiativeUpdateDraft(
+  value: unknown,
+): value is LinearInitiativeUpdateDraft {
+  if (!value || typeof value !== 'object') return false;
+  const draft = value as Partial<LinearInitiativeUpdateDraft>;
+  return (
+    typeof draft.body === 'string' && ['onTrack', 'atRisk', 'offTrack'].includes(draft.health ?? '')
+  );
+}
+
 export function isLinearProjectPlanningDraft(value: unknown): value is LinearProjectPlanningDraft {
   if (!value || typeof value !== 'object') return false;
   const draft = value as Partial<LinearProjectPlanningDraft>;
@@ -32,6 +63,8 @@ export function isLinearProjectPlanningDraft(value: unknown): value is LinearPro
 const organizationCacheCategories = [
   'cycles',
   'initiatives',
+  'initiativeDraft',
+  'initiativeUpdateDraft',
   'issueCommentDraft',
   'issueCommentEditDraft',
   'issueDetail',

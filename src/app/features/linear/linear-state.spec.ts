@@ -3,6 +3,8 @@ import { describe, expect, it } from 'vitest';
 import {
   codexFailureRestoreTarget,
   isLinearCommentDraft,
+  isLinearInitiativeDraft,
+  isLinearInitiativeUpdateDraft,
   isLinearOrganizationCacheKey,
   isLinearProjectPlanningDraft,
   isLinearProjectDocumentDraft,
@@ -223,6 +225,19 @@ describe('Linear project planning drafts', () => {
         milestoneDate: '2026-10-10',
       }),
     ).toBe(false);
+  });
+});
+
+describe('Linear roadmap drafts', () => {
+  it('validates initiative creation and update drafts before restoring them', () => {
+    expect(
+      isLinearInitiativeDraft({ name: 'Roadmap', description: 'Q4', targetDate: '2026-12-31' }),
+    ).toBe(true);
+    expect(isLinearInitiativeDraft({ name: 'Roadmap', description: 4, targetDate: '' })).toBe(
+      false,
+    );
+    expect(isLinearInitiativeUpdateDraft({ body: 'At risk', health: 'atRisk' })).toBe(true);
+    expect(isLinearInitiativeUpdateDraft({ body: 'At risk', health: 'unknown' })).toBe(false);
   });
 });
 

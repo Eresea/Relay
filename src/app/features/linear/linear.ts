@@ -44,6 +44,8 @@ import { UmbraButtonComponent } from '@umbra/components/umbra-button/umbra-butto
 import {
   codexFailureRestoreTarget,
   isLinearCommentDraft,
+  isLinearInitiativeDraft,
+  isLinearInitiativeUpdateDraft,
   isLinearOrganizationCacheKey,
   isLinearProjectDocumentDraft,
   isPendingLinearIssueUpdate,
@@ -59,6 +61,8 @@ import {
   type LinearIssueUpdate,
   type PendingLinearIssueUpdate,
   type LinearProjectDocumentDraft,
+  type LinearInitiativeDraft,
+  type LinearInitiativeUpdateDraft,
   type LinearProjectPlanningDraft,
 } from './linear-state';
 import { cycleDateInTimezone, cycleDateToIso, todayInTimezone } from './cycle-dates';
@@ -2611,6 +2615,9 @@ function isLinearTeamList(value: unknown): value is readonly LinearTeam[] {
                   }}
                 </umbra-button>
               </div>
+              @if (newInitiativeName() || newInitiativeDescription() || newInitiativeTargetDate()) {
+                <p class="hint">Initiative draft saved on this device.</p>
+              }
               <form class="create-form" (submit)="createInitiative($event)">
                 <label>
                   <span>Initiative name</span>
@@ -2618,7 +2625,7 @@ function isLinearTeamList(value: unknown): value is readonly LinearTeam[] {
                     required
                     maxlength="255"
                     [value]="newInitiativeName()"
-                    (input)="newInitiativeName.set($any($event.target).value)"
+                    (input)="updateInitiativeDraft('name', $any($event.target).value)"
                   />
                 </label>
                 <label>
@@ -2626,7 +2633,7 @@ function isLinearTeamList(value: unknown): value is readonly LinearTeam[] {
                   <input
                     type="date"
                     [value]="newInitiativeTargetDate()"
-                    (input)="newInitiativeTargetDate.set($any($event.target).value)"
+                    (input)="updateInitiativeDraft('targetDate', $any($event.target).value)"
                   />
                 </label>
                 <label class="description-field">
@@ -2634,7 +2641,7 @@ function isLinearTeamList(value: unknown): value is readonly LinearTeam[] {
                   <textarea
                     rows="2"
                     [value]="newInitiativeDescription()"
-                    (input)="newInitiativeDescription.set($any($event.target).value)"
+                    (input)="updateInitiativeDraft('description', $any($event.target).value)"
                   ></textarea>
                 </label>
                 <umbra-button
@@ -2918,12 +2925,15 @@ function isLinearTeamList(value: unknown): value is readonly LinearTeam[] {
                   </div>
                 </article>
                 @if (initiativeUpdateId() === initiative.id) {
+                  @if (initiativeUpdateBody() || initiativeUpdateHealth() !== 'onTrack') {
+                    <p class="hint">Initiative update draft saved on this device.</p>
+                  }
                   <form class="project-edit" (submit)="createInitiativeUpdate($event, initiative)">
                     <label>
                       <span>Health</span>
                       <select
                         [value]="initiativeUpdateHealth()"
-                        (change)="initiativeUpdateHealth.set($any($event.target).value)"
+                        (change)="updateInitiativeUpdateDraft('health', $any($event.target).value)"
                       >
                         <option value="onTrack">On track</option>
                         <option value="atRisk">At risk</option>
@@ -2937,7 +2947,7 @@ function isLinearTeamList(value: unknown): value is readonly LinearTeam[] {
                         maxlength="10000"
                         rows="3"
                         [value]="initiativeUpdateBody()"
-                        (input)="initiativeUpdateBody.set($any($event.target).value)"
+                        (input)="updateInitiativeUpdateDraft('body', $any($event.target).value)"
                       ></textarea>
                     </label>
                     <umbra-button
@@ -3851,6 +3861,7 @@ export class Linear {
     this.issueStateId.set('');
     this.cycles.set({});
     this.restoreIssueDraft(connection);
+    this.restoreInitiativeDraft(connection);
     this.restorePendingIssueUpdates(connection);
     this.issueCacheStale.set(false);
     this.projectCacheStale.set(false);
@@ -5415,11 +5426,72 @@ export class Linear {
     if (this.initiativeUpdateId() === initiative.id) {
       this.initiativeUpdateId.set(null);
       this.initiativeUpdateBody.set('');
+      this.initiativeUpdateHealth.set('onTrack');
       return;
     }
     this.initiativeUpdateId.set(initiative.id);
-    this.initiativeUpdateBody.set('');
-    this.initiativeUpdateHealth.set('onTrack');
+    const connection = this.selected();
+    const stored = connection
+      ? this.readLocal<unknown>(this.initiativeUpdateDraftKey(connection, initiative.id))
+      : null;
+    const draft = isLinearInitiativeUpdateDraft(stored) ? stored : null;
+    this.initiativeUpdateBody.set(draft?.body ?? '');
+    this.initiativeUpdateHealth.set(draft?.health ?? 'onTrack');
+  }
+
+  protected updateInitiativeDraft(field: keyof LinearInitiativeDraft, value: string): void {
+    if (field === 'name') this.newInitiativeName.set(value);
+    else if (field === 'description') this.newInitiativeDescription.set(value);
+    else this.newInitiativeTargetDate.set(value);
+    this.saveInitiativeDraft();
+  }
+
+  private restoreInitiativeDraft(connection: LinearConnection): void {
+    const stored = this.readLocal<unknown>(this.initiativeDraftKey(connection));
+    const draft = isLinearInitiativeDraft(stored) ? stored : null;
+    this.newInitiativeName.set(draft?.name ?? '');
+    this.newInitiativeDescription.set(draft?.description ?? '');
+    this.newInitiativeTargetDate.set(draft?.targetDate ?? '');
+  }
+
+  private saveInitiativeDraft(): void {
+    const connection = this.selected();
+    if (!connection) return;
+    const draft: LinearInitiativeDraft = {
+      name: this.newInitiativeName(),
+      description: this.newInitiativeDescription(),
+      targetDate: this.newInitiativeTargetDate(),
+    };
+    this.writeLocal(
+      this.initiativeDraftKey(connection),
+      draft.name || draft.description || draft.targetDate ? draft : null,
+    );
+  }
+
+  protected updateInitiativeUpdateDraft(
+    field: keyof LinearInitiativeUpdateDraft,
+    value: string,
+  ): void {
+    if (field === 'body') this.initiativeUpdateBody.set(value);
+    else {
+      this.initiativeUpdateHealth.set(
+        ['onTrack', 'atRisk', 'offTrack'].includes(value)
+          ? (value as LinearProjectHealth)
+          : 'onTrack',
+      );
+    }
+    const connection = this.selected();
+    const initiativeId = this.initiativeUpdateId();
+    if (connection && initiativeId) {
+      const draft: LinearInitiativeUpdateDraft = {
+        body: this.initiativeUpdateBody(),
+        health: this.initiativeUpdateHealth(),
+      };
+      this.writeLocal(
+        this.initiativeUpdateDraftKey(connection, initiativeId),
+        draft.body || draft.health !== 'onTrack' ? draft : null,
+      );
+    }
   }
 
   protected toggleArchivedInitiativeUpdates(): void {
@@ -5509,13 +5581,19 @@ export class Linear {
         body,
         this.initiativeUpdateHealth(),
       );
-      this.initiatives.update((items) =>
-        items.map((item) =>
-          item.id === initiative.id ? { ...item, updates: [update, ...item.updates] } : item,
-        ),
-      );
-      this.initiativeUpdateId.set(null);
-      this.initiativeUpdateBody.set('');
+      if (this.selected()?.organizationId === connection.organizationId) {
+        this.initiatives.update((items) =>
+          items.map((item) =>
+            item.id === initiative.id ? { ...item, updates: [update, ...item.updates] } : item,
+          ),
+        );
+      }
+      this.writeLocal(this.initiativeUpdateDraftKey(connection, initiative.id), null);
+      if (this.initiativeUpdateId() === initiative.id) {
+        this.initiativeUpdateId.set(null);
+        this.initiativeUpdateBody.set('');
+        this.initiativeUpdateHealth.set('onTrack');
+      }
     } catch (error) {
       this.error.set(error instanceof Error ? error.message : String(error));
     } finally {
@@ -5610,10 +5688,13 @@ export class Linear {
         this.newInitiativeDescription().trim(),
         this.newInitiativeTargetDate(),
       );
-      this.initiatives.update((items) => [...items, initiative]);
-      this.newInitiativeName.set('');
-      this.newInitiativeDescription.set('');
-      this.newInitiativeTargetDate.set('');
+      if (this.selected()?.organizationId === connection.organizationId) {
+        this.initiatives.update((items) => [...items, initiative]);
+        this.newInitiativeName.set('');
+        this.newInitiativeDescription.set('');
+        this.newInitiativeTargetDate.set('');
+      }
+      this.writeLocal(this.initiativeDraftKey(connection), null);
     } catch (error) {
       this.error.set(error instanceof Error ? error.message : String(error));
     } finally {
@@ -7263,5 +7344,13 @@ export class Linear {
     const archived = includeArchived ? '.all' : '';
     const updates = includeArchivedUpdates ? '.updates.all' : '';
     return `relay.linear.initiatives.${connection.organizationId}.${connection.viewerId}${archived}${updates}`;
+  }
+
+  private initiativeDraftKey(connection: LinearConnection): string {
+    return `relay.linear.initiativeDraft.${connection.organizationId}.${connection.viewerId}`;
+  }
+
+  private initiativeUpdateDraftKey(connection: LinearConnection, initiativeId: string): string {
+    return `relay.linear.initiativeUpdateDraft.${connection.organizationId}.${connection.viewerId}.${initiativeId}`;
   }
 }
