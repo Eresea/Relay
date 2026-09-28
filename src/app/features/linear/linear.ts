@@ -35,6 +35,7 @@ import {
   type LinearTeam,
   type LinearWorkflowState,
   type WorkspaceSummary,
+  type GithubRepositorySummary,
 } from '@core/tauri';
 import { UmbraButtonComponent } from '@umbra/components/umbra-button/umbra-button.component';
 import {
@@ -1524,6 +1525,73 @@ interface LinearIssueDraft {
                         {{ creatingProjectLink() ? 'Adding' : 'Add link' }}
                       </umbra-button>
                     </form>
+                    <section class="project-edit" aria-label="Link GitHub repository">
+                      <p class="hint">
+                        Link a repository explicitly. The link is saved with this Linear project and
+                        follows it across connected devices.
+                      </p>
+                      @if (githubRepositoriesForLink() === null) {
+                        <umbra-button
+                          size="sm"
+                          variant="outline"
+                          [disabled]="loadingGithubRepositories()"
+                          (click)="loadGithubRepositoriesForLink()"
+                        >
+                          {{
+                            loadingGithubRepositories()
+                              ? 'Loading repositories'
+                              : 'Choose GitHub repository'
+                          }}
+                        </umbra-button>
+                      } @else if (availableGithubRepositories().length) {
+                        <form (submit)="linkGithubRepository($event)">
+                          <label>
+                            <span>GitHub repository</span>
+                            <select
+                              [value]="selectedGithubRepository()"
+                              (change)="selectedGithubRepository.set($any($event.target).value)"
+                            >
+                              <option value="">Choose repository</option>
+                              @for (
+                                repository of availableGithubRepositories();
+                                track repository.fullName
+                              ) {
+                                <option [value]="repository.fullName">
+                                  {{ repository.fullName }}
+                                </option>
+                              }
+                            </select>
+                          </label>
+                          <div class="issue-actions">
+                            <umbra-button
+                              size="sm"
+                              [disabled]="
+                                creatingGithubProjectLink() || !selectedGithubRepository()
+                              "
+                            >
+                              {{ creatingGithubProjectLink() ? 'Linking' : 'Link repository' }}
+                            </umbra-button>
+                            <umbra-button
+                              size="sm"
+                              variant="link"
+                              type="button"
+                              (click)="githubRepositoriesForLink.set(null)"
+                            >
+                              Cancel
+                            </umbra-button>
+                          </div>
+                        </form>
+                      } @else {
+                        <p class="hint">No unlinked GitHub repositories are available.</p>
+                        <umbra-button
+                          size="sm"
+                          variant="link"
+                          (click)="githubRepositoriesForLink.set(null)"
+                        >
+                          Close
+                        </umbra-button>
+                      }
+                    </section>
                   }
                 </section>
                 <section class="milestones" aria-label="Project milestones">
@@ -3331,6 +3399,22 @@ export class Linear {
   protected readonly newProjectLinkLabel = signal('');
   protected readonly newProjectLinkUrl = signal('');
   protected readonly creatingProjectLink = signal(false);
+  protected readonly githubRepositoriesForLink = signal<readonly GithubRepositorySummary[] | null>(
+    null,
+  );
+  protected readonly loadingGithubRepositories = signal(false);
+  protected readonly selectedGithubRepository = signal('');
+  protected readonly creatingGithubProjectLink = signal(false);
+  protected readonly availableGithubRepositories = computed(() => {
+    const links = new Set(
+      this.projectResources().externalLinks.map((link) =>
+        link.url.replace(/\/$/, '').toLowerCase(),
+      ),
+    );
+    return (this.githubRepositoriesForLink() ?? []).filter(
+      (repository) => !links.has(repository.htmlUrl.replace(/\/$/, '').toLowerCase()),
+    );
+  });
   protected readonly confirmDeleteProjectLinkId = signal<string | null>(null);
   protected readonly deletingProjectLinkId = signal<string | null>(null);
   protected readonly projectUpdates = signal<readonly LinearProjectUpdate[]>([]);
@@ -5193,6 +5277,8 @@ export class Linear {
     this.projectResources.set({ documents: [], externalLinks: [] });
     this.closeProjectDocumentEditor();
     this.confirmDeleteProjectLinkId.set(null);
+    this.githubRepositoriesForLink.set(null);
+    this.selectedGithubRepository.set('');
     this.newProjectDocumentTitle.set('');
     this.newProjectDocumentContent.set('');
     this.newProjectLinkLabel.set('');
@@ -5828,6 +5914,53 @@ export class Linear {
       this.error.set(error instanceof Error ? error.message : String(error));
     } finally {
       this.creatingProjectLink.set(false);
+    }
+  }
+
+  protected async loadGithubRepositoriesForLink(): Promise<void> {
+    const project = this.selectedProject();
+    if (!project || this.loadingGithubRepositories()) return;
+    this.loadingGithubRepositories.set(true);
+    this.error.set(null);
+    try {
+      const repositories = await this.tauri.githubRepositories();
+      if (this.selectedProject()?.id === project.id) {
+        this.githubRepositoriesForLink.set(repositories);
+      }
+    } catch (error) {
+      this.error.set(error instanceof Error ? error.message : String(error));
+    } finally {
+      this.loadingGithubRepositories.set(false);
+    }
+  }
+
+  protected async linkGithubRepository(event: Event): Promise<void> {
+    event.preventDefault();
+    const connection = this.selected();
+    const project = this.selectedProject();
+    const repository = this.availableGithubRepositories().find(
+      (candidate) => candidate.fullName === this.selectedGithubRepository(),
+    );
+    if (!connection || !project || !repository || this.creatingGithubProjectLink()) return;
+    this.creatingGithubProjectLink.set(true);
+    this.error.set(null);
+    try {
+      const link = await this.tauri.linearCreateProjectExternalLink(
+        connection.organizationId,
+        project.id,
+        `GitHub: ${repository.fullName}`,
+        repository.htmlUrl,
+      );
+      if (this.selectedProject()?.id !== project.id) return;
+      this.projectResources.update((resources) => ({
+        ...resources,
+        externalLinks: [link, ...resources.externalLinks],
+      }));
+      this.selectedGithubRepository.set('');
+    } catch (error) {
+      this.error.set(error instanceof Error ? error.message : String(error));
+    } finally {
+      this.creatingGithubProjectLink.set(false);
     }
   }
 
