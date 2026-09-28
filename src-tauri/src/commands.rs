@@ -1323,6 +1323,7 @@ pub async fn linear_team_issues(
     include_archived: Option<bool>,
     state_id: Option<String>,
     priority: Option<u8>,
+    assignee_id: Option<String>,
 ) -> Result<IssuePage> {
     if team_id.trim().is_empty() {
         return Err(std::io::Error::other("A Linear team is required").into());
@@ -1333,6 +1334,9 @@ pub async fn linear_team_issues(
     if state_id
         .as_deref()
         .is_some_and(|value| value.trim().is_empty())
+        || assignee_id
+            .as_deref()
+            .is_some_and(|value| value.trim().is_empty())
         || priority.is_some_and(|value| value > 4)
     {
         return Err(std::io::Error::other("Issue filters are invalid").into());
@@ -1349,6 +1353,7 @@ pub async fn linear_team_issues(
         include_archived.unwrap_or(false),
         state_id.as_deref(),
         priority,
+        assignee_id.as_deref(),
     )
     .await
 }

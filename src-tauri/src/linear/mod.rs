@@ -923,6 +923,7 @@ pub async fn team_issues(
     include_archived: bool,
     state_id: Option<&str>,
     priority: Option<u8>,
+    assignee_id: Option<&str>,
 ) -> Result<IssuePage> {
     api::team_issues(
         &access_token(app, organization_id).await?,
@@ -932,6 +933,7 @@ pub async fn team_issues(
         include_archived,
         state_id,
         priority,
+        assignee_id,
     )
     .await
 }

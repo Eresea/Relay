@@ -808,6 +808,22 @@ interface LinearIssueDraft {
                         <option value="4">Low</option>
                       </select>
                     </label>
+                    @if (issueTeamId()) {
+                      <label>
+                        <span>Assignee</span>
+                        <select
+                          [value]="issueAssigneeId()"
+                          [disabled]="loading()"
+                          (change)="setIssueAssigneeFilter($any($event.target).value)"
+                        >
+                          <option value="">Anyone</option>
+                          <option value="unassigned">Unassigned</option>
+                          @for (user of users(); track user.id) {
+                            <option [value]="user.id">{{ user.name }}</option>
+                          }
+                        </select>
+                      </label>
+                    }
                   </details>
                   <umbra-button
                     size="sm"
@@ -2843,6 +2859,7 @@ export class Linear {
   protected readonly includeArchivedIssues = signal(false);
   protected readonly issueStateId = signal('');
   protected readonly issuePriority = signal('');
+  protected readonly issueAssigneeId = signal('');
   protected readonly confirmArchiveIssueId = signal<string | null>(null);
   protected readonly confirmArchiveIssueDetailId = signal<string | null>(null);
   protected readonly archivingIssueId = signal<string | null>(null);
@@ -3098,6 +3115,7 @@ export class Linear {
     this.projectIssuesRequest++;
     this.loadingProjectIssues.set(false);
     this.issueTeamId.set('');
+    this.issueAssigneeId.set('');
     this.issueStateId.set('');
     this.restoreIssueDraft(connection);
     this.restorePendingIssueUpdates(connection);
@@ -3125,6 +3143,7 @@ export class Linear {
   protected setIssueTeam(teamId: string): void {
     if (this.loading() || teamId === this.issueTeamId()) return;
     this.issueTeamId.set(teamId);
+    if (!teamId) this.issueAssigneeId.set('');
     if (teamId && !this.statesForTeam(teamId).some((state) => state.id === this.issueStateId())) {
       this.issueStateId.set('');
     }
@@ -3149,8 +3168,19 @@ export class Linear {
     void this.loadIssues();
   }
 
+  protected setIssueAssigneeFilter(assigneeId: string): void {
+    if (this.loading() || assigneeId === this.issueAssigneeId()) return;
+    this.issueAssigneeId.set(assigneeId);
+    this.resetIssuePage();
+    void this.loadIssues();
+  }
+
   protected issueFilterCount(): number {
-    return Number(!!this.issueStateId()) + Number(!!this.issuePriority());
+    return (
+      Number(!!this.issueStateId()) +
+      Number(!!this.issuePriority()) +
+      Number(!!this.issueTeamId() && !!this.issueAssigneeId())
+    );
   }
 
   private resetIssuePage(): void {
@@ -3810,7 +3840,8 @@ export class Linear {
     const search = this.issueSearchTerm().trim();
     const state = this.issueStateId();
     const priority = this.issuePriority();
-    return `${scope}${archived}${search ? `.search.${encodeURIComponent(search)}` : ''}${state ? `.state.${encodeURIComponent(state)}` : ''}${priority ? `.priority.${priority}` : ''}`;
+    const assignee = this.issueAssigneeId();
+    return `${scope}${archived}${search ? `.search.${encodeURIComponent(search)}` : ''}${state ? `.state.${encodeURIComponent(state)}` : ''}${priority ? `.priority.${priority}` : ''}${assignee ? `.assignee.${encodeURIComponent(assignee)}` : ''}`;
   }
 
   private projectCacheKey(connection: LinearConnection, includeArchived = false): string {
@@ -3894,7 +3925,12 @@ export class Linear {
       (this.includeArchivedIssues() || !issue.archivedAt) &&
       (!search || issue.title.toLowerCase().includes(search)) &&
       (!this.issueStateId() || issue.state?.id === this.issueStateId()) &&
-      (this.issuePriority() === '' || issue.priority === Number(this.issuePriority()))
+      (this.issuePriority() === '' || issue.priority === Number(this.issuePriority())) &&
+      (!this.issueTeamId() ||
+        !this.issueAssigneeId() ||
+        (this.issueAssigneeId() === 'unassigned'
+          ? !issue.assignee
+          : issue.assignee?.id === this.issueAssigneeId()))
     );
   }
 
@@ -5453,6 +5489,7 @@ export class Linear {
           this.issueSearchTerm(),
           this.issueStateId() || undefined,
           this.issuePriority() === '' ? undefined : Number(this.issuePriority()),
+          this.issueAssigneeId() || undefined,
         )
       : this.tauri.linearMyIssues(
           organizationId,
