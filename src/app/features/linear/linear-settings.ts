@@ -62,7 +62,7 @@ import { UmbraButtonComponent } from '@umbra/components/umbra-button/umbra-butto
               <umbra-button
                 size="sm"
                 variant="outline"
-                [disabled]="syncingId() === connection.organizationId || !nexus.status().connected"
+                [disabled]="syncingId() !== null || !nexus.status().connected"
                 (click)="sync(connection)"
               >
                 {{
