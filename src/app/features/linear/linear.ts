@@ -343,6 +343,9 @@ interface LinearIssueDraft {
                   </umbra-button>
                 </div>
               </div>
+              @if (issueDetailStale()) {
+                <p class="hint" role="status">Linear is unavailable. Showing the saved issue.</p>
+              }
               <div class="issue-fields">
                 <label>
                   <span>Status</span>
@@ -777,7 +780,7 @@ interface LinearIssueDraft {
                       maxlength="10000"
                       rows="3"
                       [value]="newComment()"
-                      (input)="newComment.set($any($event.target).value)"
+                      (input)="updateNewComment(detail.issue, $any($event.target).value)"
                     ></textarea>
                   </label>
                   <umbra-button size="sm" [disabled]="sendingComment() || !newComment().trim()">
@@ -3412,6 +3415,7 @@ export class Linear {
   protected readonly confirmArchiveIssueDetailId = signal<string | null>(null);
   protected readonly archivingIssueId = signal<string | null>(null);
   protected readonly issueDetail = signal<LinearIssueDetail | null>(null);
+  protected readonly issueDetailStale = signal(false);
   protected readonly creatingIssueRelation = signal(false);
   protected readonly relatedIssueIdentifier = signal('');
   protected readonly newIssueRelationType = signal<LinearIssueRelationType>('blocks');
@@ -3630,6 +3634,7 @@ export class Linear {
   private nextProjectIssueCursor: string | null = null;
   private projectIssuesRequest = 0;
   private projectOpenRequest = 0;
+  private issueDetailRequest = 0;
 
   protected pageTitle(): string {
     return {
@@ -3660,6 +3665,13 @@ export class Linear {
       const request = this.projectRequest();
       if (request) void this.openRequestedProject(request);
       else void this.refreshConnections();
+    });
+    effect(() => {
+      const connection = this.selected();
+      const detail = this.issueDetail();
+      if (connection && detail) {
+        this.writeLocal(this.issueDetailCacheKey(connection, detail.issue.id), detail);
+      }
     });
     void this.tauri
       .onLinearAuth((event) => {
@@ -3740,6 +3752,7 @@ export class Linear {
 
   protected select(connection: LinearConnection): void {
     if (connection.pausedOnDevice) return;
+    this.issueDetailRequest++;
     this.selected.set(connection);
     this.selectedProject.set(null);
     this.projectIssues.set([]);
@@ -3944,8 +3957,13 @@ export class Linear {
   protected async openIssueDetail(issue: Pick<LinearIssue, 'id'>): Promise<void> {
     const connection = this.selected();
     if (!connection) return;
+    const requestId = ++this.issueDetailRequest;
     void this.loadProjects();
     this.issueDetail.set(null);
+    this.issueDetailStale.set(false);
+    this.newComment.set(
+      this.readLocal<string>(this.issueCommentDraftKey(connection, issue.id)) ?? '',
+    );
     this.confirmArchiveIssueId.set(null);
     this.confirmArchiveIssueDetailId.set(null);
     this.confirmDeleteIssueRelationId.set(null);
@@ -3954,13 +3972,16 @@ export class Linear {
     this.error.set(null);
     try {
       const detail = await this.tauri.linearIssueDetail(connection.organizationId, issue.id);
+      if (requestId !== this.issueDetailRequest) return;
+      this.issueDetail.set(detail);
+      this.issueDetailStale.set(false);
       if (detail.issue.project) await this.loadMilestones(detail.issue.project.id);
       const teamCycles = await this.tauri.linearCycles(
         connection.organizationId,
         detail.issue.team.id,
       );
+      if (requestId !== this.issueDetailRequest) return;
       this.cycles.update((items) => ({ ...items, [detail.issue.team.id]: teamCycles }));
-      this.issueDetail.set(detail);
       this.codexContext.set(
         await this.tauri.linearCodexContext(connection.organizationId, issue.id),
       );
@@ -3968,7 +3989,16 @@ export class Linear {
         await this.loadCodexWorkspaces(this.codexProjectRepo(detail.issue.project.id));
       }
     } catch (error) {
-      this.error.set(error instanceof Error ? error.message : String(error));
+      if (requestId !== this.issueDetailRequest) return;
+      if (this.issueDetail()?.issue.id === issue.id) return;
+      const cached = this.readLocal<LinearIssueDetail>(
+        this.issueDetailCacheKey(connection, issue.id),
+      );
+      if (cached && cached.issue?.id === issue.id && Array.isArray(cached.comments)) {
+        this.issueDetail.set(cached);
+        this.issueDetailStale.set(true);
+        this.error.set(null);
+      } else this.error.set(error instanceof Error ? error.message : String(error));
     }
   }
 
@@ -4346,7 +4376,9 @@ export class Linear {
   }
 
   protected closeIssueDetail(): void {
+    this.issueDetailRequest++;
     this.issueDetail.set(null);
+    this.issueDetailStale.set(false);
     this.editingIssueDetailsId.set(null);
     this.confirmArchiveIssueDetailId.set(null);
     this.codexContext.set(null);
@@ -4439,11 +4471,18 @@ export class Linear {
           : detail,
       );
       this.newComment.set('');
+      this.writeLocal(this.issueCommentDraftKey(connection, issue.id), null);
     } catch (error) {
       this.error.set(error instanceof Error ? error.message : String(error));
     } finally {
       this.sendingComment.set(false);
     }
+  }
+
+  protected updateNewComment(issue: LinearIssue, value: string): void {
+    this.newComment.set(value);
+    const connection = this.selected();
+    if (connection) this.writeLocal(this.issueCommentDraftKey(connection, issue.id), value || null);
   }
 
   protected async createSubIssue(event: Event, parent: LinearIssue): Promise<void> {
@@ -4592,6 +4631,14 @@ export class Linear {
 
   private projectDocumentDraftKey(connection: LinearConnection, documentId: string): string {
     return `relay.linear.projectDocumentDraft.${connection.organizationId}.${documentId}`;
+  }
+
+  private issueDetailCacheKey(connection: LinearConnection, issueId: string): string {
+    return `relay.linear.issueDetail.${connection.organizationId}.${connection.viewerId}.${issueId}`;
+  }
+
+  private issueCommentDraftKey(connection: LinearConnection, issueId: string): string {
+    return `relay.linear.issueCommentDraft.${connection.organizationId}.${connection.viewerId}.${issueId}`;
   }
 
   private readProjectDocumentDraft(
