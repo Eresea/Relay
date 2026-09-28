@@ -658,6 +658,33 @@ export class TauriBridge {
     return document;
   }
 
+  async linearProjectDocument(organizationId: string, documentId: string): Promise<LinearDocument> {
+    const document = await this.invoke<LinearDocument>('linear_project_document', {
+      organizationId,
+      documentId,
+    });
+    if (!document) throw new Error('Linear returned no project document.');
+    return document;
+  }
+
+  async linearUpdateProjectDocument(
+    organizationId: string,
+    documentId: string,
+    expectedUpdatedAt: string,
+    title: string,
+    content: string,
+  ): Promise<LinearDocument> {
+    const document = await this.invoke<LinearDocument>('linear_update_project_document', {
+      organizationId,
+      documentId,
+      expectedUpdatedAt,
+      title,
+      content,
+    });
+    if (!document) throw new Error('Linear returned no updated project document.');
+    return document;
+  }
+
   async linearCreateProjectExternalLink(
     organizationId: string,
     projectId: string,
@@ -1682,6 +1709,7 @@ export interface LinearDocument {
   readonly title: string;
   readonly url: string;
   readonly updatedAt: string;
+  readonly content?: string | null;
   readonly creator: LinearPerson | null;
 }
 

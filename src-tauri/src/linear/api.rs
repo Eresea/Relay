@@ -230,6 +230,8 @@ pub struct LinearDocument {
     pub url: String,
     pub updated_at: String,
     #[serde(default)]
+    pub content: Option<String>,
+    #[serde(default)]
     pub creator: Option<Person>,
 }
 
@@ -730,6 +732,57 @@ pub async fn create_project_document(
     .await?;
     data.result
         .into_value("Linear did not create the project document")
+}
+
+pub async fn project_document(token: &str, document_id: &str) -> Result<LinearDocument> {
+    #[derive(Deserialize)]
+    struct Data {
+        document: Option<LinearDocument>,
+    }
+    let data: Data = query(
+        token,
+        "query RelayProjectDocument($id: String!) { document(id: $id) { id title url updatedAt content creator { id name } } }",
+        json!({ "id": document_id }),
+    )
+    .await?;
+    data.document
+        .ok_or_else(|| Error::LinearApi("Linear project document was not found".into()))
+}
+
+pub async fn update_project_document(
+    token: &str,
+    document_id: &str,
+    expected_updated_at: &str,
+    title: &str,
+    content: &str,
+) -> Result<LinearDocument> {
+    let current = project_document(token, document_id).await?;
+    ensure_document_fresh(&current.updated_at, expected_updated_at)?;
+
+    #[derive(Deserialize)]
+    struct Data {
+        #[serde(rename = "documentUpdate")]
+        result: DocumentMutation,
+    }
+    let data: Data = query(
+        token,
+        "mutation RelayProjectDocumentUpdate($id: String!, $input: DocumentUpdateInput!) { documentUpdate(id: $id, input: $input) { success document { id title url updatedAt content creator { id name } } } }",
+        json!({ "id": document_id, "input": { "title": title, "content": content } }),
+    )
+    .await?;
+    data.result
+        .into_value("Linear did not update the project document")
+}
+
+fn ensure_document_fresh(current_updated_at: &str, expected_updated_at: &str) -> Result<()> {
+    // ponytail: Linear has no update precondition; this catches prior edits but not a race after this read.
+    if current_updated_at == expected_updated_at {
+        Ok(())
+    } else {
+        Err(Error::LinearApi(
+            "This document changed in Linear. Reload it to review the latest version before saving.".into(),
+        ))
+    }
 }
 
 pub async fn create_project_external_link(
@@ -2224,6 +2277,14 @@ mod tests {
         }))
         .unwrap();
         assert_eq!(link.into_value("failed").unwrap().label, "Design");
+    }
+
+    #[test]
+    fn project_document_save_rejects_a_stale_version() {
+        assert!(ensure_document_fresh("2026-09-28T12:00:00Z", "2026-09-28T12:00:00Z").is_ok());
+        let error =
+            ensure_document_fresh("2026-09-28T12:01:00Z", "2026-09-28T12:00:00Z").unwrap_err();
+        assert!(error.to_string().contains("changed in Linear"));
     }
 
     #[test]

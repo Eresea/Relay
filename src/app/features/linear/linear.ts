@@ -1332,9 +1332,77 @@ interface LinearIssueDraft {
                       <umbra-button size="sm" variant="link" (click)="openResource(document.url)">
                         Open in Linear
                       </umbra-button>
+                      <umbra-button
+                        size="sm"
+                        variant="link"
+                        [disabled]="loadingProjectDocumentId() === document.id"
+                        (click)="editProjectDocument(document)"
+                      >
+                        {{
+                          loadingProjectDocumentId() === document.id ? 'Loading' : 'Edit in Relay'
+                        }}
+                      </umbra-button>
                     </article>
                   } @empty {
                     <p class="hint">No project documents yet.</p>
+                  }
+                  @if (editingProjectDocumentId()) {
+                    <form class="project-edit" (submit)="saveProjectDocument($event)">
+                      <h4>Edit project document</h4>
+                      @if (projectDocumentEditConflict()) {
+                        <p class="hint" role="alert">
+                          This document changed in Linear while you edited it. Your draft is still
+                          here; load the latest version only if you want to replace your draft.
+                        </p>
+                        <umbra-button
+                          size="sm"
+                          variant="outline"
+                          [disabled]="loadingProjectDocumentId() === editingProjectDocumentId()"
+                          (click)="reloadProjectDocument()"
+                        >
+                          Load latest version and replace draft
+                        </umbra-button>
+                      }
+                      <label>
+                        <span>Title</span>
+                        <input
+                          required
+                          maxlength="255"
+                          [value]="editProjectDocumentTitle()"
+                          (input)="editProjectDocumentTitle.set($any($event.target).value)"
+                        />
+                      </label>
+                      <label>
+                        <span>Markdown content</span>
+                        <textarea
+                          maxlength="50000"
+                          rows="8"
+                          [value]="editProjectDocumentContent()"
+                          (input)="editProjectDocumentContent.set($any($event.target).value)"
+                        ></textarea>
+                      </label>
+                      <div class="issue-actions">
+                        <umbra-button
+                          size="sm"
+                          [disabled]="
+                            savingProjectDocument() ||
+                            projectDocumentEditConflict() ||
+                            !editProjectDocumentTitle().trim()
+                          "
+                        >
+                          {{ savingProjectDocument() ? 'Saving' : 'Save document' }}
+                        </umbra-button>
+                        <umbra-button
+                          size="sm"
+                          variant="link"
+                          type="button"
+                          [disabled]="savingProjectDocument()"
+                          (click)="closeProjectDocumentEditor()"
+                        >
+                          Cancel
+                        </umbra-button>
+                      </div>
+                    </form>
                   }
                   @for (link of projectResources().externalLinks; track link.id) {
                     <article class="resource-row">
@@ -3165,6 +3233,13 @@ export class Linear {
     documents: readonly LinearDocument[];
     externalLinks: readonly LinearExternalLink[];
   }>({ documents: [], externalLinks: [] });
+  protected readonly editingProjectDocumentId = signal<string | null>(null);
+  protected readonly loadingProjectDocumentId = signal<string | null>(null);
+  protected readonly editProjectDocumentTitle = signal('');
+  protected readonly editProjectDocumentContent = signal('');
+  protected readonly editProjectDocumentUpdatedAt = signal('');
+  protected readonly projectDocumentEditConflict = signal(false);
+  protected readonly savingProjectDocument = signal(false);
   protected readonly newProjectDocumentTitle = signal('');
   protected readonly newProjectDocumentContent = signal('');
   protected readonly creatingProjectDocument = signal(false);
@@ -4989,6 +5064,7 @@ export class Linear {
     this.projectUpdates.set([]);
     this.newProjectUpdateBody.set('');
     this.projectResources.set({ documents: [], externalLinks: [] });
+    this.closeProjectDocumentEditor();
     this.confirmDeleteProjectLinkId.set(null);
     this.newProjectDocumentTitle.set('');
     this.newProjectDocumentContent.set('');
@@ -5467,6 +5543,100 @@ export class Linear {
     } catch (error) {
       this.error.set(error instanceof Error ? error.message : String(error));
     }
+  }
+
+  protected async editProjectDocument(document: LinearDocument): Promise<void> {
+    const connection = this.selected();
+    const project = this.selectedProject();
+    if (!connection || !project || this.loadingProjectDocumentId()) return;
+    this.loadingProjectDocumentId.set(document.id);
+    this.error.set(null);
+    try {
+      const detail = await this.tauri.linearProjectDocument(connection.organizationId, document.id);
+      if (this.selectedProject()?.id !== project.id) return;
+      this.editingProjectDocumentId.set(detail.id);
+      this.editProjectDocumentTitle.set(detail.title);
+      this.editProjectDocumentContent.set(detail.content ?? '');
+      this.editProjectDocumentUpdatedAt.set(detail.updatedAt);
+      this.projectDocumentEditConflict.set(false);
+    } catch (error) {
+      this.error.set(error instanceof Error ? error.message : String(error));
+    } finally {
+      this.loadingProjectDocumentId.set(null);
+    }
+  }
+
+  protected async reloadProjectDocument(): Promise<void> {
+    const documentId = this.editingProjectDocumentId();
+    const connection = this.selected();
+    if (!documentId || !connection || this.loadingProjectDocumentId()) return;
+    this.loadingProjectDocumentId.set(documentId);
+    try {
+      const detail = await this.tauri.linearProjectDocument(connection.organizationId, documentId);
+      if (this.editingProjectDocumentId() !== documentId) return;
+      this.editProjectDocumentTitle.set(detail.title);
+      this.editProjectDocumentContent.set(detail.content ?? '');
+      this.editProjectDocumentUpdatedAt.set(detail.updatedAt);
+      this.projectDocumentEditConflict.set(false);
+      this.error.set(null);
+    } catch (error) {
+      this.error.set(error instanceof Error ? error.message : String(error));
+    } finally {
+      this.loadingProjectDocumentId.set(null);
+    }
+  }
+
+  protected async saveProjectDocument(event: Event): Promise<void> {
+    event.preventDefault();
+    const connection = this.selected();
+    const project = this.selectedProject();
+    const documentId = this.editingProjectDocumentId();
+    const updatedAt = this.editProjectDocumentUpdatedAt();
+    const title = this.editProjectDocumentTitle().trim();
+    const content = this.editProjectDocumentContent();
+    if (
+      !connection ||
+      !project ||
+      !documentId ||
+      !updatedAt ||
+      !title ||
+      this.savingProjectDocument()
+    ) {
+      return;
+    }
+    this.savingProjectDocument.set(true);
+    this.error.set(null);
+    try {
+      const updated = await this.tauri.linearUpdateProjectDocument(
+        connection.organizationId,
+        documentId,
+        updatedAt,
+        title,
+        content,
+      );
+      if (this.selectedProject()?.id !== project.id) return;
+      this.projectResources.update((resources) => ({
+        ...resources,
+        documents: resources.documents.map((document) =>
+          document.id === updated.id ? { ...document, ...updated } : document,
+        ),
+      }));
+      this.closeProjectDocumentEditor();
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      this.projectDocumentEditConflict.set(message.includes('changed in Linear'));
+      this.error.set(message);
+    } finally {
+      this.savingProjectDocument.set(false);
+    }
+  }
+
+  protected closeProjectDocumentEditor(): void {
+    this.editingProjectDocumentId.set(null);
+    this.editProjectDocumentTitle.set('');
+    this.editProjectDocumentContent.set('');
+    this.editProjectDocumentUpdatedAt.set('');
+    this.projectDocumentEditConflict.set(false);
   }
 
   protected async createProjectDocument(event: Event): Promise<void> {

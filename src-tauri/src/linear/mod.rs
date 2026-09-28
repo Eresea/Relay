@@ -388,6 +388,32 @@ pub async fn create_project_document(
     .await
 }
 
+pub async fn project_document(
+    app: &AppHandle,
+    organization_id: &str,
+    document_id: &str,
+) -> Result<LinearDocument> {
+    api::project_document(&access_token(app, organization_id).await?, document_id).await
+}
+
+pub async fn update_project_document(
+    app: &AppHandle,
+    organization_id: &str,
+    document_id: &str,
+    expected_updated_at: &str,
+    title: &str,
+    content: &str,
+) -> Result<LinearDocument> {
+    api::update_project_document(
+        &access_token(app, organization_id).await?,
+        document_id,
+        expected_updated_at,
+        title,
+        content,
+    )
+    .await
+}
+
 pub async fn create_project_external_link(
     app: &AppHandle,
     organization_id: &str,

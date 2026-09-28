@@ -580,6 +580,47 @@ pub async fn linear_create_project_document(
 }
 
 #[tauri::command]
+pub async fn linear_project_document(
+    app: AppHandle,
+    organization_id: String,
+    document_id: String,
+) -> Result<LinearDocument> {
+    if organization_id.trim().is_empty() || document_id.trim().is_empty() {
+        return Err(std::io::Error::other("Project document is required").into());
+    }
+    linear::project_document(&app, &organization_id, &document_id).await
+}
+
+#[tauri::command]
+pub async fn linear_update_project_document(
+    app: AppHandle,
+    organization_id: String,
+    document_id: String,
+    expected_updated_at: String,
+    title: String,
+    content: String,
+) -> Result<LinearDocument> {
+    if organization_id.trim().is_empty()
+        || document_id.trim().is_empty()
+        || expected_updated_at.trim().is_empty()
+        || title.trim().is_empty()
+        || title.chars().count() > 255
+        || content.chars().count() > 50_000
+    {
+        return Err(std::io::Error::other("Project document title or content is invalid").into());
+    }
+    linear::update_project_document(
+        &app,
+        &organization_id,
+        &document_id,
+        &expected_updated_at,
+        title.trim(),
+        &content,
+    )
+    .await
+}
+
+#[tauri::command]
 pub async fn linear_create_project_external_link(
     app: AppHandle,
     organization_id: String,
