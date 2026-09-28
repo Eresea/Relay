@@ -52,6 +52,7 @@ import {
   linearIssueValues,
   linearEstimateOptions,
   linearCodexPrompt,
+  linearProjectIssueCacheKey,
   mergeLinearIssueUpdates,
   type LinearIssueUpdate,
   type PendingLinearIssueUpdate,
@@ -4725,13 +4726,14 @@ export class Linear {
   }
 
   private projectIssueCacheKey(connection: LinearConnection, projectId: string): string {
-    const archived = this.includeArchivedProjectIssues() ? '.all' : '';
-    const search = this.projectIssueSearchTerm().trim();
-    const state = this.projectIssueStateId();
-    const priority = this.projectIssuePriority();
-    const assignee = this.projectIssueAssigneeId();
-    const label = this.projectIssueLabelId();
-    return `relay.linear.projectIssues.${connection.organizationId}.${connection.viewerId}.${projectId}${archived}${search ? `.search.${encodeURIComponent(search)}` : ''}${state ? `.state.${encodeURIComponent(state)}` : ''}${priority ? `.priority.${priority}` : ''}${assignee ? `.assignee.${encodeURIComponent(assignee)}` : ''}${label ? `.label.${encodeURIComponent(label)}` : ''}`;
+    return linearProjectIssueCacheKey(connection.organizationId, connection.viewerId, projectId, {
+      includeArchived: this.includeArchivedProjectIssues(),
+      search: this.projectIssueSearchTerm(),
+      stateId: this.projectIssueStateId(),
+      priority: this.projectIssuePriority(),
+      assigneeId: this.projectIssueAssigneeId(),
+      labelId: this.projectIssueLabelId(),
+    });
   }
 
   private projectResourcesCacheKey(connection: LinearConnection, projectId: string): string {

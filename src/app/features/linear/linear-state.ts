@@ -1,5 +1,29 @@
 import type { LinearIssue, LinearIssueDetail } from '@core/tauri';
 
+export interface LinearProjectIssueFilters {
+  includeArchived: boolean;
+  search: string;
+  stateId: string;
+  priority: string;
+  assigneeId: string;
+  labelId: string;
+}
+
+export function linearProjectIssueCacheKey(
+  organizationId: string,
+  viewerId: string,
+  projectId: string,
+  filters: LinearProjectIssueFilters,
+): string {
+  const archived = filters.includeArchived ? '.all' : '';
+  const search = filters.search.trim();
+  const state = filters.stateId;
+  const priority = filters.priority;
+  const assignee = filters.assigneeId;
+  const label = filters.labelId;
+  return `relay.linear.projectIssues.${organizationId}.${viewerId}.${projectId}${archived}${search ? `.search.${encodeURIComponent(search)}` : ''}${state ? `.state.${encodeURIComponent(state)}` : ''}${priority ? `.priority.${priority}` : ''}${assignee ? `.assignee.${encodeURIComponent(assignee)}` : ''}${label ? `.label.${encodeURIComponent(label)}` : ''}`;
+}
+
 export interface LinearIssueUpdate {
   title?: string;
   description?: string;

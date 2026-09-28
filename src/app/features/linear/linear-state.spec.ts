@@ -10,6 +10,7 @@ import {
   linearIssueConflicts,
   linearIssueValues,
   linearProjectDocumentDraftConflicts,
+  linearProjectIssueCacheKey,
   mergeLinearIssueUpdates,
 } from './linear-state';
 
@@ -138,6 +139,44 @@ describe('Linear comment edit drafts', () => {
     expect(isLinearCommentDraft({ body: 42, originalBody: 'Original comment' })).toBe(false);
     expect(linearCommentDraftConflicts(draft, 'Original comment')).toBe(false);
     expect(linearCommentDraftConflicts(draft, 'Remote edit')).toBe(true);
+  });
+});
+
+describe('Linear project issue cache keys', () => {
+  it('separates project results by every active filter', () => {
+    const base = {
+      includeArchived: false,
+      search: '  release notes  ',
+      stateId: 'state-1',
+      priority: '2',
+      assigneeId: 'user-1',
+      labelId: 'label-1',
+    };
+    const key = linearProjectIssueCacheKey('org', 'viewer', 'project', base);
+    expect(key).toBe(
+      'relay.linear.projectIssues.org.viewer.project.search.release%20notes.state.state-1.priority.2.assignee.user-1.label.label-1',
+    );
+    expect(
+      linearProjectIssueCacheKey('org', 'viewer', 'project', {
+        ...base,
+        includeArchived: true,
+      }),
+    ).not.toBe(key);
+    expect(
+      linearProjectIssueCacheKey('org', 'viewer', 'project', { ...base, stateId: 'state-2' }),
+    ).not.toBe(key);
+    expect(
+      linearProjectIssueCacheKey('org', 'viewer', 'project', { ...base, priority: '3' }),
+    ).not.toBe(key);
+    expect(
+      linearProjectIssueCacheKey('org', 'viewer', 'project', { ...base, assigneeId: 'user-2' }),
+    ).not.toBe(key);
+    expect(
+      linearProjectIssueCacheKey('org', 'viewer', 'project', { ...base, labelId: 'label-2' }),
+    ).not.toBe(key);
+    expect(
+      linearProjectIssueCacheKey('org', 'viewer', 'project', { ...base, search: 'other' }),
+    ).not.toBe(key);
   });
 });
 
