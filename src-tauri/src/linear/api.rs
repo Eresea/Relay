@@ -380,48 +380,69 @@ pub async fn viewer(token: &str) -> Result<Viewer> {
 pub async fn teams(token: &str) -> Result<Vec<Team>> {
     #[derive(Deserialize)]
     struct Data {
-        teams: Nodes<Team>,
+        teams: ResourceConnection<Team>,
     }
 
-    Ok(query::<Data>(
-        token,
-        "query RelayTeams { teams { nodes { id name key timezone issueEstimationType issueEstimationExtended issueEstimationAllowZero } } }",
-        json!({}),
-    )
-    .await?
-    .teams
-    .nodes)
+    let mut teams = Vec::new();
+    let mut after = None;
+    loop {
+        let data: Data = query(
+            token,
+            "query RelayTeams($after: String) { teams(first: 100, after: $after) { nodes { id name key timezone issueEstimationType issueEstimationExtended issueEstimationAllowZero } pageInfo { endCursor hasNextPage } } }",
+            json!({ "after": after }),
+        )
+        .await?;
+        teams.extend(data.teams.nodes);
+        match next_page_cursor(&data.teams.page_info, "team")? {
+            Some(cursor) => after = Some(cursor),
+            None => return Ok(teams),
+        }
+    }
 }
 
 pub async fn users(token: &str) -> Result<Vec<Person>> {
     #[derive(Deserialize)]
     struct Data {
-        users: Nodes<Person>,
+        users: ResourceConnection<Person>,
     }
-    Ok(query::<Data>(
-        token,
-        "query RelayUsers { users(first: 100) { nodes { id name } } }",
-        json!({}),
-    )
-    .await?
-    .users
-    .nodes)
+    let mut users = Vec::new();
+    let mut after = None;
+    loop {
+        let data: Data = query(
+            token,
+            "query RelayUsers($after: String) { users(first: 100, after: $after) { nodes { id name } pageInfo { endCursor hasNextPage } } }",
+            json!({ "after": after }),
+        )
+        .await?;
+        users.extend(data.users.nodes);
+        match next_page_cursor(&data.users.page_info, "user")? {
+            Some(cursor) => after = Some(cursor),
+            None => return Ok(users),
+        }
+    }
 }
 
 pub async fn issue_labels(token: &str) -> Result<Vec<LinearLabel>> {
     #[derive(Deserialize)]
     struct Data {
         #[serde(rename = "issueLabels")]
-        labels: Nodes<LinearLabel>,
+        labels: ResourceConnection<LinearLabel>,
     }
-    Ok(query::<Data>(
-        token,
-        "query RelayIssueLabels { issueLabels(first: 250) { nodes { id name color team { id } } } }",
-        json!({}),
-    )
-    .await?
-    .labels
-    .nodes)
+    let mut labels = Vec::new();
+    let mut after = None;
+    loop {
+        let data: Data = query(
+            token,
+            "query RelayIssueLabels($after: String) { issueLabels(first: 250, after: $after) { nodes { id name color team { id } } pageInfo { endCursor hasNextPage } } }",
+            json!({ "after": after }),
+        )
+        .await?;
+        labels.extend(data.labels.nodes);
+        match next_page_cursor(&data.labels.page_info, "issue label")? {
+            Some(cursor) => after = Some(cursor),
+            None => return Ok(labels),
+        }
+    }
 }
 
 pub async fn create_issue_label(
@@ -833,16 +854,23 @@ pub async fn project_statuses(token: &str) -> Result<Vec<LinearProjectStatus>> {
     #[derive(Deserialize)]
     struct Data {
         #[serde(rename = "projectStatuses")]
-        statuses: Nodes<LinearProjectStatus>,
+        statuses: ResourceConnection<LinearProjectStatus>,
     }
-    Ok(query::<Data>(
-        token,
-        "query RelayProjectStatuses { projectStatuses(first: 100) { nodes { id name type } } }",
-        json!({}),
-    )
-    .await?
-    .statuses
-    .nodes)
+    let mut statuses = Vec::new();
+    let mut after = None;
+    loop {
+        let data: Data = query(
+            token,
+            "query RelayProjectStatuses($after: String) { projectStatuses(first: 100, after: $after) { nodes { id name type } pageInfo { endCursor hasNextPage } } }",
+            json!({ "after": after }),
+        )
+        .await?;
+        statuses.extend(data.statuses.nodes);
+        match next_page_cursor(&data.statuses.page_info, "project status")? {
+            Some(cursor) => after = Some(cursor),
+            None => return Ok(statuses),
+        }
+    }
 }
 
 pub async fn project_milestones(token: &str, project_id: &str) -> Result<Vec<LinearMilestone>> {
@@ -1526,23 +1554,29 @@ pub async fn workflow_states(token: &str, team_id: &str) -> Result<Vec<WorkflowS
     #[derive(Deserialize)]
     struct Data {
         #[serde(rename = "workflowStates")]
-        workflow_states: Nodes<WorkflowState>,
+        workflow_states: ResourceConnection<WorkflowState>,
     }
 
-    Ok(query::<Data>(
-        token,
-        "query RelayWorkflowStates { workflowStates { nodes { id name type team { id } } } }",
-        json!({}),
-    )
-    .await?
-    .workflow_states
-    .nodes)
-    .map(|states| {
-        states
-            .into_iter()
-            .filter(|state| state.team.as_ref().is_some_and(|team| team.id == team_id))
-            .collect()
-    })
+    let mut states = Vec::new();
+    let mut after = None;
+    loop {
+        let data: Data = query(
+            token,
+            "query RelayWorkflowStates($after: String) { workflowStates(first: 100, after: $after) { nodes { id name type team { id } } pageInfo { endCursor hasNextPage } } }",
+            json!({ "after": after }),
+        )
+        .await?;
+        states.extend(data.workflow_states.nodes);
+        match next_page_cursor(&data.workflow_states.page_info, "workflow state")? {
+            Some(cursor) => after = Some(cursor),
+            None => {
+                return Ok(states
+                    .into_iter()
+                    .filter(|state| state.team.as_ref().is_some_and(|team| team.id == team_id))
+                    .collect());
+            }
+        }
+    }
 }
 
 pub async fn create_issue(
@@ -1618,10 +1652,10 @@ pub async fn issue_detail(token: &str, issue_id: &str) -> Result<IssueDetail> {
     struct IssueNode {
         #[serde(flatten)]
         issue: Issue,
-        children: Nodes<Issue>,
-        comments: Nodes<LinearComment>,
-        relations: Nodes<IssueRelation>,
-        inverse_relations: Nodes<IssueRelation>,
+        children: ResourceConnection<Issue>,
+        comments: ResourceConnection<LinearComment>,
+        relations: ResourceConnection<IssueRelation>,
+        inverse_relations: ResourceConnection<IssueRelation>,
     }
     #[derive(Deserialize)]
     struct Data {
@@ -1629,16 +1663,120 @@ pub async fn issue_detail(token: &str, issue_id: &str) -> Result<IssueDetail> {
     }
     let data: Data = query(
         token,
-        "query RelayIssueDetail($id: String!) { issue(id: $id) { id identifier title description url priority estimate dueDate updatedAt archivedAt state { id name type } assignee { id name } project { id name } projectMilestone { id name } cycle { id name number } labels { nodes { id name color } } team { id name key } children(first: 50) { nodes { id identifier title description url priority updatedAt archivedAt state { id name type } assignee { id name } project { id name } cycle { id name number } labels { nodes { id name color } } team { id name key } } } relations(first: 50) { nodes { id type relatedIssue { id identifier title url } } } inverseRelations(first: 50) { nodes { id type issue { id identifier title url } } } comments(first: 50) { nodes { id body createdAt editedAt user { id name } } } } }",
+        "query RelayIssueDetail($id: String!) { issue(id: $id) { id identifier title description url priority estimate dueDate updatedAt archivedAt state { id name type } assignee { id name } project { id name } projectMilestone { id name } cycle { id name number } labels { nodes { id name color } } team { id name key } children(first: 100) { nodes { id identifier title description url priority updatedAt archivedAt state { id name type } assignee { id name } project { id name } cycle { id name number } labels { nodes { id name color } } team { id name key } } pageInfo { endCursor hasNextPage } } relations(first: 100) { nodes { id type relatedIssue { id identifier title url } } pageInfo { endCursor hasNextPage } } inverseRelations(first: 100) { nodes { id type issue { id identifier title url } } pageInfo { endCursor hasNextPage } } comments(first: 100) { nodes { id body createdAt editedAt user { id name } } pageInfo { endCursor hasNextPage } } } }",
         json!({ "id": issue_id }),
     )
     .await?;
+    let mut children = data.issue.children.nodes;
+    let mut after = next_page_cursor(&data.issue.children.page_info, "issue child")?;
+    while let Some(cursor) = after {
+        #[derive(Deserialize)]
+        struct ChildIssue {
+            children: ResourceConnection<Issue>,
+        }
+        #[derive(Deserialize)]
+        struct ChildData {
+            issue: Option<ChildIssue>,
+        }
+        let page: ChildData = query(
+            token,
+            "query RelayIssueChildren($id: String!, $after: String) { issue(id: $id) { children(first: 100, after: $after) { nodes { id identifier title description url priority updatedAt archivedAt state { id name type } assignee { id name } project { id name } cycle { id name number } labels { nodes { id name color } } team { id name key } } pageInfo { endCursor hasNextPage } } } }",
+            json!({ "id": issue_id, "after": cursor }),
+        )
+        .await?;
+        let page = page
+            .issue
+            .ok_or_else(|| Error::LinearApi("Linear issue was not found".into()))?
+            .children;
+        children.extend(page.nodes);
+        after = next_page_cursor(&page.page_info, "issue child")?;
+    }
+
+    let mut comments = data.issue.comments.nodes;
+    let mut after = next_page_cursor(&data.issue.comments.page_info, "issue comment")?;
+    while let Some(cursor) = after {
+        #[derive(Deserialize)]
+        struct CommentIssue {
+            comments: ResourceConnection<LinearComment>,
+        }
+        #[derive(Deserialize)]
+        struct CommentData {
+            issue: Option<CommentIssue>,
+        }
+        let page: CommentData = query(
+            token,
+            "query RelayIssueComments($id: String!, $after: String) { issue(id: $id) { comments(first: 100, after: $after) { nodes { id body createdAt editedAt user { id name } } pageInfo { endCursor hasNextPage } } } }",
+            json!({ "id": issue_id, "after": cursor }),
+        )
+        .await?;
+        let page = page
+            .issue
+            .ok_or_else(|| Error::LinearApi("Linear issue was not found".into()))?
+            .comments;
+        comments.extend(page.nodes);
+        after = next_page_cursor(&page.page_info, "issue comment")?;
+    }
+
+    let mut relations = data.issue.relations.nodes;
+    let mut after = next_page_cursor(&data.issue.relations.page_info, "issue relation")?;
+    while let Some(cursor) = after {
+        #[derive(Deserialize)]
+        struct RelationIssue {
+            relations: ResourceConnection<IssueRelation>,
+        }
+        #[derive(Deserialize)]
+        struct RelationData {
+            issue: Option<RelationIssue>,
+        }
+        let page: RelationData = query(
+            token,
+            "query RelayIssueRelations($id: String!, $after: String) { issue(id: $id) { relations(first: 100, after: $after) { nodes { id type relatedIssue { id identifier title url } } pageInfo { endCursor hasNextPage } } } }",
+            json!({ "id": issue_id, "after": cursor }),
+        )
+        .await?;
+        let page = page
+            .issue
+            .ok_or_else(|| Error::LinearApi("Linear issue was not found".into()))?
+            .relations;
+        relations.extend(page.nodes);
+        after = next_page_cursor(&page.page_info, "issue relation")?;
+    }
+
+    let mut inverse_relations = data.issue.inverse_relations.nodes;
+    let mut after = next_page_cursor(
+        &data.issue.inverse_relations.page_info,
+        "inverse issue relation",
+    )?;
+    while let Some(cursor) = after {
+        #[derive(Deserialize)]
+        struct InverseRelationIssue {
+            #[serde(rename = "inverseRelations")]
+            relations: ResourceConnection<IssueRelation>,
+        }
+        #[derive(Deserialize)]
+        struct InverseRelationData {
+            issue: Option<InverseRelationIssue>,
+        }
+        let page: InverseRelationData = query(
+            token,
+            "query RelayInverseIssueRelations($id: String!, $after: String) { issue(id: $id) { inverseRelations(first: 100, after: $after) { nodes { id type issue { id identifier title url } } pageInfo { endCursor hasNextPage } } } }",
+            json!({ "id": issue_id, "after": cursor }),
+        )
+        .await?;
+        let page = page
+            .issue
+            .ok_or_else(|| Error::LinearApi("Linear issue was not found".into()))?
+            .relations;
+        inverse_relations.extend(page.nodes);
+        after = next_page_cursor(&page.page_info, "inverse issue relation")?;
+    }
+
     Ok(IssueDetail {
         issue: data.issue.issue,
-        children: data.issue.children.nodes,
-        comments: data.issue.comments.nodes,
-        relations: data.issue.relations.nodes,
-        inverse_relations: data.issue.inverse_relations.nodes,
+        children,
+        comments,
+        relations,
+        inverse_relations,
     })
 }
 
