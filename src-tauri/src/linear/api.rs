@@ -2,7 +2,7 @@
 
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 use std::collections::HashMap;
 
 use crate::error::{Error, Result};
@@ -848,25 +848,30 @@ pub async fn project_statuses(token: &str) -> Result<Vec<LinearProjectStatus>> {
 pub async fn project_milestones(token: &str, project_id: &str) -> Result<Vec<LinearMilestone>> {
     #[derive(Deserialize)]
     struct ProjectNode {
-        project_milestones: Nodes<LinearMilestone>,
+        project_milestones: ResourceConnection<LinearMilestone>,
     }
     #[derive(Deserialize)]
     struct Data {
         projects: Nodes<ProjectNode>,
     }
-    let data: Data = query(
-        token,
-        "query RelayProjectMilestones($projectId: String!) { projects(filter: { id: { eq: $projectId } }, first: 1) { nodes { projectMilestones(first: 100) { nodes { id name description targetDate } } } } }",
-        json!({ "projectId": project_id }),
-    )
-    .await?;
-    Ok(data
-        .projects
-        .nodes
-        .into_iter()
-        .next()
-        .map(|project| project.project_milestones.nodes)
-        .unwrap_or_default())
+    let mut milestones = Vec::new();
+    let mut after = None;
+    loop {
+        let data: Data = query(
+            token,
+            "query RelayProjectMilestones($projectId: String!, $after: String) { projects(filter: { id: { eq: $projectId } }, first: 1) { nodes { projectMilestones(first: 100, after: $after) { nodes { id name description targetDate } pageInfo { endCursor hasNextPage } } } } }",
+            json!({ "projectId": project_id, "after": after }),
+        )
+        .await?;
+        let Some(project) = data.projects.nodes.into_iter().next() else {
+            return Ok(milestones);
+        };
+        milestones.extend(project.project_milestones.nodes);
+        match next_page_cursor(&project.project_milestones.page_info, "milestone")? {
+            Some(cursor) => after = Some(cursor),
+            None => return Ok(milestones),
+        }
+    }
 }
 
 pub async fn project_updates(
@@ -876,25 +881,30 @@ pub async fn project_updates(
 ) -> Result<Vec<LinearProjectUpdate>> {
     #[derive(Deserialize)]
     struct ProjectNode {
-        project_updates: Nodes<LinearProjectUpdate>,
+        project_updates: ResourceConnection<LinearProjectUpdate>,
     }
     #[derive(Deserialize)]
     struct Data {
         projects: Nodes<ProjectNode>,
     }
-    let data: Data = query(
-        token,
-        "query RelayProjectUpdates($projectId: String!, $includeArchived: Boolean!) { projects(filter: { id: { eq: $projectId } }, first: 1) { nodes { projectUpdates(first: 50, includeArchived: $includeArchived, orderBy: createdAt) { nodes { id body health createdAt archivedAt user { id name } } } } } }",
-        json!({ "projectId": project_id, "includeArchived": include_archived }),
-    )
-    .await?;
-    Ok(data
-        .projects
-        .nodes
-        .into_iter()
-        .next()
-        .map(|project| project.project_updates.nodes)
-        .unwrap_or_default())
+    let mut updates = Vec::new();
+    let mut after = None;
+    loop {
+        let data: Data = query(
+            token,
+            "query RelayProjectUpdates($projectId: String!, $includeArchived: Boolean!, $after: String) { projects(filter: { id: { eq: $projectId } }, first: 1) { nodes { projectUpdates(first: 100, after: $after, includeArchived: $includeArchived, orderBy: createdAt) { nodes { id body health createdAt archivedAt user { id name } } pageInfo { endCursor hasNextPage } } } } }",
+            json!({ "projectId": project_id, "includeArchived": include_archived, "after": after }),
+        )
+        .await?;
+        let Some(project) = data.projects.nodes.into_iter().next() else {
+            return Ok(updates);
+        };
+        updates.extend(project.project_updates.nodes);
+        match next_page_cursor(&project.project_updates.page_info, "project update")? {
+            Some(cursor) => after = Some(cursor),
+            None => return Ok(updates),
+        }
+    }
 }
 
 pub async fn archive_project_update(token: &str, update_id: &str) -> Result<()> {
@@ -1071,13 +1081,16 @@ pub async fn initiatives(
         #[serde(rename = "archivedAt")]
         archived_at: Option<String>,
         #[serde(rename = "initiativeUpdates")]
-        updates: Nodes<InitiativeUpdate>,
+        updates: ResourceConnection<InitiativeUpdate>,
     }
     #[derive(Deserialize)]
-    struct Data {
-        initiatives: Nodes<InitiativeNode>,
+    struct InitiativesData {
+        initiatives: ResourceConnection<InitiativeNode>,
+    }
+    #[derive(Deserialize)]
+    struct InitiativeProjectsData {
         #[serde(rename = "initiativeToProjects")]
-        project_links: Nodes<InitiativeProjectNode>,
+        project_links: ResourceConnection<InitiativeProjectNode>,
     }
     #[derive(Deserialize)]
     struct InitiativeProjectNode {
@@ -1089,14 +1102,68 @@ pub async fn initiatives(
     struct InitiativeRef {
         id: String,
     }
-    let data = query::<Data>(
-        token,
-        "query RelayInitiatives($includeArchived: Boolean!, $includeArchivedUpdates: Boolean!) { initiatives(first: 100, includeArchived: $includeArchived) { nodes { id name description targetDate archivedAt initiativeUpdates(first: 50, includeArchived: $includeArchivedUpdates) { nodes { id body health createdAt archivedAt user { id name } } } } } initiativeToProjects(first: 100, includeArchived: $includeArchived) { nodes { id initiative { id } project { id name teams { nodes { id name key } } } } } }",
-        json!({ "includeArchived": include_archived, "includeArchivedUpdates": include_archived_updates }),
-    )
-    .await?;
+    let mut initiative_nodes = Vec::new();
+    let mut after = None;
+    loop {
+        let data: InitiativesData = query(
+            token,
+            "query RelayInitiatives($includeArchived: Boolean!, $includeArchivedUpdates: Boolean!, $after: String) { initiatives(first: 100, after: $after, includeArchived: $includeArchived) { nodes { id name description targetDate archivedAt initiativeUpdates(first: 100, includeArchived: $includeArchivedUpdates) { nodes { id body health createdAt archivedAt user { id name } } pageInfo { endCursor hasNextPage } } } pageInfo { endCursor hasNextPage } } }",
+            json!({ "includeArchived": include_archived, "includeArchivedUpdates": include_archived_updates, "after": after }),
+        )
+        .await?;
+        initiative_nodes.extend(data.initiatives.nodes);
+        match next_page_cursor(&data.initiatives.page_info, "initiative")? {
+            Some(cursor) => after = Some(cursor),
+            None => break,
+        }
+    }
+
+    let mut project_links = Vec::new();
+    let mut after = None;
+    loop {
+        let data: InitiativeProjectsData = query(
+            token,
+            "query RelayInitiativeProjects($includeArchived: Boolean!, $after: String) { initiativeToProjects(first: 100, after: $after, includeArchived: $includeArchived) { nodes { id initiative { id } project { id name teams { nodes { id name key } } } } pageInfo { endCursor hasNextPage } } }",
+            json!({ "includeArchived": include_archived, "after": after }),
+        )
+        .await?;
+        project_links.extend(data.project_links.nodes);
+        match next_page_cursor(&data.project_links.page_info, "initiative project link")? {
+            Some(cursor) => after = Some(cursor),
+            None => break,
+        }
+    }
+
+    for initiative in &mut initiative_nodes {
+        let mut updates = std::mem::take(&mut initiative.updates.nodes);
+        let mut after = next_page_cursor(&initiative.updates.page_info, "initiative update")?;
+        while let Some(cursor) = after {
+            #[derive(Deserialize)]
+            struct UpdatesData {
+                initiative: Option<InitiativeUpdatesNode>,
+            }
+            #[derive(Deserialize)]
+            struct InitiativeUpdatesNode {
+                #[serde(rename = "initiativeUpdates")]
+                updates: ResourceConnection<InitiativeUpdate>,
+            }
+            let data: UpdatesData = query(
+                token,
+                "query RelayInitiativeUpdates($id: String!, $includeArchived: Boolean!, $after: String) { initiative(id: $id) { initiativeUpdates(first: 100, after: $after, includeArchived: $includeArchived) { nodes { id body health createdAt archivedAt user { id name } } pageInfo { endCursor hasNextPage } } } }",
+                json!({ "id": initiative.id, "includeArchived": include_archived_updates, "after": cursor }),
+            )
+            .await?;
+            let Some(page) = data.initiative.map(|initiative| initiative.updates) else {
+                return Err(Error::LinearApi("Linear initiative was not found".into()));
+            };
+            updates.extend(page.nodes);
+            after = next_page_cursor(&page.page_info, "initiative update")?;
+        }
+        initiative.updates.nodes = updates;
+    }
+
     let mut projects = HashMap::<String, Vec<InitiativeProject>>::new();
-    for link in data.project_links.nodes {
+    for link in project_links {
         projects
             .entry(link.initiative.id)
             .or_default()
@@ -1105,9 +1172,7 @@ pub async fn initiatives(
                 project: link.project,
             });
     }
-    Ok(data
-        .initiatives
-        .nodes
+    Ok(initiative_nodes
         .into_iter()
         .map(|initiative| Initiative {
             id: initiative.id.clone(),
@@ -1342,16 +1407,23 @@ pub async fn remove_project_from_initiative(token: &str, link_id: &str) -> Resul
 pub async fn cycles(token: &str, team_id: &str) -> Result<Vec<LinearCycle>> {
     #[derive(Deserialize)]
     struct Data {
-        cycles: Nodes<LinearCycle>,
+        cycles: ResourceConnection<LinearCycle>,
     }
-    Ok(query::<Data>(
-        token,
-        "query RelayCycles($teamId: String!) { cycles(filter: { team: { id: { eq: $teamId } } }, first: 100) { nodes { id name description number startsAt endsAt isActive team { id name key timezone } } } }",
-        json!({ "teamId": team_id }),
-    )
-    .await?
-    .cycles
-    .nodes)
+    let mut cycles = Vec::new();
+    let mut after = None;
+    loop {
+        let data: Data = query(
+            token,
+            "query RelayCycles($teamId: String!, $after: String) { cycles(filter: { team: { id: { eq: $teamId } } }, first: 100, after: $after) { nodes { id name description number startsAt endsAt isActive team { id name key timezone } } pageInfo { endCursor hasNextPage } } }",
+            json!({ "teamId": team_id, "after": after }),
+        )
+        .await?;
+        cycles.extend(data.cycles.nodes);
+        match next_page_cursor(&data.cycles.page_info, "cycle")? {
+            Some(cursor) => after = Some(cursor),
+            None => return Ok(cycles),
+        }
+    }
 }
 
 pub async fn create_cycle(
@@ -2265,6 +2337,17 @@ struct PageInfo {
     has_next_page: bool,
 }
 
+fn next_page_cursor(page_info: &PageInfo, collection: &str) -> Result<Option<String>> {
+    if !page_info.has_next_page {
+        return Ok(None);
+    }
+    page_info
+        .end_cursor
+        .clone()
+        .map(Some)
+        .ok_or_else(|| Error::LinearApi(format!("Linear returned an incomplete {collection} page")))
+}
+
 async fn query<T: DeserializeOwned>(token: &str, query: &str, variables: Value) -> Result<T> {
     let response = reqwest::Client::new()
         .post(GRAPHQL)
@@ -2295,6 +2378,40 @@ async fn query<T: DeserializeOwned>(token: &str, query: &str, variables: Value) 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn pagination_requires_a_cursor_only_when_another_page_exists() {
+        assert_eq!(
+            next_page_cursor(
+                &PageInfo {
+                    end_cursor: Some("next".into()),
+                    has_next_page: true,
+                },
+                "cycle"
+            )
+            .unwrap(),
+            Some("next".into())
+        );
+        assert_eq!(
+            next_page_cursor(
+                &PageInfo {
+                    end_cursor: None,
+                    has_next_page: false,
+                },
+                "cycle"
+            )
+            .unwrap(),
+            None
+        );
+        assert!(next_page_cursor(
+            &PageInfo {
+                end_cursor: None,
+                has_next_page: true,
+            },
+            "cycle"
+        )
+        .is_err());
+    }
 
     #[derive(Deserialize, Serialize)]
     struct LabelResponse {
