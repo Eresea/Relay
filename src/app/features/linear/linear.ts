@@ -54,6 +54,7 @@ import {
   isLinearOrganizationCacheKey,
   isLinearProjectDocumentDraft,
   isLinearProjectDocumentCreateDraft,
+  isLinearProjectEditDraft,
   isLinearProjectLinkDraft,
   isPendingLinearIssueUpdate,
   linearCommentDraftConflicts,
@@ -78,7 +79,12 @@ import {
   type LinearIssueLabelDraft,
   type LinearIssueDetailsDraft,
   type LinearProjectDraft,
+  type LinearProjectEditDraft,
+  type LinearProjectEditValues,
   type LinearProjectPlanningDraft,
+  linearProjectEditDraftConflicts,
+  linearProjectEditValues,
+  linearProjectEditValuesEqual,
 } from './linear-state';
 import { cycleDateInTimezone, cycleDateToIso, todayInTimezone } from './cycle-dates';
 
@@ -1361,39 +1367,44 @@ function isLinearTeamList(value: unknown): value is readonly LinearTeam[] {
                     <input
                       required
                       maxlength="255"
+                      [disabled]="savingProject()"
                       [value]="editProjectName()"
-                      (input)="editProjectName.set($any($event.target).value)"
+                      (input)="updateProjectEditDraft('name', $any($event.target).value)"
                     />
                   </label>
                   <label>
                     <span>Description</span>
                     <textarea
                       rows="3"
+                      [disabled]="savingProject()"
                       [value]="editProjectDescription()"
-                      (input)="editProjectDescription.set($any($event.target).value)"
+                      (input)="updateProjectEditDraft('description', $any($event.target).value)"
                     ></textarea>
                   </label>
                   <label>
                     <span>Start date</span>
                     <input
                       type="date"
+                      [disabled]="savingProject()"
                       [value]="editProjectStartDate()"
-                      (input)="editProjectStartDate.set($any($event.target).value)"
+                      (input)="updateProjectEditDraft('startDate', $any($event.target).value)"
                     />
                   </label>
                   <label>
                     <span>Target date</span>
                     <input
                       type="date"
+                      [disabled]="savingProject()"
                       [value]="editProjectTargetDate()"
-                      (input)="editProjectTargetDate.set($any($event.target).value)"
+                      (input)="updateProjectEditDraft('targetDate', $any($event.target).value)"
                     />
                   </label>
                   <label>
                     <span>Status</span>
                     <select
+                      [disabled]="savingProject()"
                       [value]="editProjectStatusId()"
-                      (change)="editProjectStatusId.set($any($event.target).value)"
+                      (change)="updateProjectEditDraft('statusId', $any($event.target).value)"
                     >
                       @for (status of projectStatuses(); track status.id) {
                         <option [value]="status.id">{{ status.name }}</option>
@@ -1403,8 +1414,9 @@ function isLinearTeamList(value: unknown): value is readonly LinearTeam[] {
                   <label>
                     <span>Project lead</span>
                     <select
+                      [disabled]="savingProject()"
                       [value]="editProjectLeadId()"
-                      (change)="editProjectLeadId.set($any($event.target).value)"
+                      (change)="updateProjectEditDraft('leadId', $any($event.target).value)"
                     >
                       <option value="">No lead</option>
                       @for (user of users(); track user.id) {
@@ -1418,6 +1430,7 @@ function isLinearTeamList(value: unknown): value is readonly LinearTeam[] {
                       <label>
                         <input
                           type="checkbox"
+                          [disabled]="savingProject()"
                           [checked]="editProjectTeamIds().includes(team.id)"
                           (change)="toggleProjectTeam('edit', team.id, $event)"
                         />
@@ -1425,10 +1438,36 @@ function isLinearTeamList(value: unknown): value is readonly LinearTeam[] {
                       </label>
                     }
                   </fieldset>
+                  @if (projectEditDraftConflict()) {
+                    <div class="issue-conflicts" role="alert">
+                      <span>This project draft overlaps newer changes in Linear.</span>
+                      <umbra-button
+                        size="sm"
+                        variant="outline"
+                        type="button"
+                        (click)="resolveProjectEditDraftConflict(true)"
+                      >
+                        Keep draft
+                      </umbra-button>
+                      <umbra-button
+                        size="sm"
+                        variant="outline"
+                        type="button"
+                        (click)="resolveProjectEditDraftConflict(false)"
+                      >
+                        Use Linear's version
+                      </umbra-button>
+                    </div>
+                  } @else if (hasProjectEditDraft()) {
+                    <p class="hint">Project draft saved on this device.</p>
+                  }
                   <umbra-button
                     size="sm"
                     [disabled]="
-                      savingProject() || !editProjectName().trim() || !editProjectTeamIds().length
+                      savingProject() ||
+                      projectEditDraftConflict() ||
+                      !editProjectName().trim() ||
+                      !editProjectTeamIds().length
                     "
                   >
                     {{ savingProject() ? 'Saving' : 'Save project' }}
@@ -3732,6 +3771,8 @@ export class Linear {
   protected readonly editProjectStatusId = signal('');
   protected readonly editProjectLeadId = signal('');
   protected readonly editProjectTeamIds = signal<readonly string[]>([]);
+  protected readonly projectEditDraftConflict = signal(false);
+  protected readonly hasProjectEditDraft = signal(false);
   protected readonly newMilestoneName = signal('');
   protected readonly newMilestoneDescription = signal('');
   protected readonly newMilestoneDate = signal('');
@@ -4904,6 +4945,93 @@ export class Linear {
     );
   }
 
+  protected updateProjectEditDraft(
+    field: keyof Omit<LinearProjectEditValues, 'teamIds'>,
+    value: string,
+  ): void {
+    if (field === 'name') this.editProjectName.set(value);
+    else if (field === 'description') this.editProjectDescription.set(value);
+    else if (field === 'startDate') this.editProjectStartDate.set(value);
+    else if (field === 'targetDate') this.editProjectTargetDate.set(value);
+    else if (field === 'statusId') this.editProjectStatusId.set(value);
+    else this.editProjectLeadId.set(value);
+    const connection = this.selected();
+    const project = this.selectedProject();
+    if (connection && project) this.saveProjectEditDraft(connection, project);
+  }
+
+  protected resolveProjectEditDraftConflict(keepDraft: boolean): void {
+    const connection = this.selected();
+    const project = this.selectedProject();
+    if (!connection || !project) return;
+    if (keepDraft) {
+      const draft = this.readProjectEditDraft(connection, project.id);
+      if (draft) {
+        this.writeLocal(this.projectEditDraftKey(connection, project.id), {
+          values: this.currentProjectEditValues(),
+          base: linearProjectEditValues(project),
+        } satisfies LinearProjectEditDraft);
+      }
+    } else {
+      this.applyProjectEditValues(linearProjectEditValues(project));
+      this.writeLocal(this.projectEditDraftKey(connection, project.id), null);
+      this.hasProjectEditDraft.set(false);
+    }
+    this.projectEditDraftConflict.set(false);
+  }
+
+  private restoreProjectEditDraft(connection: LinearConnection, project: LinearProject): void {
+    const current = linearProjectEditValues(project);
+    const draft = this.readProjectEditDraft(connection, project.id);
+    this.applyProjectEditValues(draft?.values ?? current);
+    this.projectEditDraftConflict.set(
+      draft ? linearProjectEditDraftConflicts(draft, current) : false,
+    );
+    this.hasProjectEditDraft.set(!!draft);
+  }
+
+  private currentProjectEditValues(): LinearProjectEditValues {
+    return {
+      name: this.editProjectName(),
+      description: this.editProjectDescription(),
+      startDate: this.editProjectStartDate(),
+      targetDate: this.editProjectTargetDate(),
+      statusId: this.editProjectStatusId(),
+      leadId: this.editProjectLeadId(),
+      teamIds: this.editProjectTeamIds(),
+    };
+  }
+
+  private applyProjectEditValues(values: LinearProjectEditValues): void {
+    this.editProjectName.set(values.name);
+    this.editProjectDescription.set(values.description);
+    this.editProjectStartDate.set(values.startDate);
+    this.editProjectTargetDate.set(values.targetDate);
+    this.editProjectStatusId.set(values.statusId);
+    this.editProjectLeadId.set(values.leadId);
+    this.editProjectTeamIds.set(values.teamIds);
+  }
+
+  private saveProjectEditDraft(connection: LinearConnection, project: LinearProject): void {
+    const values = this.currentProjectEditValues();
+    const original = this.readProjectEditDraft(connection, project.id);
+    const draft: LinearProjectEditDraft = {
+      values,
+      base: original?.base ?? linearProjectEditValues(project),
+    };
+    const hasDraft = !linearProjectEditValuesEqual(draft.values, draft.base);
+    this.writeLocal(this.projectEditDraftKey(connection, project.id), hasDraft ? draft : null);
+    this.hasProjectEditDraft.set(hasDraft);
+  }
+
+  private readProjectEditDraft(
+    connection: LinearConnection,
+    projectId: string,
+  ): LinearProjectEditDraft | null {
+    const value = this.readLocal<unknown>(this.projectEditDraftKey(connection, projectId));
+    return isLinearProjectEditDraft(value) ? value : null;
+  }
+
   protected toggleProjectTeam(which: 'create' | 'edit', teamId: string, event: Event): void {
     const selected = which === 'create' ? this.newProjectTeamIds() : this.editProjectTeamIds();
     const checked = (event.target as HTMLInputElement | null)?.checked ?? false;
@@ -4915,6 +5043,11 @@ export class Linear {
     if (which === 'create') this.newProjectTeamIds.set(next);
     else this.editProjectTeamIds.set(next);
     if (which === 'create') this.saveProjectDraft();
+    else {
+      const project = this.selectedProject();
+      const connection = this.selected();
+      if (connection && project) this.saveProjectEditDraft(connection, project);
+    }
   }
 
   protected updateIssueDraft(field: 'title' | 'description', value: string): void {
@@ -4990,6 +5123,10 @@ export class Linear {
 
   private projectDraftKey(connection: LinearConnection): string {
     return `relay.linear.projectDraft.${connection.organizationId}.${connection.viewerId}`;
+  }
+
+  private projectEditDraftKey(connection: LinearConnection, projectId: string): string {
+    return `relay.linear.projectEditDraft.${connection.organizationId}.${connection.viewerId}.${projectId}`;
   }
 
   private projectIssueCacheKey(connection: LinearConnection, projectId: string): string {
@@ -6206,13 +6343,8 @@ export class Linear {
       this.restoreProjectDocumentCreateDraft(connection, project.id);
       this.restoreProjectLinkDraft(connection, project.id);
     }
-    this.editProjectName.set(project.name);
-    this.editProjectDescription.set(project.description ?? '');
-    this.editProjectStartDate.set(project.startDate ?? '');
-    this.editProjectTargetDate.set(project.targetDate ?? '');
-    this.editProjectStatusId.set(project.status?.id ?? '');
-    this.editProjectLeadId.set(project.lead?.id ?? '');
-    this.editProjectTeamIds.set((project.teams ?? []).map((team) => team.id));
+    if (connection) this.restoreProjectEditDraft(connection, project);
+    else this.applyProjectEditValues(linearProjectEditValues(project));
     this.projectUpdates.set([]);
     this.projectResources.set({ documents: [], externalLinks: [] });
     this.closeProjectDocumentEditor();
@@ -6620,25 +6752,60 @@ export class Linear {
   protected async saveProject(event: Event): Promise<void> {
     event.preventDefault();
     const connection = this.selected();
-    const project = this.selectedProject();
+    const openedProject = this.selectedProject();
     const name = this.editProjectName().trim();
-    if (!connection || !project || !name || this.savingProject()) return;
+    if (
+      !connection ||
+      !openedProject ||
+      !name ||
+      this.savingProject() ||
+      this.projectEditDraftConflict()
+    ) {
+      return;
+    }
     this.savingProject.set(true);
     this.error.set(null);
     try {
+      const latest = (
+        await this.tauri.linearProjects(connection.organizationId, this.showArchivedProjects())
+      ).find((item) => item.id === openedProject.id);
+      if (!latest) throw new Error('Linear no longer has this project. Refresh and try again.');
+      const draft = this.readProjectEditDraft(connection, latest.id);
+      if (!draft) {
+        this.selectedProject.set(latest);
+        this.applyProjectEditValues(linearProjectEditValues(latest));
+        return;
+      }
+      const current = linearProjectEditValues(latest);
+      if (linearProjectEditDraftConflicts(draft, current)) {
+        this.selectedProject.set(latest);
+        this.projectEditDraftConflict.set(true);
+        return;
+      }
+      if (linearProjectEditValuesEqual(draft.values, current)) {
+        this.selectedProject.set(latest);
+        this.applyProjectEditValues(current);
+        this.writeLocal(this.projectEditDraftKey(connection, latest.id), null);
+        this.hasProjectEditDraft.set(false);
+        return;
+      }
       const updated = await this.tauri.linearUpdateProject(
         connection.organizationId,
-        project.id,
-        name,
-        this.editProjectDescription(),
-        this.editProjectStartDate(),
-        this.editProjectTargetDate(),
-        this.editProjectStatusId(),
-        this.editProjectLeadId(),
-        !this.editProjectLeadId(),
-        this.editProjectTeamIds(),
+        latest.id,
+        draft.values.name.trim(),
+        draft.values.description,
+        draft.values.startDate,
+        draft.values.targetDate,
+        draft.values.statusId,
+        draft.values.leadId,
+        !draft.values.leadId,
+        draft.values.teamIds,
       );
       this.selectedProject.set(updated);
+      this.applyProjectEditValues(linearProjectEditValues(updated));
+      this.writeLocal(this.projectEditDraftKey(connection, latest.id), null);
+      this.hasProjectEditDraft.set(false);
+      this.projectEditDraftConflict.set(false);
       if (updated.teams.length && !updated.teams.some((team) => team.id === this.createTeamId())) {
         this.setCreateTeam(updated.teams[0].id);
       }

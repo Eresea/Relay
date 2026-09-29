@@ -2,6 +2,7 @@ import type {
   LinearIssue,
   LinearIssueDetail,
   LinearIssueRelationType,
+  LinearProject,
   LinearProjectHealth,
 } from '@core/tauri';
 
@@ -28,6 +29,86 @@ export interface LinearProjectDraft {
   startDate: string;
   targetDate: string;
   teamIds: readonly string[];
+}
+
+export interface LinearProjectEditValues {
+  name: string;
+  description: string;
+  startDate: string;
+  targetDate: string;
+  statusId: string;
+  leadId: string;
+  teamIds: readonly string[];
+}
+
+export interface LinearProjectEditDraft {
+  values: LinearProjectEditValues;
+  base: LinearProjectEditValues;
+}
+
+export function linearProjectEditValues(project: LinearProject): LinearProjectEditValues {
+  return {
+    name: project.name,
+    description: project.description ?? '',
+    startDate: project.startDate ?? '',
+    targetDate: project.targetDate ?? '',
+    statusId: project.status?.id ?? '',
+    leadId: project.lead?.id ?? '',
+    teamIds: project.teams.map((team) => team.id),
+  };
+}
+
+export function isLinearProjectEditDraft(value: unknown): value is LinearProjectEditDraft {
+  if (!value || typeof value !== 'object') return false;
+  const draft = value as Partial<LinearProjectEditDraft>;
+  const validValues = (values: unknown): values is LinearProjectEditValues => {
+    if (!values || typeof values !== 'object') return false;
+    const item = values as Partial<LinearProjectEditValues>;
+    return (
+      typeof item.name === 'string' &&
+      typeof item.description === 'string' &&
+      typeof item.startDate === 'string' &&
+      typeof item.targetDate === 'string' &&
+      typeof item.statusId === 'string' &&
+      typeof item.leadId === 'string' &&
+      Array.isArray(item.teamIds) &&
+      item.teamIds.every((id) => typeof id === 'string')
+    );
+  };
+  return validValues(draft.values) && validValues(draft.base);
+}
+
+export function linearProjectEditDraftConflicts(
+  draft: LinearProjectEditDraft,
+  current: LinearProjectEditValues,
+): boolean {
+  const fields = ['name', 'description', 'startDate', 'targetDate', 'statusId', 'leadId'] as const;
+  if (
+    fields.some(
+      (field) => draft.base[field] !== current[field] && draft.values[field] !== current[field],
+    )
+  ) {
+    return true;
+  }
+  return (
+    !sameProjectTeams(draft.base.teamIds, current.teamIds) &&
+    !sameProjectTeams(draft.values.teamIds, current.teamIds)
+  );
+}
+
+export function linearProjectEditValuesEqual(
+  left: LinearProjectEditValues,
+  right: LinearProjectEditValues,
+): boolean {
+  const fields = ['name', 'description', 'startDate', 'targetDate', 'statusId', 'leadId'] as const;
+  return (
+    fields.every((field) => left[field] === right[field]) &&
+    sameProjectTeams(left.teamIds, right.teamIds)
+  );
+}
+
+function sameProjectTeams(left: readonly string[], right: readonly string[]): boolean {
+  return left.length === right.length && left.every((id) => right.includes(id));
 }
 
 export interface LinearProjectDocumentCreateDraft {
@@ -201,6 +282,7 @@ const organizationCacheCategories = [
   'milestones',
   'projectDocumentDraft',
   'projectDocumentCreateDraft',
+  'projectEditDraft',
   'subIssueDraft',
   'projectDraft',
   'projectIssues',

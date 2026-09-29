@@ -16,12 +16,15 @@ import {
   isLinearProjectDocumentCreateDraft,
   isLinearProjectLinkDraft,
   isLinearProjectDocumentDraft,
+  isLinearProjectEditDraft,
   linearCodexPrompt,
   linearCommentDraftConflicts,
   linearEstimateOptions,
   linearIssueConflicts,
   linearIssueValues,
   linearProjectDocumentDraftConflicts,
+  linearProjectEditDraftConflicts,
+  linearProjectEditValuesEqual,
   linearProjectIssueCacheKey,
   mergeLinearIssueUpdates,
 } from './linear-state';
@@ -217,6 +220,30 @@ describe('Linear project issue cache keys', () => {
   });
 });
 
+describe('Linear project edit drafts', () => {
+  it('requires review when any field in the full update changed remotely', () => {
+    const base = {
+      name: 'Original',
+      description: 'Details',
+      startDate: '2026-09-01',
+      targetDate: '2026-09-30',
+      statusId: 'active',
+      leadId: 'person-1',
+      teamIds: ['team-1'],
+    };
+    const draft = { base, values: { ...base, name: 'Relay draft' } };
+    expect(isLinearProjectEditDraft(draft)).toBe(true);
+    expect(isLinearProjectEditDraft({ ...draft, values: { ...base, teamIds: [3] } })).toBe(false);
+    expect(linearProjectEditDraftConflicts(draft, { ...base, name: 'Remote title' })).toBe(true);
+    expect(linearProjectEditDraftConflicts(draft, { ...base, description: 'Remote details' })).toBe(
+      true,
+    );
+    expect(linearProjectEditDraftConflicts(draft, { ...base, name: 'Relay draft' })).toBe(false);
+    expect(linearProjectEditDraftConflicts(draft, { ...base, teamIds: ['team-2'] })).toBe(true);
+    expect(linearProjectEditValuesEqual(base, { ...base, teamIds: ['team-1'] })).toBe(true);
+  });
+});
+
 describe('Linear organization cache cleanup', () => {
   it('matches this workspace caches without matching neighboring workspace ids', () => {
     for (const key of [
@@ -231,6 +258,7 @@ describe('Linear organization cache cleanup', () => {
       'relay.linear.projectIssues.org.viewer.project',
       'relay.linear.projectPlanningDraft.org.viewer.project',
       'relay.linear.projectDraft.org.viewer',
+      'relay.linear.projectEditDraft.org.viewer.project',
       'relay.linear.projectDocumentCreateDraft.org.viewer.project',
       'relay.linear.projectLinkDraft.org.viewer.project',
       'relay.linear.initiatives.org.viewer',
