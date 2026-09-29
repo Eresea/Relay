@@ -186,7 +186,7 @@ function isLinearTeamList(value: unknown): value is readonly LinearTeam[] {
               size="sm"
               variant="outline"
               (click)="pending() ? cancelConnect() : connect()"
-              [disabled]="!pending() && !oauthConfigured()"
+              [disabled]="!pending() && (!oauthConfigured() || !nexus.status().connected)"
             >
               {{ pending() ? 'Cancel sign-in' : 'Connect workspace' }}
             </umbra-button>
