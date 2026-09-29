@@ -637,21 +637,9 @@ function isLinearTeamList(value: unknown): value is readonly LinearTeam[] {
                       </select>
                     </label>
                     <div class="issue-actions">
-                      <umbra-button
-                        size="sm"
-                        [disabled]="
-                          codexPending() ||
-                          !selected()?.agentInstalled ||
-                          !selectedCodexWorkspacePath()
-                        "
-                        (click)="requestCodex(detail.issue, false)"
-                      >
-                        {{ codexPending() ? 'Working in Codex' : 'Start new Codex thread' }}
-                      </umbra-button>
-                      @if (localCodexLink(); as link) {
+                      @if (localCodexLink()) {
                         <umbra-button
                           size="sm"
-                          variant="outline"
                           [disabled]="
                             codexPending() ||
                             !selected()?.agentInstalled ||
@@ -660,6 +648,30 @@ function isLinearTeamList(value: unknown): value is readonly LinearTeam[] {
                           (click)="requestCodex(detail.issue, true)"
                         >
                           Continue Codex
+                        </umbra-button>
+                        <umbra-button
+                          size="sm"
+                          variant="outline"
+                          [disabled]="
+                            codexPending() ||
+                            !selected()?.agentInstalled ||
+                            !selectedCodexWorkspacePath()
+                          "
+                          (click)="requestCodex(detail.issue, false)"
+                        >
+                          Start new thread
+                        </umbra-button>
+                      } @else {
+                        <umbra-button
+                          size="sm"
+                          [disabled]="
+                            codexPending() ||
+                            !selected()?.agentInstalled ||
+                            !selectedCodexWorkspacePath()
+                          "
+                          (click)="requestCodex(detail.issue, false)"
+                        >
+                          {{ codexPending() ? 'Working in Codex' : 'Start Codex thread' }}
                         </umbra-button>
                       }
                     </div>
