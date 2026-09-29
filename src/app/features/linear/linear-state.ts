@@ -343,6 +343,36 @@ export interface LinearInitiativeUpdateDraft {
   health: LinearProjectHealth;
 }
 
+export interface LinearStatusUpdateEditDraft {
+  values: LinearInitiativeUpdateDraft;
+  base: LinearInitiativeUpdateDraft;
+}
+
+export function isLinearStatusUpdateEditDraft(
+  value: unknown,
+): value is LinearStatusUpdateEditDraft {
+  if (!value || typeof value !== 'object') return false;
+  const draft = value as Partial<LinearStatusUpdateEditDraft>;
+  return isLinearInitiativeUpdateDraft(draft.values) && isLinearInitiativeUpdateDraft(draft.base);
+}
+
+export function linearStatusUpdateEditDraftConflicts(
+  draft: LinearStatusUpdateEditDraft,
+  current: LinearInitiativeUpdateDraft,
+): boolean {
+  return (
+    (draft.base.body !== current.body && draft.values.body !== current.body) ||
+    (draft.base.health !== current.health && draft.values.health !== current.health)
+  );
+}
+
+export function linearStatusUpdateEditValuesEqual(
+  left: LinearInitiativeUpdateDraft,
+  right: LinearInitiativeUpdateDraft,
+): boolean {
+  return left.body === right.body && left.health === right.health;
+}
+
 export interface LinearCycleDraft {
   name: string;
   startsAt: string;
@@ -438,6 +468,7 @@ const organizationCacheCategories = [
   'initiativeDraft',
   'initiativeEditDraft',
   'initiativeUpdateDraft',
+  'initiativeUpdateEditDraft',
   'issueCommentDraft',
   'issueCommentEditDraft',
   'issueDetailsDraft',
@@ -457,6 +488,7 @@ const organizationCacheCategories = [
   'projectPlanningDraft',
   'projectResources',
   'projectUpdates',
+  'projectUpdateEditDraft',
   'projects',
   'teams',
 ] as const;

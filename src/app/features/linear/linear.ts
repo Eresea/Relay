@@ -8,6 +8,7 @@ import {
   input,
   output,
   signal,
+  type WritableSignal,
 } from '@angular/core';
 
 import { NexusAccount } from '@core/nexus-account';
@@ -49,6 +50,7 @@ import {
   isLinearInitiativeDraft,
   isLinearInitiativeEditDraft,
   isLinearInitiativeUpdateDraft,
+  isLinearStatusUpdateEditDraft,
   isLinearIssueRelationDraft,
   isLinearIssueLabelDraft,
   isLinearIssueDetailsDraft,
@@ -74,6 +76,8 @@ import {
   linearInitiativeEditDraftConflicts,
   linearInitiativeEditValues,
   linearInitiativeEditValuesEqual,
+  linearStatusUpdateEditDraftConflicts,
+  linearStatusUpdateEditValuesEqual,
   mergeLinearIssueUpdates,
   type LinearIssueUpdate,
   type LinearCycleDraft,
@@ -87,6 +91,7 @@ import {
   type LinearInitiativeEditDraft,
   type LinearInitiativeEditValues,
   type LinearInitiativeUpdateDraft,
+  type LinearStatusUpdateEditDraft,
   type LinearIssueRelationDraft,
   type LinearIssueLabelDraft,
   type LinearIssueDetailsDraft,
@@ -2126,7 +2131,7 @@ function isLinearTeamList(value: unknown): value is readonly LinearTeam[] {
                           <span>Health</span>
                           <select
                             [value]="editProjectUpdateHealth()"
-                            (change)="editProjectUpdateHealth.set($any($event.target).value)"
+                            (change)="updateProjectUpdateEdit('health', $any($event.target).value)"
                           >
                             <option value="onTrack">On track</option>
                             <option value="atRisk">At risk</option>
@@ -2140,13 +2145,40 @@ function isLinearTeamList(value: unknown): value is readonly LinearTeam[] {
                             maxlength="10000"
                             rows="3"
                             [value]="editProjectUpdateBody()"
-                            (input)="editProjectUpdateBody.set($any($event.target).value)"
+                            (input)="updateProjectUpdateEdit('body', $any($event.target).value)"
                           ></textarea>
                         </label>
+                        @if (projectUpdateEditDraftConflict()) {
+                          <div class="issue-conflicts" role="alert">
+                            <span>This project update draft overlaps newer changes in Linear.</span>
+                            <umbra-button
+                              size="sm"
+                              variant="outline"
+                              type="button"
+                              (click)="resolveProjectUpdateEditDraftConflict(update, true)"
+                            >
+                              Keep draft
+                            </umbra-button>
+                            <umbra-button
+                              size="sm"
+                              variant="outline"
+                              type="button"
+                              (click)="resolveProjectUpdateEditDraftConflict(update, false)"
+                            >
+                              Use Linear's version
+                            </umbra-button>
+                          </div>
+                        } @else if (hasProjectUpdateEditDraft()) {
+                          <p class="hint">Project update draft saved on this device.</p>
+                        }
                         <div class="issue-actions">
                           <umbra-button
                             size="sm"
-                            [disabled]="savingProjectUpdate() || !editProjectUpdateBody().trim()"
+                            [disabled]="
+                              savingProjectUpdate() ||
+                              projectUpdateEditDraftConflict() ||
+                              !editProjectUpdateBody().trim()
+                            "
                           >
                             {{ savingProjectUpdate() ? 'Saving' : 'Save update' }}
                           </umbra-button>
@@ -3010,7 +3042,10 @@ function isLinearTeamList(value: unknown): value is readonly LinearTeam[] {
                                   <select
                                     [value]="editInitiativeUpdateHealth()"
                                     (change)="
-                                      editInitiativeUpdateHealth.set($any($event.target).value)
+                                      updateInitiativeUpdateEdit(
+                                        'health',
+                                        $any($event.target).value
+                                      )
                                     "
                                   >
                                     <option value="onTrack">On track</option>
@@ -3026,15 +3061,47 @@ function isLinearTeamList(value: unknown): value is readonly LinearTeam[] {
                                     rows="3"
                                     [value]="editInitiativeUpdateBody()"
                                     (input)="
-                                      editInitiativeUpdateBody.set($any($event.target).value)
+                                      updateInitiativeUpdateEdit('body', $any($event.target).value)
                                     "
                                   ></textarea>
                                 </label>
+                                @if (initiativeUpdateEditDraftConflict()) {
+                                  <div class="issue-conflicts" role="alert">
+                                    <span
+                                      >This initiative update draft overlaps newer changes in
+                                      Linear.</span
+                                    >
+                                    <umbra-button
+                                      size="sm"
+                                      variant="outline"
+                                      type="button"
+                                      (click)="
+                                        resolveInitiativeUpdateEditDraftConflict(update, true)
+                                      "
+                                    >
+                                      Keep draft
+                                    </umbra-button>
+                                    <umbra-button
+                                      size="sm"
+                                      variant="outline"
+                                      type="button"
+                                      (click)="
+                                        resolveInitiativeUpdateEditDraftConflict(update, false)
+                                      "
+                                    >
+                                      Use Linear's version
+                                    </umbra-button>
+                                  </div>
+                                } @else if (hasInitiativeUpdateEditDraft()) {
+                                  <p class="hint">Initiative update draft saved on this device.</p>
+                                }
                                 <div class="issue-actions">
                                   <umbra-button
                                     size="sm"
                                     [disabled]="
-                                      savingInitiativeUpdate() || !editInitiativeUpdateBody().trim()
+                                      savingInitiativeUpdate() ||
+                                      initiativeUpdateEditDraftConflict() ||
+                                      !editInitiativeUpdateBody().trim()
                                     "
                                   >
                                     {{ savingInitiativeUpdate() ? 'Saving' : 'Save update' }}
@@ -3848,6 +3915,9 @@ export class Linear {
   protected readonly editProjectUpdateBody = signal('');
   protected readonly editProjectUpdateHealth = signal<LinearProjectHealth>('onTrack');
   protected readonly savingProjectUpdate = signal(false);
+  protected readonly projectUpdateEditDraftConflict = signal(false);
+  protected readonly hasProjectUpdateEditDraft = signal(false);
+  private readonly projectUpdateEditBase = signal<LinearInitiativeUpdateDraft | null>(null);
   protected readonly includeArchivedProjectUpdates = signal(false);
   protected readonly busyProjectUpdateId = signal<string | null>(null);
   protected readonly confirmArchiveProjectUpdateId = signal<string | null>(null);
@@ -3862,6 +3932,9 @@ export class Linear {
   protected readonly editInitiativeUpdateBody = signal('');
   protected readonly editInitiativeUpdateHealth = signal<LinearProjectHealth>('onTrack');
   protected readonly savingInitiativeUpdate = signal(false);
+  protected readonly initiativeUpdateEditDraftConflict = signal(false);
+  protected readonly hasInitiativeUpdateEditDraft = signal(false);
+  private readonly initiativeUpdateEditBase = signal<LinearInitiativeUpdateDraft | null>(null);
   protected readonly busyInitiativeUpdateId = signal<string | null>(null);
   protected readonly confirmArchiveInitiativeUpdateId = signal<string | null>(null);
   protected readonly includeArchivedInitiativeUpdates = signal(false);
@@ -6342,8 +6415,70 @@ export class Linear {
 
   protected editInitiativeUpdate(update: LinearInitiativeUpdate): void {
     this.editingInitiativeUpdateId.set(update.id);
-    this.editInitiativeUpdateBody.set(update.body);
-    this.editInitiativeUpdateHealth.set(update.health);
+    const current = { body: update.body, health: update.health };
+    this.initiativeUpdateEditBase.set(current);
+    const connection = this.selected();
+    const draft = connection
+      ? this.readStatusUpdateEditDraft(this.initiativeUpdateEditDraftKey(connection, update.id))
+      : null;
+    const values = draft?.values ?? current;
+    this.editInitiativeUpdateBody.set(values.body);
+    this.editInitiativeUpdateHealth.set(values.health);
+    this.initiativeUpdateEditDraftConflict.set(
+      draft ? linearStatusUpdateEditDraftConflicts(draft, current) : false,
+    );
+    this.hasInitiativeUpdateEditDraft.set(!!draft);
+  }
+
+  protected updateInitiativeUpdateEdit(field: 'body' | 'health', value: string): void {
+    if (field === 'body') this.editInitiativeUpdateBody.set(value);
+    else this.editInitiativeUpdateHealth.set(this.updateHealth(value));
+    const connection = this.selected();
+    const updateId = this.editingInitiativeUpdateId();
+    if (connection && updateId) {
+      this.saveStatusUpdateEditDraft(
+        this.initiativeUpdateEditDraftKey(connection, updateId),
+        { body: this.editInitiativeUpdateBody(), health: this.editInitiativeUpdateHealth() },
+        this.initiativeUpdateEditBase() ?? {
+          body: this.editInitiativeUpdateBody(),
+          health: this.editInitiativeUpdateHealth(),
+        },
+        this.hasInitiativeUpdateEditDraft,
+      );
+    }
+  }
+
+  protected resolveInitiativeUpdateEditDraftConflict(
+    update: LinearInitiativeUpdate,
+    keepDraft: boolean,
+  ): void {
+    const connection = this.selected();
+    if (!connection) return;
+    const current = { body: update.body, health: update.health };
+    const key = this.initiativeUpdateEditDraftKey(connection, update.id);
+    const draft = this.readStatusUpdateEditDraft(key);
+    if (keepDraft && draft) {
+      this.writeLocal(key, { values: this.currentInitiativeUpdateEditValues(), base: current });
+      this.initiativeUpdateEditBase.set(current);
+    } else {
+      this.applyInitiativeUpdateEditValues(current);
+      this.initiativeUpdateEditBase.set(current);
+      this.writeLocal(key, null);
+      this.hasInitiativeUpdateEditDraft.set(false);
+    }
+    this.initiativeUpdateEditDraftConflict.set(false);
+  }
+
+  private currentInitiativeUpdateEditValues(): LinearInitiativeUpdateDraft {
+    return {
+      body: this.editInitiativeUpdateBody(),
+      health: this.editInitiativeUpdateHealth(),
+    };
+  }
+
+  private applyInitiativeUpdateEditValues(values: LinearInitiativeUpdateDraft): void {
+    this.editInitiativeUpdateBody.set(values.body);
+    this.editInitiativeUpdateHealth.set(values.health);
   }
 
   protected async setInitiativeUpdateArchived(
@@ -6381,22 +6516,89 @@ export class Linear {
     event.preventDefault();
     const connection = this.selected();
     const body = this.editInitiativeUpdateBody().trim();
-    if (!connection || !body || this.savingInitiativeUpdate()) return;
+    if (
+      !connection ||
+      !body ||
+      this.savingInitiativeUpdate() ||
+      this.initiativeUpdateEditDraftConflict()
+    ) {
+      return;
+    }
     this.savingInitiativeUpdate.set(true);
     this.error.set(null);
     try {
+      const latest = await this.tauri.linearInitiatives(connection.organizationId, true, true);
+      if (
+        this.selected()?.organizationId !== connection.organizationId ||
+        this.selected()?.viewerId !== connection.viewerId
+      ) {
+        return;
+      }
+      const currentInitiative = latest.find((item) =>
+        item.updates.some((candidate) => candidate.id === current.id),
+      );
+      const currentUpdate = currentInitiative?.updates.find((item) => item.id === current.id);
+      if (!currentInitiative || !currentUpdate)
+        throw new Error('Linear no longer has this initiative update. Refresh and retry.');
+      const currentValues = { body: currentUpdate.body, health: currentUpdate.health };
+      const key = this.initiativeUpdateEditDraftKey(connection, current.id);
+      const draft = this.readStatusUpdateEditDraft(key) ?? {
+        values: {
+          body: this.editInitiativeUpdateBody(),
+          health: this.editInitiativeUpdateHealth(),
+        },
+        base: { body: current.body, health: current.health },
+      };
+      if (linearStatusUpdateEditDraftConflicts(draft, currentValues)) {
+        this.initiatives.update((items) =>
+          items.map((item) =>
+            item.id === currentInitiative.id
+              ? { ...currentInitiative, projects: item.projects }
+              : item,
+          ),
+        );
+        this.persistInitiativesCache(connection);
+        this.initiativeUpdateEditDraftConflict.set(true);
+        return;
+      }
+      if (linearStatusUpdateEditValuesEqual(draft.values, currentValues)) {
+        this.applyInitiativeUpdateEditValues(currentValues);
+        this.writeLocal(key, null);
+        this.hasInitiativeUpdateEditDraft.set(false);
+        this.initiativeUpdateEditBase.set(null);
+        this.initiatives.update((items) =>
+          items.map((item) =>
+            item.id === currentInitiative.id
+              ? { ...currentInitiative, projects: item.projects }
+              : item,
+          ),
+        );
+        this.persistInitiativesCache(connection);
+        this.editingInitiativeUpdateId.set(null);
+        return;
+      }
       const update = await this.tauri.linearUpdateInitiativeUpdate(
         connection.organizationId,
         current.id,
-        body,
-        this.editInitiativeUpdateHealth(),
+        draft.values.body.trim(),
+        draft.values.health,
       );
+      if (
+        this.selected()?.organizationId !== connection.organizationId ||
+        this.selected()?.viewerId !== connection.viewerId
+      ) {
+        return;
+      }
       this.initiatives.update((items) =>
         items.map((initiative) => ({
           ...initiative,
           updates: initiative.updates.map((item) => (item.id === update.id ? update : item)),
         })),
       );
+      this.writeLocal(key, null);
+      this.hasInitiativeUpdateEditDraft.set(false);
+      this.initiativeUpdateEditDraftConflict.set(false);
+      this.initiativeUpdateEditBase.set(null);
       this.persistInitiativesCache(connection);
       this.editingInitiativeUpdateId.set(null);
     } catch (error) {
@@ -6863,8 +7065,101 @@ export class Linear {
 
   protected editProjectUpdate(update: LinearProjectUpdate): void {
     this.editingProjectUpdateId.set(update.id);
-    this.editProjectUpdateBody.set(update.body);
-    this.editProjectUpdateHealth.set(update.health);
+    this.projectUpdateEditBase.set({ body: update.body, health: update.health });
+    const connection = this.selected();
+    const draft = connection
+      ? this.readStatusUpdateEditDraft(this.projectUpdateEditDraftKey(connection, update.id))
+      : null;
+    const values = draft?.values ?? { body: update.body, health: update.health };
+    this.editProjectUpdateBody.set(values.body);
+    this.editProjectUpdateHealth.set(values.health);
+    this.projectUpdateEditDraftConflict.set(
+      draft
+        ? linearStatusUpdateEditDraftConflicts(draft, { body: update.body, health: update.health })
+        : false,
+    );
+    this.hasProjectUpdateEditDraft.set(!!draft);
+  }
+
+  protected updateProjectUpdateEdit(field: 'body' | 'health', value: string): void {
+    if (field === 'body') this.editProjectUpdateBody.set(value);
+    else this.editProjectUpdateHealth.set(this.updateHealth(value));
+    const connection = this.selected();
+    const updateId = this.editingProjectUpdateId();
+    if (!connection || !updateId) return;
+    this.saveStatusUpdateEditDraft(
+      this.projectUpdateEditDraftKey(connection, updateId),
+      { body: this.editProjectUpdateBody(), health: this.editProjectUpdateHealth() },
+      this.projectUpdateEditBase() ?? {
+        body: this.editProjectUpdateBody(),
+        health: this.editProjectUpdateHealth(),
+      },
+      this.hasProjectUpdateEditDraft,
+    );
+  }
+
+  protected resolveProjectUpdateEditDraftConflict(
+    update: LinearProjectUpdate,
+    keepDraft: boolean,
+  ): void {
+    const connection = this.selected();
+    if (!connection) return;
+    const current = { body: update.body, health: update.health };
+    const key = this.projectUpdateEditDraftKey(connection, update.id);
+    const draft = this.readStatusUpdateEditDraft(key);
+    if (keepDraft && draft) {
+      this.projectUpdateEditBase.set(current);
+      this.writeLocal(key, { values: this.currentProjectUpdateEditValues(), base: current });
+    } else {
+      this.projectUpdateEditBase.set(current);
+      this.applyProjectUpdateEditValues(current);
+      this.writeLocal(key, null);
+      this.hasProjectUpdateEditDraft.set(false);
+    }
+    this.projectUpdateEditDraftConflict.set(false);
+  }
+
+  private currentProjectUpdateEditValues(): LinearInitiativeUpdateDraft {
+    return { body: this.editProjectUpdateBody(), health: this.editProjectUpdateHealth() };
+  }
+
+  private applyProjectUpdateEditValues(values: LinearInitiativeUpdateDraft): void {
+    this.editProjectUpdateBody.set(values.body);
+    this.editProjectUpdateHealth.set(values.health);
+  }
+
+  private updateHealth(value: string): LinearProjectHealth {
+    return ['onTrack', 'atRisk', 'offTrack'].includes(value)
+      ? (value as LinearProjectHealth)
+      : 'onTrack';
+  }
+
+  private readStatusUpdateEditDraft(key: string): LinearStatusUpdateEditDraft | null {
+    const value = this.readLocal<unknown>(key);
+    return isLinearStatusUpdateEditDraft(value) ? value : null;
+  }
+
+  private saveStatusUpdateEditDraft(
+    key: string,
+    values: LinearInitiativeUpdateDraft,
+    base: LinearInitiativeUpdateDraft,
+    hasDraftSignal: WritableSignal<boolean>,
+  ): void {
+    const draft: LinearStatusUpdateEditDraft = {
+      values,
+      base: this.readStatusUpdateEditDraft(key)?.base ?? base,
+    };
+    const hasDraft = !linearStatusUpdateEditValuesEqual(draft.values, draft.base);
+    this.writeLocal(key, hasDraft ? draft : null);
+    hasDraftSignal.set(hasDraft);
+  }
+
+  private projectUpdateEditDraftKey(connection: LinearConnection, updateId: string): string {
+    return `relay.linear.projectUpdateEditDraft.${connection.organizationId}.${connection.viewerId}.${updateId}`;
+  }
+
+  private initiativeUpdateEditDraftKey(connection: LinearConnection, updateId: string): string {
+    return `relay.linear.initiativeUpdateEditDraft.${connection.organizationId}.${connection.viewerId}.${updateId}`;
   }
 
   protected toggleArchivedProjectUpdates(): void {
@@ -6907,21 +7202,77 @@ export class Linear {
     event.preventDefault();
     const connection = this.selected();
     const body = this.editProjectUpdateBody().trim();
-    if (!connection || !body || this.savingProjectUpdate()) return;
+    const project = this.selectedProject();
+    if (
+      !connection ||
+      !project ||
+      !body ||
+      this.savingProjectUpdate() ||
+      this.projectUpdateEditDraftConflict()
+    ) {
+      return;
+    }
     this.savingProjectUpdate.set(true);
     this.error.set(null);
     try {
+      const latest = await this.tauri.linearProjectUpdates(
+        connection.organizationId,
+        project.id,
+        this.includeArchivedProjectUpdates(),
+      );
+      if (
+        this.selected()?.organizationId !== connection.organizationId ||
+        this.selected()?.viewerId !== connection.viewerId ||
+        this.selectedProject()?.id !== project.id
+      ) {
+        return;
+      }
+      const currentUpdate = latest.find((update) => update.id === current.id);
+      if (!currentUpdate)
+        throw new Error('Linear no longer has this project update. Refresh and retry.');
+      const currentValues = { body: currentUpdate.body, health: currentUpdate.health };
+      const key = this.projectUpdateEditDraftKey(connection, current.id);
+      const draft = this.readStatusUpdateEditDraft(key) ?? {
+        values: this.currentProjectUpdateEditValues(),
+        base: this.projectUpdateEditBase() ?? { body: current.body, health: current.health },
+      };
+      if (linearStatusUpdateEditDraftConflicts(draft, currentValues)) {
+        this.projectUpdates.set(latest);
+        this.saveProjectUpdatesCache(project.id, this.includeArchivedProjectUpdates());
+        this.projectUpdateEditDraftConflict.set(true);
+        return;
+      }
+      if (linearStatusUpdateEditValuesEqual(draft.values, currentValues)) {
+        this.applyProjectUpdateEditValues(currentValues);
+        this.writeLocal(key, null);
+        this.hasProjectUpdateEditDraft.set(false);
+        this.projectUpdateEditBase.set(currentValues);
+        this.projectUpdates.set(latest);
+        this.saveProjectUpdatesCache(project.id, this.includeArchivedProjectUpdates());
+        this.editingProjectUpdateId.set(null);
+        return;
+      }
       const updated = await this.tauri.linearUpdateProjectUpdate(
         connection.organizationId,
         current.id,
-        body,
-        this.editProjectUpdateHealth(),
+        draft.values.body.trim(),
+        draft.values.health,
       );
-      this.projectUpdates.update((updates) =>
-        updates.map((update) => (update.id === updated.id ? updated : update)),
+      if (
+        this.selected()?.organizationId !== connection.organizationId ||
+        this.selected()?.viewerId !== connection.viewerId ||
+        this.selectedProject()?.id !== project.id
+      ) {
+        return;
+      }
+      this.projectUpdates.set(
+        latest.map((update) => (update.id === updated.id ? updated : update)),
       );
-      const projectId = this.selectedProject()?.id;
-      if (projectId) this.saveProjectUpdatesCache(projectId, this.includeArchivedProjectUpdates());
+      this.writeLocal(key, null);
+      this.hasProjectUpdateEditDraft.set(false);
+      this.projectUpdateEditDraftConflict.set(false);
+      this.projectUpdateEditBase.set(null);
+      this.saveProjectUpdatesCache(project.id, this.includeArchivedProjectUpdates());
       this.editingProjectUpdateId.set(null);
     } catch (error) {
       this.error.set(error instanceof Error ? error.message : String(error));

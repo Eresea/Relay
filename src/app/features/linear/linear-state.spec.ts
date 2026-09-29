@@ -8,6 +8,7 @@ import {
   isLinearInitiativeDraft,
   isLinearInitiativeEditDraft,
   isLinearInitiativeUpdateDraft,
+  isLinearStatusUpdateEditDraft,
   isLinearIssueRelationDraft,
   isLinearIssueLabelDraft,
   isLinearIssueDetailsDraft,
@@ -26,6 +27,8 @@ import {
   linearCycleEditValuesEqual,
   linearInitiativeEditDraftConflicts,
   linearInitiativeEditValuesEqual,
+  linearStatusUpdateEditDraftConflicts,
+  linearStatusUpdateEditValuesEqual,
   linearEstimateOptions,
   linearIssueConflicts,
   linearIssueValues,
@@ -288,6 +291,8 @@ describe('Linear organization cache cleanup', () => {
       'relay.linear.projectLinkDraft.org.viewer.project',
       'relay.linear.initiatives.org.viewer',
       'relay.linear.initiativeEditDraft.org.viewer.initiative',
+      'relay.linear.initiativeUpdateEditDraft.org.viewer.update',
+      'relay.linear.projectUpdateEditDraft.org.viewer.update',
       'relay.linear.cycles.org.viewer.team',
     ]) {
       expect(isLinearOrganizationCacheKey(key, 'org')).toBe(true);
@@ -376,6 +381,18 @@ describe('Linear issue label drafts', () => {
 });
 
 describe('Linear roadmap drafts', () => {
+  it('validates status update edit drafts and flags overlapping remote changes', () => {
+    const base = { body: 'On track', health: 'onTrack' as const };
+    const draft = { base, values: { ...base, body: 'At risk' } };
+    expect(isLinearStatusUpdateEditDraft(draft)).toBe(true);
+    expect(
+      isLinearStatusUpdateEditDraft({ ...draft, values: { ...base, health: 'unknown' } }),
+    ).toBe(false);
+    expect(linearStatusUpdateEditDraftConflicts(draft, { ...base, health: 'atRisk' })).toBe(true);
+    expect(linearStatusUpdateEditDraftConflicts(draft, { ...base, body: 'At risk' })).toBe(false);
+    expect(linearStatusUpdateEditValuesEqual(base, { ...base })).toBe(true);
+  });
+
   it('validates cycle creation drafts before restoring them', () => {
     expect(
       isLinearCycleDraft({ name: 'Sprint 1', startsAt: '2026-10-01', endsAt: '2026-10-14' }),
