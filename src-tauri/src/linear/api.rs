@@ -220,7 +220,7 @@ pub struct LinearProject {
     pub lead: Option<Person>,
     #[serde(default, deserialize_with = "deserialize_nodes")]
     pub teams: Vec<Team>,
-    #[serde(default, deserialize_with = "deserialize_nodes")]
+    #[serde(default, skip_deserializing)]
     pub external_links: Vec<LinearExternalLink>,
 }
 
@@ -250,6 +250,14 @@ pub struct LinearExternalLink {
 pub struct LinearProjectResources {
     pub documents: Vec<LinearDocument>,
     pub external_links: Vec<LinearExternalLink>,
+}
+
+#[derive(Deserialize)]
+struct LinearProjectNode {
+    #[serde(flatten)]
+    project: LinearProject,
+    #[serde(rename = "externalLinks")]
+    external_links: ResourceConnection<LinearExternalLink>,
 }
 
 fn deserialize_nodes<'de, D, T>(deserializer: D) -> std::result::Result<Vec<T>, D::Error>
@@ -511,26 +519,52 @@ pub async fn delete_issue_label(token: &str, label_id: &str) -> Result<()> {
 pub async fn projects(token: &str, include_archived: bool) -> Result<Vec<LinearProject>> {
     #[derive(Deserialize)]
     struct Data {
-        projects: ProjectConnection,
+        projects: ResourceConnection<LinearProjectNode>,
     }
     let mut projects = Vec::new();
     let mut after = None;
     loop {
         let data: Data = query(
             token,
-            "query RelayProjects($includeArchived: Boolean!, $after: String) { projects(first: 100, after: $after, includeArchived: $includeArchived) { nodes { id name description url startDate targetDate archivedAt status { id name type } lead { id name } teams { nodes { id name key } } externalLinks(first: 100) { nodes { id label url } } } pageInfo { endCursor hasNextPage } } }",
+            "query RelayProjects($includeArchived: Boolean!, $after: String) { projects(first: 100, after: $after, includeArchived: $includeArchived) { nodes { id name description url startDate targetDate archivedAt status { id name type } lead { id name } teams { nodes { id name key } } externalLinks(first: 100) { nodes { id label url } pageInfo { endCursor hasNextPage } } } pageInfo { endCursor hasNextPage } } }",
             json!({ "includeArchived": include_archived, "after": after }),
         )
         .await?;
-        projects.extend(data.projects.nodes);
-        if !data.projects.page_info.has_next_page {
-            return Ok(projects);
+        let mut page = data.projects;
+        let next = next_page_cursor(&page.page_info, "project")?;
+        for mut project in page.nodes.drain(..) {
+            let mut links = std::mem::take(&mut project.external_links.nodes);
+            let mut link_after =
+                next_page_cursor(&project.external_links.page_info, "project link")?;
+            while let Some(cursor) = link_after {
+                #[derive(Deserialize)]
+                struct ProjectLinks {
+                    #[serde(rename = "externalLinks")]
+                    external_links: ResourceConnection<LinearExternalLink>,
+                }
+                #[derive(Deserialize)]
+                struct LinksData {
+                    project: Option<ProjectLinks>,
+                }
+                let data: LinksData = query(
+                    token,
+                    "query RelayProjectLinks($id: String!, $after: String) { project(id: $id) { externalLinks(first: 100, after: $after) { nodes { id label url } pageInfo { endCursor hasNextPage } } } }",
+                    json!({ "id": project.project.id, "after": cursor }),
+                )
+                .await?;
+                let page = data
+                    .project
+                    .ok_or_else(|| Error::LinearApi("Linear project was not found".into()))?
+                    .external_links;
+                links.extend(page.nodes);
+                link_after = next_page_cursor(&page.page_info, "project link")?;
+            }
+            project.project.external_links = links;
+            projects.push(project.project);
         }
-        after = data.projects.page_info.end_cursor;
-        if after.is_none() {
-            return Err(Error::LinearApi(
-                "Linear returned an incomplete project page".into(),
-            ));
+        match next {
+            Some(cursor) => after = Some(cursor),
+            None => return Ok(projects),
         }
     }
 }
@@ -2455,13 +2489,6 @@ struct IssueConnection {
 }
 
 #[derive(Deserialize)]
-struct ProjectConnection {
-    nodes: Vec<LinearProject>,
-    #[serde(rename = "pageInfo")]
-    page_info: PageInfo,
-}
-
-#[derive(Deserialize)]
 struct ResourceConnection<T> {
     nodes: Vec<T>,
     #[serde(rename = "pageInfo")]
@@ -2595,25 +2622,6 @@ mod tests {
         }))
         .unwrap();
         assert_eq!(link.into_value("failed").unwrap().label, "Design");
-    }
-
-    #[test]
-    fn linear_project_decodes_explicit_repository_links() {
-        let project: LinearProject = serde_json::from_value(json!({
-            "id": "project-1",
-            "name": "Relay release",
-            "externalLinks": { "nodes": [{
-                "id": "link-1",
-                "label": "GitHub: openai/relay",
-                "url": "https://github.com/openai/relay"
-            }] }
-        }))
-        .unwrap();
-
-        assert_eq!(
-            project.external_links[0].url,
-            "https://github.com/openai/relay"
-        );
     }
 
     #[test]
@@ -2789,7 +2797,7 @@ mod tests {
 
     #[test]
     fn project_connection_decodes_pagination_state() {
-        let connection: ProjectConnection = serde_json::from_value(json!({
+        let connection: ResourceConnection<LinearProjectNode> = serde_json::from_value(json!({
             "nodes": [],
             "pageInfo": { "endCursor": "cursor-1", "hasNextPage": true }
         }))
@@ -2797,6 +2805,33 @@ mod tests {
         assert!(connection.nodes.is_empty());
         assert_eq!(connection.page_info.end_cursor.as_deref(), Some("cursor-1"));
         assert!(connection.page_info.has_next_page);
+    }
+
+    #[test]
+    fn linear_project_page_decodes_explicit_repository_links_and_their_cursor() {
+        let project: LinearProjectNode = serde_json::from_value(json!({
+            "id": "project-1",
+            "name": "Relay release",
+            "externalLinks": {
+                "nodes": [{
+                    "id": "link-1",
+                    "label": "GitHub: openai/relay",
+                    "url": "https://github.com/openai/relay"
+                }],
+                "pageInfo": { "endCursor": "next-link", "hasNextPage": true }
+            }
+        }))
+        .unwrap();
+
+        assert_eq!(
+            project.external_links.nodes[0].url,
+            "https://github.com/openai/relay"
+        );
+        assert_eq!(
+            project.external_links.page_info.end_cursor.as_deref(),
+            Some("next-link")
+        );
+        assert!(project.external_links.page_info.has_next_page);
     }
 
     #[test]
