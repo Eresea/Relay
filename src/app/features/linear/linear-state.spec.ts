@@ -17,6 +17,7 @@ import {
   isLinearProjectLinkDraft,
   isLinearProjectDocumentDraft,
   isLinearProjectEditDraft,
+  isLinearMilestoneEditDraft,
   linearCodexPrompt,
   linearCommentDraftConflicts,
   linearEstimateOptions,
@@ -25,6 +26,8 @@ import {
   linearProjectDocumentDraftConflicts,
   linearProjectEditDraftConflicts,
   linearProjectEditValuesEqual,
+  linearMilestoneEditDraftConflicts,
+  linearMilestoneEditValuesEqual,
   linearProjectIssueCacheKey,
   mergeLinearIssueUpdates,
 } from './linear-state';
@@ -244,6 +247,20 @@ describe('Linear project edit drafts', () => {
   });
 });
 
+describe('Linear milestone edit drafts', () => {
+  it('validates drafts and catches newer edits to any milestone field', () => {
+    const base = { name: 'Design', description: 'Original', targetDate: '2026-10-01' };
+    const draft = { base, values: { ...base, name: 'Design review' } };
+    expect(isLinearMilestoneEditDraft(draft)).toBe(true);
+    expect(isLinearMilestoneEditDraft({ ...draft, base: { ...base, targetDate: 4 } })).toBe(false);
+    expect(linearMilestoneEditDraftConflicts(draft, { ...base, description: 'Remote' })).toBe(true);
+    expect(linearMilestoneEditDraftConflicts(draft, { ...base, name: 'Design review' })).toBe(
+      false,
+    );
+    expect(linearMilestoneEditValuesEqual(base, { ...base })).toBe(true);
+  });
+});
+
 describe('Linear organization cache cleanup', () => {
   it('matches this workspace caches without matching neighboring workspace ids', () => {
     for (const key of [
@@ -252,6 +269,7 @@ describe('Linear organization cache cleanup', () => {
       'relay.linear.projectIssueDraft.org.project',
       'relay.linear.issueDetail.org.viewer.issue',
       'relay.linear.issueDetailsDraft.org.viewer.issue',
+      'relay.linear.milestoneEditDraft.org.viewer.project.milestone',
       'relay.linear.issueRelationDraft.org.viewer.issue',
       'relay.linear.issueLabelDraft.org.viewer',
       'relay.linear.subIssueDraft.org.viewer.issue',

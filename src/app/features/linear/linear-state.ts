@@ -2,6 +2,7 @@ import type {
   LinearIssue,
   LinearIssueDetail,
   LinearIssueRelationType,
+  LinearMilestone,
   LinearProject,
   LinearProjectHealth,
 } from '@core/tauri';
@@ -56,6 +57,63 @@ export function linearProjectEditValues(project: LinearProject): LinearProjectEd
     leadId: project.lead?.id ?? '',
     teamIds: project.teams.map((team) => team.id),
   };
+}
+
+export interface LinearMilestoneEditValues {
+  name: string;
+  description: string;
+  targetDate: string;
+}
+
+export interface LinearMilestoneEditDraft {
+  values: LinearMilestoneEditValues;
+  base: LinearMilestoneEditValues;
+}
+
+export function linearMilestoneEditValues(milestone: LinearMilestone): LinearMilestoneEditValues {
+  return {
+    name: milestone.name,
+    description: milestone.description ?? '',
+    targetDate: milestone.targetDate ?? '',
+  };
+}
+
+export function isLinearMilestoneEditDraft(value: unknown): value is LinearMilestoneEditDraft {
+  if (!value || typeof value !== 'object') return false;
+  const draft = value as Partial<LinearMilestoneEditDraft>;
+  const valid = (item: unknown): item is LinearMilestoneEditValues => {
+    if (!item || typeof item !== 'object') return false;
+    const values = item as Partial<LinearMilestoneEditValues>;
+    return (
+      typeof values.name === 'string' &&
+      typeof values.description === 'string' &&
+      typeof values.targetDate === 'string'
+    );
+  };
+  return valid(draft.values) && valid(draft.base);
+}
+
+export function linearMilestoneEditDraftConflicts(
+  draft: LinearMilestoneEditDraft,
+  current: LinearMilestoneEditValues,
+): boolean {
+  return (
+    (draft.base.name !== current.name && draft.values.name !== current.name) ||
+    (draft.base.description !== current.description &&
+      draft.values.description !== current.description) ||
+    (draft.base.targetDate !== current.targetDate && draft.values.targetDate !== current.targetDate)
+  );
+}
+
+export function linearMilestoneEditValuesEqual(
+  left: LinearMilestoneEditValues,
+  right: LinearMilestoneEditValues,
+): boolean {
+  return (
+    left.name === right.name &&
+    left.description === right.description &&
+    left.targetDate === right.targetDate
+  );
 }
 
 export function isLinearProjectEditDraft(value: unknown): value is LinearProjectEditDraft {
@@ -280,6 +338,7 @@ const organizationCacheCategories = [
   'issueRelationDraft',
   'issues',
   'milestones',
+  'milestoneEditDraft',
   'projectDocumentDraft',
   'projectDocumentCreateDraft',
   'projectEditDraft',

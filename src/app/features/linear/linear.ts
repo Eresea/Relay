@@ -50,6 +50,7 @@ import {
   isLinearIssueRelationDraft,
   isLinearIssueLabelDraft,
   isLinearIssueDetailsDraft,
+  isLinearMilestoneEditDraft,
   isLinearProjectDraft,
   isLinearOrganizationCacheKey,
   isLinearProjectDocumentDraft,
@@ -78,6 +79,8 @@ import {
   type LinearIssueRelationDraft,
   type LinearIssueLabelDraft,
   type LinearIssueDetailsDraft,
+  type LinearMilestoneEditDraft,
+  type LinearMilestoneEditValues,
   type LinearProjectDraft,
   type LinearProjectEditDraft,
   type LinearProjectEditValues,
@@ -85,6 +88,9 @@ import {
   linearProjectEditDraftConflicts,
   linearProjectEditValues,
   linearProjectEditValuesEqual,
+  linearMilestoneEditDraftConflicts,
+  linearMilestoneEditValues,
+  linearMilestoneEditValuesEqual,
 } from './linear-state';
 import { cycleDateInTimezone, cycleDateToIso, todayInTimezone } from './cycle-dates';
 
@@ -1833,8 +1839,13 @@ function isLinearTeamList(value: unknown): value is readonly LinearTeam[] {
                       @if (milestone.description) {
                         <span>{{ milestone.description }}</span>
                       }
-                      <umbra-button size="sm" variant="link" (click)="editMilestone(milestone)">
-                        Edit
+                      <umbra-button
+                        size="sm"
+                        variant="link"
+                        [disabled]="loadingMilestoneId() === milestone.id"
+                        (click)="editMilestone(milestone)"
+                      >
+                        {{ loadingMilestoneId() === milestone.id ? 'Checking' : 'Edit' }}
                       </umbra-button>
                       @if (confirmDeleteMilestoneId() === milestone.id) {
                         <div
@@ -1881,29 +1892,73 @@ function isLinearTeamList(value: unknown): value is readonly LinearTeam[] {
                           <input
                             required
                             maxlength="255"
+                            [disabled]="savingMilestone()"
                             [value]="editMilestoneName()"
-                            (input)="editMilestoneName.set($any($event.target).value)"
+                            (input)="
+                              updateMilestoneEditDraft(milestone, 'name', $any($event.target).value)
+                            "
                           />
                         </label>
                         <label>
                           <span>Target date</span>
                           <input
                             type="date"
+                            [disabled]="savingMilestone()"
                             [value]="editMilestoneDate()"
-                            (input)="editMilestoneDate.set($any($event.target).value)"
+                            (input)="
+                              updateMilestoneEditDraft(
+                                milestone,
+                                'targetDate',
+                                $any($event.target).value
+                              )
+                            "
                           />
                         </label>
                         <label>
                           <span>Description</span>
                           <textarea
                             rows="2"
+                            [disabled]="savingMilestone()"
                             [value]="editMilestoneDescription()"
-                            (input)="editMilestoneDescription.set($any($event.target).value)"
+                            (input)="
+                              updateMilestoneEditDraft(
+                                milestone,
+                                'description',
+                                $any($event.target).value
+                              )
+                            "
                           ></textarea>
                         </label>
+                        @if (milestoneEditDraftConflict()) {
+                          <div class="issue-conflicts" role="alert">
+                            <span>This milestone draft overlaps newer changes in Linear.</span>
+                            <umbra-button
+                              size="sm"
+                              variant="outline"
+                              type="button"
+                              (click)="resolveMilestoneEditDraftConflict(milestone, true)"
+                            >
+                              Keep draft
+                            </umbra-button>
+                            <umbra-button
+                              size="sm"
+                              variant="outline"
+                              type="button"
+                              (click)="resolveMilestoneEditDraftConflict(milestone, false)"
+                            >
+                              Use Linear's version
+                            </umbra-button>
+                          </div>
+                        } @else if (hasMilestoneEditDraft()) {
+                          <p class="hint">Milestone draft saved on this device.</p>
+                        }
                         <umbra-button
                           size="sm"
-                          [disabled]="savingMilestone() || !editMilestoneName().trim()"
+                          [disabled]="
+                            savingMilestone() ||
+                            milestoneEditDraftConflict() ||
+                            !editMilestoneName().trim()
+                          "
                         >
                           {{ savingMilestone() ? 'Saving' : 'Save milestone' }}
                         </umbra-button>
@@ -3802,9 +3857,13 @@ export class Linear {
   protected readonly deletingCommentId = signal<string | null>(null);
   protected readonly confirmDeleteCommentId = signal<string | null>(null);
   protected readonly editingMilestoneId = signal<string | null>(null);
+  protected readonly loadingMilestoneId = signal<string | null>(null);
   protected readonly editMilestoneName = signal('');
   protected readonly editMilestoneDescription = signal('');
   protected readonly editMilestoneDate = signal('');
+  protected readonly milestoneEditDraftConflict = signal(false);
+  protected readonly hasMilestoneEditDraft = signal(false);
+  private readonly milestoneEditBase = signal<LinearMilestoneEditValues | null>(null);
   protected readonly section = signal<'work' | 'projects' | 'cycles' | 'roadmap' | 'labels'>(
     'work',
   );
@@ -3864,6 +3923,7 @@ export class Linear {
   private initiativeRequest = 0;
   private projectUpdatesRequest = 0;
   private milestoneRequest = 0;
+  private milestoneEditRequest = 0;
 
   protected pageTitle(): string {
     return {
@@ -6642,33 +6702,138 @@ export class Linear {
     }
   }
 
-  protected editMilestone(milestone: LinearMilestone): void {
-    this.editingMilestoneId.set(milestone.id);
-    this.editMilestoneName.set(milestone.name);
-    this.editMilestoneDescription.set(milestone.description ?? '');
-    this.editMilestoneDate.set(milestone.targetDate ?? '');
+  protected async editMilestone(milestone: LinearMilestone): Promise<void> {
+    const connection = this.selected();
+    const project = this.selectedProject();
+    if (!connection || !project || this.loadingMilestoneId()) return;
+    const requestId = ++this.milestoneEditRequest;
+    this.loadingMilestoneId.set(milestone.id);
+    let current = milestone;
+    try {
+      const latest = await this.tauri.linearProjectMilestones(
+        connection.organizationId,
+        project.id,
+      );
+      if (requestId !== this.milestoneEditRequest || this.selectedProject()?.id !== project.id)
+        return;
+      current = latest.find((item) => item.id === milestone.id) ?? milestone;
+      this.milestones.set(latest);
+      this.saveMilestoneCache(project.id);
+    } catch {
+      if (requestId !== this.milestoneEditRequest || this.selectedProject()?.id !== project.id)
+        return;
+    } finally {
+      if (requestId === this.milestoneEditRequest) this.loadingMilestoneId.set(null);
+    }
+    const draft = this.readMilestoneEditDraft(connection, project.id, current.id);
+    const values = draft?.values ?? linearMilestoneEditValues(current);
+    this.editingMilestoneId.set(current.id);
+    this.editMilestoneName.set(values.name);
+    this.editMilestoneDescription.set(values.description);
+    this.editMilestoneDate.set(values.targetDate);
+    this.milestoneEditBase.set(draft?.base ?? linearMilestoneEditValues(current));
+    this.milestoneEditDraftConflict.set(
+      draft ? linearMilestoneEditDraftConflicts(draft, linearMilestoneEditValues(current)) : false,
+    );
+    this.hasMilestoneEditDraft.set(!!draft);
+  }
+
+  protected updateMilestoneEditDraft(
+    milestone: LinearMilestone,
+    field: keyof LinearMilestoneEditValues,
+    value: string,
+  ): void {
+    if (field === 'name') this.editMilestoneName.set(value);
+    else if (field === 'description') this.editMilestoneDescription.set(value);
+    else this.editMilestoneDate.set(value);
+    const connection = this.selected();
+    const project = this.selectedProject();
+    if (connection && project) this.saveMilestoneEditDraft(connection, project.id, milestone);
+  }
+
+  protected resolveMilestoneEditDraftConflict(
+    milestone: LinearMilestone,
+    keepDraft: boolean,
+  ): void {
+    const connection = this.selected();
+    const project = this.selectedProject();
+    if (!connection || !project) return;
+    const current = linearMilestoneEditValues(milestone);
+    if (keepDraft) {
+      const draft = this.readMilestoneEditDraft(connection, project.id, milestone.id);
+      if (draft) {
+        this.milestoneEditBase.set(current);
+        this.writeLocal(this.milestoneEditDraftKey(connection, project.id, milestone.id), {
+          values: this.currentMilestoneEditValues(),
+          base: current,
+        } satisfies LinearMilestoneEditDraft);
+      }
+    } else {
+      this.applyMilestoneEditValues(current);
+      this.milestoneEditBase.set(current);
+      this.writeLocal(this.milestoneEditDraftKey(connection, project.id, milestone.id), null);
+      this.hasMilestoneEditDraft.set(false);
+    }
+    this.milestoneEditDraftConflict.set(false);
   }
 
   protected async saveMilestone(event: Event, milestone: LinearMilestone): Promise<void> {
     event.preventDefault();
     const connection = this.selected();
+    const project = this.selectedProject();
     const name = this.editMilestoneName().trim();
-    if (!connection || !name || this.savingMilestone()) return;
+    if (
+      !connection ||
+      !project ||
+      !name ||
+      this.savingMilestone() ||
+      this.milestoneEditDraftConflict()
+    ) {
+      return;
+    }
     this.savingMilestone.set(true);
     this.error.set(null);
     try {
+      const latest = await this.tauri.linearProjectMilestones(
+        connection.organizationId,
+        project.id,
+      );
+      const currentMilestone = latest.find((item) => item.id === milestone.id);
+      if (!currentMilestone)
+        throw new Error('Linear no longer has this milestone. Refresh and retry.');
+      this.milestones.set(latest);
+      const current = linearMilestoneEditValues(currentMilestone);
+      const draft = this.readMilestoneEditDraft(connection, project.id, milestone.id) ?? {
+        values: this.currentMilestoneEditValues(),
+        base: this.milestoneEditBase() ?? linearMilestoneEditValues(milestone),
+      };
+      if (linearMilestoneEditDraftConflicts(draft, current)) {
+        this.milestoneEditDraftConflict.set(true);
+        return;
+      }
+      if (linearMilestoneEditValuesEqual(draft.values, current)) {
+        this.applyMilestoneEditValues(current);
+        this.writeLocal(this.milestoneEditDraftKey(connection, project.id, milestone.id), null);
+        this.hasMilestoneEditDraft.set(false);
+        this.milestoneEditBase.set(current);
+        this.saveMilestoneCache(project.id);
+        return;
+      }
       const updated = await this.tauri.linearUpdateMilestone(
         connection.organizationId,
-        milestone.id,
-        name,
-        this.editMilestoneDescription().trim(),
-        this.editMilestoneDate(),
+        currentMilestone.id,
+        draft.values.name.trim(),
+        draft.values.description.trim(),
+        draft.values.targetDate,
       );
       this.milestones.update((items) =>
         items.map((item) => (item.id === updated.id ? updated : item)),
       );
-      const projectId = this.selectedProject()?.id;
-      if (projectId) this.saveMilestoneCache(projectId);
+      this.writeLocal(this.milestoneEditDraftKey(connection, project.id, milestone.id), null);
+      this.hasMilestoneEditDraft.set(false);
+      this.milestoneEditDraftConflict.set(false);
+      this.milestoneEditBase.set(null);
+      this.saveMilestoneCache(project.id);
       this.editingMilestoneId.set(null);
     } catch (error) {
       this.error.set(error instanceof Error ? error.message : String(error));
@@ -6770,12 +6935,10 @@ export class Linear {
         await this.tauri.linearProjects(connection.organizationId, this.showArchivedProjects())
       ).find((item) => item.id === openedProject.id);
       if (!latest) throw new Error('Linear no longer has this project. Refresh and try again.');
-      const draft = this.readProjectEditDraft(connection, latest.id);
-      if (!draft) {
-        this.selectedProject.set(latest);
-        this.applyProjectEditValues(linearProjectEditValues(latest));
-        return;
-      }
+      const draft = this.readProjectEditDraft(connection, latest.id) ?? {
+        values: this.currentProjectEditValues(),
+        base: linearProjectEditValues(openedProject),
+      };
       const current = linearProjectEditValues(latest);
       if (linearProjectEditDraftConflicts(draft, current)) {
         this.selectedProject.set(latest);
@@ -6977,6 +7140,58 @@ export class Linear {
 
   private milestoneCacheKey(connection: LinearConnection, projectId: string): string {
     return `relay.linear.milestones.${connection.organizationId}.${connection.viewerId}.${projectId}`;
+  }
+
+  private milestoneEditDraftKey(
+    connection: LinearConnection,
+    projectId: string,
+    milestoneId: string,
+  ): string {
+    return `relay.linear.milestoneEditDraft.${connection.organizationId}.${connection.viewerId}.${projectId}.${milestoneId}`;
+  }
+
+  private currentMilestoneEditValues(): LinearMilestoneEditValues {
+    return {
+      name: this.editMilestoneName(),
+      description: this.editMilestoneDescription(),
+      targetDate: this.editMilestoneDate(),
+    };
+  }
+
+  private applyMilestoneEditValues(values: LinearMilestoneEditValues): void {
+    this.editMilestoneName.set(values.name);
+    this.editMilestoneDescription.set(values.description);
+    this.editMilestoneDate.set(values.targetDate);
+  }
+
+  private saveMilestoneEditDraft(
+    connection: LinearConnection,
+    projectId: string,
+    milestone: LinearMilestone,
+  ): void {
+    const values = this.currentMilestoneEditValues();
+    const original = this.readMilestoneEditDraft(connection, projectId, milestone.id);
+    const draft: LinearMilestoneEditDraft = {
+      values,
+      base: original?.base ?? this.milestoneEditBase() ?? linearMilestoneEditValues(milestone),
+    };
+    const hasDraft = !linearMilestoneEditValuesEqual(draft.values, draft.base);
+    this.writeLocal(
+      this.milestoneEditDraftKey(connection, projectId, milestone.id),
+      hasDraft ? draft : null,
+    );
+    this.hasMilestoneEditDraft.set(hasDraft);
+  }
+
+  private readMilestoneEditDraft(
+    connection: LinearConnection,
+    projectId: string,
+    milestoneId: string,
+  ): LinearMilestoneEditDraft | null {
+    const value = this.readLocal<unknown>(
+      this.milestoneEditDraftKey(connection, projectId, milestoneId),
+    );
+    return isLinearMilestoneEditDraft(value) ? value : null;
   }
 
   private async loadProjectResources(projectId: string): Promise<void> {
