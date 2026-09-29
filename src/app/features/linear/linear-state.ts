@@ -2,6 +2,7 @@ import type {
   LinearIssue,
   LinearIssueDetail,
   LinearIssueRelationType,
+  LinearInitiative,
   LinearMilestone,
   LinearProject,
   LinearProjectHealth,
@@ -271,6 +272,62 @@ export interface LinearInitiativeDraft {
   targetDate: string;
 }
 
+export interface LinearInitiativeEditValues {
+  name: string;
+  description: string;
+  targetDate: string;
+}
+
+export interface LinearInitiativeEditDraft {
+  values: LinearInitiativeEditValues;
+  base: LinearInitiativeEditValues;
+}
+
+export function linearInitiativeEditValues(
+  initiative: LinearInitiative,
+): LinearInitiativeEditValues {
+  return {
+    name: initiative.name,
+    description: initiative.description ?? '',
+    targetDate: initiative.targetDate ?? '',
+  };
+}
+
+export function isLinearInitiativeEditDraft(value: unknown): value is LinearInitiativeEditDraft {
+  if (!value || typeof value !== 'object') return false;
+  const draft = value as Partial<LinearInitiativeEditDraft>;
+  const valid = (item: unknown): item is LinearInitiativeEditValues => {
+    if (!item || typeof item !== 'object') return false;
+    const values = item as Partial<LinearInitiativeEditValues>;
+    return (
+      typeof values.name === 'string' &&
+      typeof values.description === 'string' &&
+      typeof values.targetDate === 'string'
+    );
+  };
+  return valid(draft.values) && valid(draft.base);
+}
+
+export function linearInitiativeEditDraftConflicts(
+  draft: LinearInitiativeEditDraft,
+  current: LinearInitiativeEditValues,
+): boolean {
+  return (['name', 'description', 'targetDate'] as const).some(
+    (field) => draft.base[field] !== current[field] && draft.values[field] !== current[field],
+  );
+}
+
+export function linearInitiativeEditValuesEqual(
+  left: LinearInitiativeEditValues,
+  right: LinearInitiativeEditValues,
+): boolean {
+  return (
+    left.name === right.name &&
+    left.description === right.description &&
+    left.targetDate === right.targetDate
+  );
+}
+
 export function isLinearInitiativeDraft(value: unknown): value is LinearInitiativeDraft {
   if (!value || typeof value !== 'object') return false;
   const draft = value as Partial<LinearInitiativeDraft>;
@@ -379,6 +436,7 @@ const organizationCacheCategories = [
   'cycleEditDraft',
   'initiatives',
   'initiativeDraft',
+  'initiativeEditDraft',
   'initiativeUpdateDraft',
   'issueCommentDraft',
   'issueCommentEditDraft',

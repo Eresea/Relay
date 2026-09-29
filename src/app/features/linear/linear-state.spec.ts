@@ -6,6 +6,7 @@ import {
   isLinearCycleEditDraft,
   isLinearCommentDraft,
   isLinearInitiativeDraft,
+  isLinearInitiativeEditDraft,
   isLinearInitiativeUpdateDraft,
   isLinearIssueRelationDraft,
   isLinearIssueLabelDraft,
@@ -23,6 +24,8 @@ import {
   linearCommentDraftConflicts,
   linearCycleEditDraftConflicts,
   linearCycleEditValuesEqual,
+  linearInitiativeEditDraftConflicts,
+  linearInitiativeEditValuesEqual,
   linearEstimateOptions,
   linearIssueConflicts,
   linearIssueValues,
@@ -284,6 +287,7 @@ describe('Linear organization cache cleanup', () => {
       'relay.linear.projectDocumentCreateDraft.org.viewer.project',
       'relay.linear.projectLinkDraft.org.viewer.project',
       'relay.linear.initiatives.org.viewer',
+      'relay.linear.initiativeEditDraft.org.viewer.initiative',
       'relay.linear.cycles.org.viewer.team',
     ]) {
       expect(isLinearOrganizationCacheKey(key, 'org')).toBe(true);
@@ -405,6 +409,22 @@ describe('Linear roadmap drafts', () => {
     );
     expect(isLinearInitiativeUpdateDraft({ body: 'At risk', health: 'atRisk' })).toBe(true);
     expect(isLinearInitiativeUpdateDraft({ body: 'At risk', health: 'unknown' })).toBe(false);
+  });
+
+  it('validates initiative edit drafts and flags overlapping remote changes', () => {
+    const base = { name: 'Roadmap', description: 'Q4', targetDate: '2026-12-31' };
+    const draft = { base, values: { ...base, name: 'Relay roadmap' } };
+    expect(isLinearInitiativeEditDraft(draft)).toBe(true);
+    expect(isLinearInitiativeEditDraft({ ...draft, values: { ...base, targetDate: 3 } })).toBe(
+      false,
+    );
+    expect(linearInitiativeEditDraftConflicts(draft, { ...base, targetDate: '2027-01-31' })).toBe(
+      true,
+    );
+    expect(linearInitiativeEditDraftConflicts(draft, { ...base, name: 'Relay roadmap' })).toBe(
+      false,
+    );
+    expect(linearInitiativeEditValuesEqual(base, { ...base })).toBe(true);
   });
 });
 

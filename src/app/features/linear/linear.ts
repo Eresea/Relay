@@ -47,6 +47,7 @@ import {
   isLinearCycleEditDraft,
   isLinearCommentDraft,
   isLinearInitiativeDraft,
+  isLinearInitiativeEditDraft,
   isLinearInitiativeUpdateDraft,
   isLinearIssueRelationDraft,
   isLinearIssueLabelDraft,
@@ -70,6 +71,9 @@ import {
   isLinearProjectPlanningDraft,
   linearCycleEditDraftConflicts,
   linearCycleEditValuesEqual,
+  linearInitiativeEditDraftConflicts,
+  linearInitiativeEditValues,
+  linearInitiativeEditValuesEqual,
   mergeLinearIssueUpdates,
   type LinearIssueUpdate,
   type LinearCycleDraft,
@@ -80,6 +84,8 @@ import {
   type LinearProjectDocumentCreateDraft,
   type LinearProjectLinkDraft,
   type LinearInitiativeDraft,
+  type LinearInitiativeEditDraft,
+  type LinearInitiativeEditValues,
   type LinearInitiativeUpdateDraft,
   type LinearIssueRelationDraft,
   type LinearIssueLabelDraft,
@@ -3184,7 +3190,9 @@ function isLinearTeamList(value: unknown): value is readonly LinearTeam[] {
                         required
                         maxlength="255"
                         [value]="editInitiativeName()"
-                        (input)="editInitiativeName.set($any($event.target).value)"
+                        (input)="
+                          updateInitiativeEditDraft(initiative, 'name', $any($event.target).value)
+                        "
                       />
                     </label>
                     <label>
@@ -3192,7 +3200,13 @@ function isLinearTeamList(value: unknown): value is readonly LinearTeam[] {
                       <input
                         type="date"
                         [value]="editInitiativeTargetDate()"
-                        (input)="editInitiativeTargetDate.set($any($event.target).value)"
+                        (input)="
+                          updateInitiativeEditDraft(
+                            initiative,
+                            'targetDate',
+                            $any($event.target).value
+                          )
+                        "
                       />
                     </label>
                     <label>
@@ -3200,12 +3214,45 @@ function isLinearTeamList(value: unknown): value is readonly LinearTeam[] {
                       <textarea
                         rows="2"
                         [value]="editInitiativeDescription()"
-                        (input)="editInitiativeDescription.set($any($event.target).value)"
+                        (input)="
+                          updateInitiativeEditDraft(
+                            initiative,
+                            'description',
+                            $any($event.target).value
+                          )
+                        "
                       ></textarea>
                     </label>
+                    @if (initiativeEditDraftConflict()) {
+                      <div class="issue-conflicts" role="alert">
+                        <span>This initiative draft overlaps newer changes in Linear.</span>
+                        <umbra-button
+                          size="sm"
+                          variant="outline"
+                          type="button"
+                          (click)="resolveInitiativeEditDraftConflict(initiative, true)"
+                        >
+                          Keep draft
+                        </umbra-button>
+                        <umbra-button
+                          size="sm"
+                          variant="outline"
+                          type="button"
+                          (click)="resolveInitiativeEditDraftConflict(initiative, false)"
+                        >
+                          Use Linear's version
+                        </umbra-button>
+                      </div>
+                    } @else if (hasInitiativeEditDraft()) {
+                      <p class="hint">Initiative draft saved on this device.</p>
+                    }
                     <umbra-button
                       size="sm"
-                      [disabled]="savingInitiative() || !editInitiativeName().trim()"
+                      [disabled]="
+                        savingInitiative() ||
+                        initiativeEditDraftConflict() ||
+                        !editInitiativeName().trim()
+                      "
                     >
                       {{ savingInitiative() ? 'Saving' : 'Save initiative' }}
                     </umbra-button>
@@ -3829,6 +3876,9 @@ export class Linear {
   protected readonly editInitiativeDescription = signal('');
   protected readonly editInitiativeTargetDate = signal('');
   protected readonly savingInitiative = signal(false);
+  protected readonly initiativeEditDraftConflict = signal(false);
+  protected readonly hasInitiativeEditDraft = signal(false);
+  private readonly initiativeEditBase = signal<LinearInitiativeEditValues | null>(null);
   protected readonly initiativeProjectSelection = signal<Readonly<Record<string, string>>>({});
   protected readonly savingInitiativeProjectId = signal<string | null>(null);
   protected readonly confirmRemoveInitiativeProjectId = signal<string | null>(null);
@@ -6500,31 +6550,125 @@ export class Linear {
 
   protected editInitiative(initiative: LinearInitiative): void {
     this.editingInitiativeId.set(initiative.id);
-    this.editInitiativeName.set(initiative.name);
-    this.editInitiativeDescription.set(initiative.description ?? '');
-    this.editInitiativeTargetDate.set(initiative.targetDate ?? '');
+    const current = linearInitiativeEditValues(initiative);
+    const connection = this.selected();
+    const draft = connection ? this.readInitiativeEditDraft(connection, initiative.id) : null;
+    this.applyInitiativeEditValues(draft?.values ?? current);
+    this.initiativeEditBase.set(draft?.base ?? current);
+    this.initiativeEditDraftConflict.set(
+      draft ? linearInitiativeEditDraftConflicts(draft, current) : false,
+    );
+    this.hasInitiativeEditDraft.set(!!draft);
+  }
+
+  protected updateInitiativeEditDraft(
+    initiative: LinearInitiative,
+    field: keyof LinearInitiativeEditValues,
+    value: string,
+  ): void {
+    if (field === 'name') this.editInitiativeName.set(value);
+    else if (field === 'description') this.editInitiativeDescription.set(value);
+    else this.editInitiativeTargetDate.set(value);
+    const connection = this.selected();
+    if (connection) this.saveInitiativeEditDraft(connection, initiative);
+  }
+
+  protected resolveInitiativeEditDraftConflict(
+    initiative: LinearInitiative,
+    keepDraft: boolean,
+  ): void {
+    const connection = this.selected();
+    if (!connection) return;
+    const current = linearInitiativeEditValues(initiative);
+    if (keepDraft) {
+      const draft = this.readInitiativeEditDraft(connection, initiative.id);
+      if (draft) {
+        this.initiativeEditBase.set(current);
+        this.writeLocal(this.initiativeEditDraftKey(connection, initiative.id), {
+          values: this.currentInitiativeEditValues(),
+          base: current,
+        } satisfies LinearInitiativeEditDraft);
+      }
+    } else {
+      this.applyInitiativeEditValues(current);
+      this.initiativeEditBase.set(current);
+      this.writeLocal(this.initiativeEditDraftKey(connection, initiative.id), null);
+      this.hasInitiativeEditDraft.set(false);
+    }
+    this.initiativeEditDraftConflict.set(false);
   }
 
   protected async saveInitiative(event: Event, initiative: LinearInitiative): Promise<void> {
     event.preventDefault();
     const connection = this.selected();
     const name = this.editInitiativeName().trim();
-    if (!connection || !name || this.savingInitiative()) return;
+    if (!connection || !name || this.savingInitiative() || this.initiativeEditDraftConflict()) {
+      return;
+    }
     this.savingInitiative.set(true);
     this.error.set(null);
     try {
+      const latest = await this.tauri.linearInitiatives(connection.organizationId, true, true);
+      if (
+        this.selected()?.organizationId !== connection.organizationId ||
+        this.selected()?.viewerId !== connection.viewerId
+      ) {
+        return;
+      }
+      const currentInitiative = latest.find((item) => item.id === initiative.id);
+      if (!currentInitiative)
+        throw new Error('Linear no longer has this initiative. Refresh and retry.');
+      const applyLatestInitiative = (): void =>
+        this.initiatives.update((items) =>
+          items.map((item) =>
+            item.id === currentInitiative.id
+              ? { ...currentInitiative, projects: item.projects }
+              : item,
+          ),
+        );
+      const current = linearInitiativeEditValues(currentInitiative);
+      const draft = this.readInitiativeEditDraft(connection, initiative.id) ?? {
+        values: this.currentInitiativeEditValues(),
+        base: this.initiativeEditBase() ?? linearInitiativeEditValues(initiative),
+      };
+      if (linearInitiativeEditDraftConflicts(draft, current)) {
+        applyLatestInitiative();
+        this.persistInitiativesCache(connection);
+        this.initiativeEditDraftConflict.set(true);
+        return;
+      }
+      if (linearInitiativeEditValuesEqual(draft.values, current)) {
+        this.applyInitiativeEditValues(current);
+        this.writeLocal(this.initiativeEditDraftKey(connection, initiative.id), null);
+        this.hasInitiativeEditDraft.set(false);
+        this.initiativeEditBase.set(current);
+        applyLatestInitiative();
+        this.persistInitiativesCache(connection);
+        this.editingInitiativeId.set(null);
+        return;
+      }
       const updated = await this.tauri.linearUpdateInitiative(
         connection.organizationId,
-        initiative.id,
-        name,
-        this.editInitiativeDescription(),
-        this.editInitiativeTargetDate(),
+        currentInitiative.id,
+        draft.values.name.trim(),
+        draft.values.description,
+        draft.values.targetDate,
       );
+      if (
+        this.selected()?.organizationId !== connection.organizationId ||
+        this.selected()?.viewerId !== connection.viewerId
+      ) {
+        return;
+      }
       this.initiatives.update((items) =>
         items.map((item) =>
-          item.id === updated.id ? { ...updated, projects: item.projects } : item,
+          item.id === updated.id ? { ...updated, projects: currentInitiative.projects } : item,
         ),
       );
+      this.writeLocal(this.initiativeEditDraftKey(connection, initiative.id), null);
+      this.hasInitiativeEditDraft.set(false);
+      this.initiativeEditDraftConflict.set(false);
+      this.initiativeEditBase.set(null);
       this.persistInitiativesCache(connection);
       this.editingInitiativeId.set(null);
     } catch (error) {
@@ -6532,6 +6676,46 @@ export class Linear {
     } finally {
       this.savingInitiative.set(false);
     }
+  }
+
+  private currentInitiativeEditValues(): LinearInitiativeEditValues {
+    return {
+      name: this.editInitiativeName(),
+      description: this.editInitiativeDescription(),
+      targetDate: this.editInitiativeTargetDate(),
+    };
+  }
+
+  private applyInitiativeEditValues(values: LinearInitiativeEditValues): void {
+    this.editInitiativeName.set(values.name);
+    this.editInitiativeDescription.set(values.description);
+    this.editInitiativeTargetDate.set(values.targetDate);
+  }
+
+  private saveInitiativeEditDraft(
+    connection: LinearConnection,
+    initiative: LinearInitiative,
+  ): void {
+    const values = this.currentInitiativeEditValues();
+    const original = this.readInitiativeEditDraft(connection, initiative.id);
+    const draft: LinearInitiativeEditDraft = {
+      values,
+      base: original?.base ?? this.initiativeEditBase() ?? linearInitiativeEditValues(initiative),
+    };
+    const hasDraft = !linearInitiativeEditValuesEqual(draft.values, draft.base);
+    this.writeLocal(
+      this.initiativeEditDraftKey(connection, initiative.id),
+      hasDraft ? draft : null,
+    );
+    this.hasInitiativeEditDraft.set(hasDraft);
+  }
+
+  private readInitiativeEditDraft(
+    connection: LinearConnection,
+    initiativeId: string,
+  ): LinearInitiativeEditDraft | null {
+    const value = this.readLocal<unknown>(this.initiativeEditDraftKey(connection, initiativeId));
+    return isLinearInitiativeEditDraft(value) ? value : null;
   }
 
   protected async openProject(project: LinearProject): Promise<void> {
@@ -8363,6 +8547,10 @@ export class Linear {
 
   private initiativeDraftKey(connection: LinearConnection): string {
     return `relay.linear.initiativeDraft.${connection.organizationId}.${connection.viewerId}`;
+  }
+
+  private initiativeEditDraftKey(connection: LinearConnection, initiativeId: string): string {
+    return `relay.linear.initiativeEditDraft.${connection.organizationId}.${connection.viewerId}.${initiativeId}`;
   }
 
   private initiativeUpdateDraftKey(connection: LinearConnection, initiativeId: string): string {
