@@ -2016,30 +2016,6 @@ function isLinearTeamList(value: unknown): value is readonly LinearTeam[] {
                       />
                     </label>
                     <label>
-                      <span>Status</span>
-                      <select
-                        [value]="newProjectStatusId()"
-                        (change)="newProjectStatusId.set($any($event.target).value)"
-                      >
-                        <option value="">Use workspace default</option>
-                        @for (status of projectStatuses(); track status.id) {
-                          <option [value]="status.id">{{ status.name }}</option>
-                        }
-                      </select>
-                    </label>
-                    <label>
-                      <span>Project lead</span>
-                      <select
-                        [value]="newProjectLeadId()"
-                        (change)="newProjectLeadId.set($any($event.target).value)"
-                      >
-                        <option value="">No lead</option>
-                        @for (user of users(); track user.id) {
-                          <option [value]="user.id">{{ user.name }}</option>
-                        }
-                      </select>
-                    </label>
-                    <label>
                       <span>Description</span>
                       <textarea
                         rows="2"
@@ -2590,7 +2566,10 @@ function isLinearTeamList(value: unknown): value is readonly LinearTeam[] {
                     newProjectName() ||
                     newProjectDescription() ||
                     newProjectStartDate() ||
-                    newProjectTargetDate()
+                    newProjectTargetDate() ||
+                    newProjectStatusId() ||
+                    newProjectLeadId() ||
+                    newProjectTeamIds().length
                   ) {
                     <p class="hint">Project draft saved on this device.</p>
                   }
@@ -2640,6 +2619,30 @@ function isLinearTeamList(value: unknown): value is readonly LinearTeam[] {
                         [value]="newProjectTargetDate()"
                         (input)="updateProjectDraft('targetDate', $any($event.target).value)"
                       />
+                    </label>
+                    <label>
+                      <span>Status</span>
+                      <select
+                        [value]="newProjectStatusId()"
+                        (change)="updateProjectDraft('statusId', $any($event.target).value)"
+                      >
+                        <option value="">Use workspace default</option>
+                        @for (status of projectStatuses(); track status.id) {
+                          <option [value]="status.id">{{ status.name }}</option>
+                        }
+                      </select>
+                    </label>
+                    <label>
+                      <span>Project lead</span>
+                      <select
+                        [value]="newProjectLeadId()"
+                        (change)="updateProjectDraft('leadId', $any($event.target).value)"
+                      >
+                        <option value="">No lead</option>
+                        @for (user of users(); track user.id) {
+                          <option [value]="user.id">{{ user.name }}</option>
+                        }
+                      </select>
                     </label>
                     <umbra-button
                       size="sm"
@@ -5171,7 +5174,9 @@ export class Linear {
     if (field === 'name') this.newProjectName.set(value);
     else if (field === 'description') this.newProjectDescription.set(value);
     else if (field === 'startDate') this.newProjectStartDate.set(value);
-    else this.newProjectTargetDate.set(value);
+    else if (field === 'targetDate') this.newProjectTargetDate.set(value);
+    else if (field === 'statusId') this.newProjectStatusId.set(value);
+    else this.newProjectLeadId.set(value);
     this.saveProjectDraft();
   }
 
@@ -5182,6 +5187,8 @@ export class Linear {
     this.newProjectDescription.set(draft?.description ?? '');
     this.newProjectStartDate.set(draft?.startDate ?? '');
     this.newProjectTargetDate.set(draft?.targetDate ?? '');
+    this.newProjectStatusId.set(draft?.statusId ?? '');
+    this.newProjectLeadId.set(draft?.leadId ?? '');
     const defaultTeam = this.createTeamId() || this.teams()[0]?.id;
     this.newProjectTeamIds.set(draft?.teamIds ?? (defaultTeam ? [defaultTeam] : []));
   }
@@ -5194,11 +5201,19 @@ export class Linear {
       description: this.newProjectDescription(),
       startDate: this.newProjectStartDate(),
       targetDate: this.newProjectTargetDate(),
+      statusId: this.newProjectStatusId(),
+      leadId: this.newProjectLeadId(),
       teamIds: this.newProjectTeamIds(),
     };
     this.writeLocal(
       this.projectDraftKey(connection),
-      draft.name || draft.description || draft.startDate || draft.targetDate || draft.teamIds.length
+      draft.name ||
+        draft.description ||
+        draft.startDate ||
+        draft.targetDate ||
+        draft.statusId ||
+        draft.leadId ||
+        draft.teamIds.length
         ? draft
         : null,
     );

@@ -316,6 +316,8 @@ describe('Linear project planning drafts', () => {
         description: 'Desktop app',
         startDate: '2026-09-01',
         targetDate: '2026-09-30',
+        statusId: 'active',
+        leadId: 'person-1',
         teamIds: ['team-1'],
       }),
     ).toBe(true);
@@ -325,9 +327,19 @@ describe('Linear project planning drafts', () => {
         description: 'Desktop app',
         startDate: '',
         targetDate: '',
+        statusId: 3,
         teamIds: [3],
       }),
     ).toBe(false);
+    expect(
+      isLinearProjectDraft({
+        name: 'Legacy draft',
+        description: '',
+        startDate: '',
+        targetDate: '',
+        teamIds: ['team-1'],
+      }),
+    ).toBe(true);
   });
 
   it('restores only well-formed status update and milestone drafts', () => {

@@ -30,6 +30,8 @@ export interface LinearProjectDraft {
   description: string;
   startDate: string;
   targetDate: string;
+  statusId?: string;
+  leadId?: string;
   teamIds: readonly string[];
 }
 
@@ -299,6 +301,8 @@ export function isLinearProjectDraft(value: unknown): value is LinearProjectDraf
     typeof draft.description === 'string' &&
     typeof draft.startDate === 'string' &&
     typeof draft.targetDate === 'string' &&
+    (draft.statusId === undefined || typeof draft.statusId === 'string') &&
+    (draft.leadId === undefined || typeof draft.leadId === 'string') &&
     Array.isArray(draft.teamIds) &&
     draft.teamIds.every((teamId) => typeof teamId === 'string')
   );
