@@ -53,6 +53,7 @@ import {
   isLinearStatusUpdateEditDraft,
   isLinearIssueRelationDraft,
   isLinearIssueLabelDraft,
+  isLinearLabelEditDraft,
   isLinearIssueDetailsDraft,
   isLinearMilestoneEditDraft,
   isLinearProjectDraft,
@@ -78,6 +79,8 @@ import {
   linearInitiativeEditValuesEqual,
   linearStatusUpdateEditDraftConflicts,
   linearStatusUpdateEditValuesEqual,
+  linearLabelEditDraftConflicts,
+  linearLabelEditValuesEqual,
   mergeLinearIssueUpdates,
   type LinearIssueUpdate,
   type LinearCycleDraft,
@@ -94,6 +97,8 @@ import {
   type LinearStatusUpdateEditDraft,
   type LinearIssueRelationDraft,
   type LinearIssueLabelDraft,
+  type LinearLabelEditDraft,
+  type LinearLabelEditValues,
   type LinearIssueDetailsDraft,
   type LinearMilestoneEditDraft,
   type LinearMilestoneEditValues,
@@ -3382,7 +3387,7 @@ function isLinearTeamList(value: unknown): value is readonly LinearTeam[] {
                           required
                           maxlength="255"
                           [value]="editLabelName()"
-                          (input)="editLabelName.set($any($event.target).value)"
+                          (input)="updateLabelEditDraft(label, 'name', $any($event.target).value)"
                         />
                       </label>
                       <label>
@@ -3390,10 +3395,38 @@ function isLinearTeamList(value: unknown): value is readonly LinearTeam[] {
                         <input
                           type="color"
                           [value]="editLabelColor()"
-                          (input)="editLabelColor.set($any($event.target).value)"
+                          (input)="updateLabelEditDraft(label, 'color', $any($event.target).value)"
                         />
                       </label>
-                      <umbra-button size="sm" [disabled]="savingLabel() || !editLabelName().trim()">
+                      @if (labelEditDraftConflict()) {
+                        <div class="issue-conflicts" role="alert">
+                          <span>This label draft overlaps newer changes in Linear.</span>
+                          <umbra-button
+                            size="sm"
+                            variant="outline"
+                            type="button"
+                            (click)="resolveLabelEditDraftConflict(label, true)"
+                          >
+                            Keep draft
+                          </umbra-button>
+                          <umbra-button
+                            size="sm"
+                            variant="outline"
+                            type="button"
+                            (click)="resolveLabelEditDraftConflict(label, false)"
+                          >
+                            Use Linear's version
+                          </umbra-button>
+                        </div>
+                      } @else if (hasLabelEditDraft()) {
+                        <p class="hint">Label draft saved on this device.</p>
+                      }
+                      <umbra-button
+                        size="sm"
+                        [disabled]="
+                          savingLabel() || labelEditDraftConflict() || !editLabelName().trim()
+                        "
+                      >
                         {{ savingLabel() ? 'Saving' : 'Save' }}
                       </umbra-button>
                       <umbra-button
@@ -4041,6 +4074,9 @@ export class Linear {
   protected readonly editLabelName = signal('');
   protected readonly editLabelColor = signal('#6b7280');
   protected readonly savingLabel = signal(false);
+  protected readonly labelEditDraftConflict = signal(false);
+  protected readonly hasLabelEditDraft = signal(false);
+  private readonly labelEditBase = signal<LinearLabelEditValues | null>(null);
   protected readonly confirmDeleteLabelId = signal<string | null>(null);
   protected readonly deletingLabelId = signal<string | null>(null);
   protected readonly workflowStates = signal<
@@ -7162,6 +7198,10 @@ export class Linear {
     return `relay.linear.initiativeUpdateEditDraft.${connection.organizationId}.${connection.viewerId}.${updateId}`;
   }
 
+  private labelEditDraftKey(connection: LinearConnection, labelId: string): string {
+    return `relay.linear.labelEditDraft.${connection.organizationId}.${connection.viewerId}.${labelId}`;
+  }
+
   protected toggleArchivedProjectUpdates(): void {
     const project = this.selectedProject();
     if (!project) return;
@@ -8448,8 +8488,46 @@ export class Linear {
   protected editLabel(label: LinearLabel): void {
     this.error.set(null);
     this.editingLabelId.set(label.id);
-    this.editLabelName.set(label.name);
-    this.editLabelColor.set(label.color ?? '#6b7280');
+    const current = this.labelEditValues(label);
+    const connection = this.selected();
+    const draft = connection ? this.readLabelEditDraft(connection, label.id) : null;
+    this.applyLabelEditValues(draft?.values ?? current);
+    this.labelEditBase.set(draft?.base ?? current);
+    this.labelEditDraftConflict.set(draft ? linearLabelEditDraftConflicts(draft, current) : false);
+    this.hasLabelEditDraft.set(!!draft);
+  }
+
+  protected updateLabelEditDraft(
+    label: LinearLabel,
+    field: keyof LinearLabelEditValues,
+    value: string,
+  ): void {
+    if (field === 'name') this.editLabelName.set(value);
+    else this.editLabelColor.set(value);
+    const connection = this.selected();
+    if (connection) this.saveLabelEditDraft(connection, label);
+  }
+
+  protected resolveLabelEditDraftConflict(label: LinearLabel, keepDraft: boolean): void {
+    const connection = this.selected();
+    if (!connection) return;
+    const current = this.labelEditValues(label);
+    if (keepDraft) {
+      const draft = this.readLabelEditDraft(connection, label.id);
+      if (draft) {
+        this.labelEditBase.set(current);
+        this.writeLocal(this.labelEditDraftKey(connection, label.id), {
+          values: this.currentLabelEditValues(),
+          base: current,
+        } satisfies LinearLabelEditDraft);
+      }
+    } else {
+      this.applyLabelEditValues(current);
+      this.labelEditBase.set(current);
+      this.writeLocal(this.labelEditDraftKey(connection, label.id), null);
+      this.hasLabelEditDraft.set(false);
+    }
+    this.labelEditDraftConflict.set(false);
   }
 
   protected async createLabel(event: Event): Promise<void> {
@@ -8487,37 +8565,111 @@ export class Linear {
     event.preventDefault();
     const connection = this.selected();
     const name = this.editLabelName().trim();
-    if (!connection || this.editingLabelId() !== label.id || !name || this.savingLabel()) {
+    if (
+      !connection ||
+      this.editingLabelId() !== label.id ||
+      !name ||
+      this.savingLabel() ||
+      this.labelEditDraftConflict()
+    ) {
       return;
     }
     this.savingLabel.set(true);
     this.error.set(null);
     try {
+      const latest = await this.tauri.linearIssueLabels(connection.organizationId);
+      if (
+        this.selected()?.organizationId !== connection.organizationId ||
+        this.selected()?.viewerId !== connection.viewerId
+      ) {
+        return;
+      }
+      const currentLabel = latest.find((item) => item.id === label.id);
+      if (!currentLabel) throw new Error('Linear no longer has this label. Refresh and retry.');
+      const current = this.labelEditValues(currentLabel);
+      const key = this.labelEditDraftKey(connection, label.id);
+      const draft = this.readLabelEditDraft(connection, label.id) ?? {
+        values: this.currentLabelEditValues(),
+        base: this.labelEditBase() ?? this.labelEditValues(label),
+      };
+      if (linearLabelEditDraftConflicts(draft, current)) {
+        this.labels.set(latest);
+        this.labelEditDraftConflict.set(true);
+        return;
+      }
+      if (linearLabelEditValuesEqual(draft.values, current)) {
+        this.applyLabelEditValues(current);
+        this.writeLocal(key, null);
+        this.hasLabelEditDraft.set(false);
+        this.labelEditBase.set(current);
+        this.labels.set(latest);
+        this.editingLabelId.set(null);
+        return;
+      }
       const updated = await this.tauri.linearUpdateIssueLabel(
         connection.organizationId,
-        label.id,
-        name,
-        this.editLabelColor(),
+        currentLabel.id,
+        draft.values.name.trim(),
+        draft.values.color,
       );
-      if (this.selected()?.organizationId === connection.organizationId) {
-        this.labels.update((items) =>
-          items.map((item) => (item.id === updated.id ? updated : item)),
-        );
-        for (const issue of [...this.issues(), ...this.projectIssues()]) {
-          if (issue.labels.some((item) => item.id === updated.id)) {
-            this.applyUpdatedIssue(connection.organizationId, {
-              ...issue,
-              labels: issue.labels.map((item) => (item.id === updated.id ? updated : item)),
-            });
-          }
+      if (
+        this.selected()?.organizationId !== connection.organizationId ||
+        this.selected()?.viewerId !== connection.viewerId
+      ) {
+        return;
+      }
+      this.labels.set(latest.map((item) => (item.id === updated.id ? updated : item)));
+      for (const issue of [...this.issues(), ...this.projectIssues()]) {
+        if (issue.labels.some((item) => item.id === updated.id)) {
+          this.applyUpdatedIssue(connection.organizationId, {
+            ...issue,
+            labels: issue.labels.map((item) => (item.id === updated.id ? updated : item)),
+          });
         }
       }
+      this.writeLocal(key, null);
+      this.hasLabelEditDraft.set(false);
+      this.labelEditDraftConflict.set(false);
+      this.labelEditBase.set(null);
       this.editingLabelId.set(null);
     } catch (error) {
       this.error.set(error instanceof Error ? error.message : String(error));
     } finally {
       this.savingLabel.set(false);
     }
+  }
+
+  private labelEditValues(label: LinearLabel): LinearLabelEditValues {
+    return { name: label.name, color: label.color ?? '#6b7280' };
+  }
+
+  private currentLabelEditValues(): LinearLabelEditValues {
+    return { name: this.editLabelName(), color: this.editLabelColor() };
+  }
+
+  private applyLabelEditValues(values: LinearLabelEditValues): void {
+    this.editLabelName.set(values.name);
+    this.editLabelColor.set(values.color);
+  }
+
+  private saveLabelEditDraft(connection: LinearConnection, label: LinearLabel): void {
+    const values = this.currentLabelEditValues();
+    const original = this.readLabelEditDraft(connection, label.id);
+    const draft: LinearLabelEditDraft = {
+      values,
+      base: original?.base ?? this.labelEditBase() ?? this.labelEditValues(label),
+    };
+    const hasDraft = !linearLabelEditValuesEqual(draft.values, draft.base);
+    this.writeLocal(this.labelEditDraftKey(connection, label.id), hasDraft ? draft : null);
+    this.hasLabelEditDraft.set(hasDraft);
+  }
+
+  private readLabelEditDraft(
+    connection: LinearConnection,
+    labelId: string,
+  ): LinearLabelEditDraft | null {
+    const value = this.readLocal<unknown>(this.labelEditDraftKey(connection, labelId));
+    return isLinearLabelEditDraft(value) ? value : null;
   }
 
   protected async deleteLabel(label: LinearLabel): Promise<void> {

@@ -11,6 +11,7 @@ import {
   isLinearStatusUpdateEditDraft,
   isLinearIssueRelationDraft,
   isLinearIssueLabelDraft,
+  isLinearLabelEditDraft,
   isLinearIssueDetailsDraft,
   linearIssueDetailsDraftConflicts,
   isLinearOrganizationCacheKey,
@@ -29,6 +30,8 @@ import {
   linearInitiativeEditValuesEqual,
   linearStatusUpdateEditDraftConflicts,
   linearStatusUpdateEditValuesEqual,
+  linearLabelEditDraftConflicts,
+  linearLabelEditValuesEqual,
   linearEstimateOptions,
   linearIssueConflicts,
   linearIssueValues,
@@ -282,6 +285,7 @@ describe('Linear organization cache cleanup', () => {
       'relay.linear.cycleEditDraft.org.viewer.cycle',
       'relay.linear.issueRelationDraft.org.viewer.issue',
       'relay.linear.issueLabelDraft.org.viewer',
+      'relay.linear.labelEditDraft.org.viewer.label',
       'relay.linear.subIssueDraft.org.viewer.issue',
       'relay.linear.projectIssues.org.viewer.project',
       'relay.linear.projectPlanningDraft.org.viewer.project',
@@ -377,6 +381,16 @@ describe('Linear issue label drafts', () => {
     expect(isLinearIssueLabelDraft({ name: 'Needs review', teamId: 'team-1', color: 3 })).toBe(
       false,
     );
+  });
+
+  it('validates label edit drafts and flags overlapping remote changes', () => {
+    const base = { name: 'Needs review', color: '#123456' };
+    const draft = { base, values: { ...base, name: 'Review' } };
+    expect(isLinearLabelEditDraft(draft)).toBe(true);
+    expect(isLinearLabelEditDraft({ ...draft, values: { ...base, color: 'blue' } })).toBe(false);
+    expect(linearLabelEditDraftConflicts(draft, { ...base, color: '#654321' })).toBe(true);
+    expect(linearLabelEditDraftConflicts(draft, { ...base, name: 'Review' })).toBe(false);
+    expect(linearLabelEditValuesEqual(base, { ...base })).toBe(true);
   });
 });
 

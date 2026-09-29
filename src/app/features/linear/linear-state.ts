@@ -191,6 +191,44 @@ export interface LinearIssueLabelDraft {
   color: string;
 }
 
+export interface LinearLabelEditValues {
+  name: string;
+  color: string;
+}
+
+export interface LinearLabelEditDraft {
+  values: LinearLabelEditValues;
+  base: LinearLabelEditValues;
+}
+
+export function isLinearLabelEditDraft(value: unknown): value is LinearLabelEditDraft {
+  if (!value || typeof value !== 'object') return false;
+  const draft = value as Partial<LinearLabelEditDraft>;
+  const valid = (item: unknown): item is LinearLabelEditValues => {
+    if (!item || typeof item !== 'object') return false;
+    const values = item as Partial<LinearLabelEditValues>;
+    return typeof values.name === 'string' && /^#[\da-f]{6}$/i.test(values.color ?? '');
+  };
+  return valid(draft.values) && valid(draft.base);
+}
+
+export function linearLabelEditDraftConflicts(
+  draft: LinearLabelEditDraft,
+  current: LinearLabelEditValues,
+): boolean {
+  return (
+    (draft.base.name !== current.name && draft.values.name !== current.name) ||
+    (draft.base.color !== current.color && draft.values.color !== current.color)
+  );
+}
+
+export function linearLabelEditValuesEqual(
+  left: LinearLabelEditValues,
+  right: LinearLabelEditValues,
+): boolean {
+  return left.name === right.name && left.color === right.color;
+}
+
 export interface LinearIssueDetailsDraft {
   title: string;
   description: string;
@@ -474,6 +512,7 @@ const organizationCacheCategories = [
   'issueDetailsDraft',
   'issueDetail',
   'issueLabelDraft',
+  'labelEditDraft',
   'issueRelationDraft',
   'issues',
   'milestones',
