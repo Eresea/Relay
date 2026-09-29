@@ -1596,19 +1596,14 @@ pub async fn workflow_states(token: &str, team_id: &str) -> Result<Vec<WorkflowS
     loop {
         let data: Data = query(
             token,
-            "query RelayWorkflowStates($after: String) { workflowStates(first: 100, after: $after) { nodes { id name type team { id } } pageInfo { endCursor hasNextPage } } }",
-            json!({ "after": after }),
+            "query RelayWorkflowStates($teamId: String!, $after: String) { workflowStates(filter: { team: { id: { eq: $teamId } } }, first: 100, after: $after) { nodes { id name type team { id } } pageInfo { endCursor hasNextPage } } }",
+            json!({ "teamId": team_id, "after": after }),
         )
         .await?;
         states.extend(data.workflow_states.nodes);
         match next_page_cursor(&data.workflow_states.page_info, "workflow state")? {
             Some(cursor) => after = Some(cursor),
-            None => {
-                return Ok(states
-                    .into_iter()
-                    .filter(|state| state.team.as_ref().is_some_and(|team| team.id == team_id))
-                    .collect());
-            }
+            None => return Ok(states),
         }
     }
 }
