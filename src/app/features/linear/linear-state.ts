@@ -292,6 +292,55 @@ export interface LinearCycleDraft {
   endsAt: string;
 }
 
+export interface LinearCycleEditValues {
+  name: string;
+  description: string;
+  startDate: string;
+  endDate: string;
+}
+
+export interface LinearCycleEditDraft {
+  values: LinearCycleEditValues;
+  base: LinearCycleEditValues;
+}
+
+export function isLinearCycleEditDraft(value: unknown): value is LinearCycleEditDraft {
+  if (!value || typeof value !== 'object') return false;
+  const draft = value as Partial<LinearCycleEditDraft>;
+  const valid = (item: unknown): item is LinearCycleEditValues => {
+    if (!item || typeof item !== 'object') return false;
+    const values = item as Partial<LinearCycleEditValues>;
+    return (
+      typeof values.name === 'string' &&
+      typeof values.description === 'string' &&
+      typeof values.startDate === 'string' &&
+      typeof values.endDate === 'string'
+    );
+  };
+  return valid(draft.values) && valid(draft.base);
+}
+
+export function linearCycleEditDraftConflicts(
+  draft: LinearCycleEditDraft,
+  current: LinearCycleEditValues,
+): boolean {
+  return (['name', 'description', 'startDate', 'endDate'] as const).some(
+    (field) => draft.base[field] !== current[field] && draft.values[field] !== current[field],
+  );
+}
+
+export function linearCycleEditValuesEqual(
+  left: LinearCycleEditValues,
+  right: LinearCycleEditValues,
+): boolean {
+  return (
+    left.name === right.name &&
+    left.description === right.description &&
+    left.startDate === right.startDate &&
+    left.endDate === right.endDate
+  );
+}
+
 export function isLinearCycleDraft(value: unknown): value is LinearCycleDraft {
   if (!value || typeof value !== 'object') return false;
   const draft = value as Partial<LinearCycleDraft>;
@@ -327,6 +376,7 @@ export function isLinearProjectPlanningDraft(value: unknown): value is LinearPro
 const organizationCacheCategories = [
   'cycles',
   'cycleDraft',
+  'cycleEditDraft',
   'initiatives',
   'initiativeDraft',
   'initiativeUpdateDraft',

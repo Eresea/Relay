@@ -44,6 +44,7 @@ import { UmbraButtonComponent } from '@umbra/components/umbra-button/umbra-butto
 import {
   codexFailureRestoreTarget,
   isLinearCycleDraft,
+  isLinearCycleEditDraft,
   isLinearCommentDraft,
   isLinearInitiativeDraft,
   isLinearInitiativeUpdateDraft,
@@ -67,9 +68,13 @@ import {
   linearCodexPrompt,
   linearProjectIssueCacheKey,
   isLinearProjectPlanningDraft,
+  linearCycleEditDraftConflicts,
+  linearCycleEditValuesEqual,
   mergeLinearIssueUpdates,
   type LinearIssueUpdate,
   type LinearCycleDraft,
+  type LinearCycleEditDraft,
+  type LinearCycleEditValues,
   type PendingLinearIssueUpdate,
   type LinearProjectDocumentDraft,
   type LinearProjectDocumentCreateDraft,
@@ -2715,7 +2720,7 @@ function isLinearTeamList(value: unknown): value is readonly LinearTeam[] {
                         <input
                           maxlength="255"
                           [value]="editCycleName()"
-                          (input)="editCycleName.set($any($event.target).value)"
+                          (input)="updateCycleEditDraft(cycle, 'name', $any($event.target).value)"
                         />
                       </label>
                       <label>
@@ -2723,7 +2728,9 @@ function isLinearTeamList(value: unknown): value is readonly LinearTeam[] {
                         <textarea
                           rows="2"
                           [value]="editCycleDescription()"
-                          (input)="editCycleDescription.set($any($event.target).value)"
+                          (input)="
+                            updateCycleEditDraft(cycle, 'description', $any($event.target).value)
+                          "
                         ></textarea>
                       </label>
                       @if (!cycle.isActive) {
@@ -2735,7 +2742,9 @@ function isLinearTeamList(value: unknown): value is readonly LinearTeam[] {
                               required
                               [value]="editCycleStartDate()"
                               [min]="todayForTeam(team)"
-                              (input)="editCycleStartDate.set($any($event.target).value)"
+                              (input)="
+                                updateCycleEditDraft(cycle, 'startDate', $any($event.target).value)
+                              "
                             />
                           </label>
                         }
@@ -2748,13 +2757,41 @@ function isLinearTeamList(value: unknown): value is readonly LinearTeam[] {
                             required
                             [value]="editCycleEndDate()"
                             [min]="cycle.isActive ? todayForTeam(team) : editCycleStartDate()"
-                            (input)="editCycleEndDate.set($any($event.target).value)"
+                            (input)="
+                              updateCycleEditDraft(cycle, 'endDate', $any($event.target).value)
+                            "
                           />
                         </label>
                       } @else {
                         <p class="hint">Past cycle dates cannot be changed.</p>
                       }
-                      <umbra-button size="sm" [disabled]="savingCycle()">
+                      @if (cycleEditDraftConflict()) {
+                        <div class="issue-conflicts" role="alert">
+                          <span>This cycle draft overlaps newer changes in Linear.</span>
+                          <umbra-button
+                            size="sm"
+                            variant="outline"
+                            type="button"
+                            (click)="resolveCycleEditDraftConflict(cycle, true)"
+                          >
+                            Keep draft
+                          </umbra-button>
+                          <umbra-button
+                            size="sm"
+                            variant="outline"
+                            type="button"
+                            (click)="resolveCycleEditDraftConflict(cycle, false)"
+                          >
+                            Use Linear's version
+                          </umbra-button>
+                        </div>
+                      } @else if (hasCycleEditDraft()) {
+                        <p class="hint">Cycle draft saved on this device.</p>
+                      }
+                      <umbra-button
+                        size="sm"
+                        [disabled]="savingCycle() || cycleEditDraftConflict()"
+                      >
                         {{ savingCycle() ? 'Saving' : 'Save schedule' }}
                       </umbra-button>
                       <umbra-button
@@ -3807,6 +3844,9 @@ export class Linear {
   protected readonly editCycleStartDate = signal('');
   protected readonly editCycleEndDate = signal('');
   protected readonly savingCycle = signal(false);
+  protected readonly cycleEditDraftConflict = signal(false);
+  protected readonly hasCycleEditDraft = signal(false);
+  private readonly cycleEditBase = signal<LinearCycleEditValues | null>(null);
   protected readonly selectedProject = signal<LinearProject | null>(null);
   protected readonly showArchivedProjects = signal(false);
   protected readonly confirmArchiveProjectId = signal<string | null>(null);
@@ -5823,41 +5863,114 @@ export class Linear {
   protected editCycle(cycle: LinearCycle): void {
     this.error.set(null);
     this.editingCycleId.set(cycle.id);
-    this.editCycleName.set(cycle.name ?? '');
-    this.editCycleDescription.set(cycle.description ?? '');
-    this.editCycleStartDate.set(
-      cycle.startsAt ? cycleDateInTimezone(cycle.startsAt, cycle.team.timezone) : '',
-    );
-    this.editCycleEndDate.set(
-      cycle.endsAt ? cycleDateInTimezone(cycle.endsAt, cycle.team.timezone) : '',
-    );
+    const current = this.cycleEditValues(cycle);
+    const connection = this.selected();
+    const draft = connection ? this.readCycleEditDraft(connection, cycle.id) : null;
+    const values = draft?.values ?? current;
+    this.applyCycleEditValues(values);
+    this.cycleEditBase.set(draft?.base ?? current);
+    this.cycleEditDraftConflict.set(draft ? linearCycleEditDraftConflicts(draft, current) : false);
+    this.hasCycleEditDraft.set(!!draft);
+  }
+
+  protected updateCycleEditDraft(
+    cycle: LinearCycle,
+    field: keyof LinearCycleEditValues,
+    value: string,
+  ): void {
+    if (field === 'name') this.editCycleName.set(value);
+    else if (field === 'description') this.editCycleDescription.set(value);
+    else if (field === 'startDate') this.editCycleStartDate.set(value);
+    else this.editCycleEndDate.set(value);
+    const connection = this.selected();
+    if (connection) this.saveCycleEditDraft(connection, cycle);
+  }
+
+  protected resolveCycleEditDraftConflict(cycle: LinearCycle, keepDraft: boolean): void {
+    const connection = this.selected();
+    if (!connection) return;
+    const current = this.cycleEditValues(cycle);
+    if (keepDraft) {
+      const draft = this.readCycleEditDraft(connection, cycle.id);
+      if (draft) {
+        this.cycleEditBase.set(current);
+        this.writeLocal(this.cycleEditDraftKey(connection, cycle.id), {
+          values: this.currentCycleEditValues(),
+          base: current,
+        } satisfies LinearCycleEditDraft);
+      }
+    } else {
+      this.applyCycleEditValues(current);
+      this.cycleEditBase.set(current);
+      this.writeLocal(this.cycleEditDraftKey(connection, cycle.id), null);
+      this.hasCycleEditDraft.set(false);
+    }
+    this.cycleEditDraftConflict.set(false);
   }
 
   protected async saveCycle(event: Event, cycle: LinearCycle): Promise<void> {
     event.preventDefault();
     const connection = this.selected();
-    if (!connection || this.savingCycle()) return;
+    if (!connection || this.savingCycle() || this.cycleEditDraftConflict()) return;
     this.savingCycle.set(true);
     this.error.set(null);
     try {
+      const latestCycles = await this.tauri.linearCycles(connection.organizationId, cycle.team.id);
+      if (
+        this.selected()?.organizationId !== connection.organizationId ||
+        this.selected()?.viewerId !== connection.viewerId
+      ) {
+        return;
+      }
+      const currentCycle = latestCycles.find((item) => item.id === cycle.id);
+      if (!currentCycle) throw new Error('Linear no longer has this cycle. Refresh and retry.');
+      const current = this.cycleEditValues(currentCycle);
+      const draft = this.readCycleEditDraft(connection, cycle.id) ?? {
+        values: this.currentCycleEditValues(),
+        base: this.cycleEditBase() ?? this.cycleEditValues(cycle),
+      };
+      if (linearCycleEditDraftConflicts(draft, current)) {
+        this.cycles.update((items) => ({ ...items, [cycle.team.id]: latestCycles }));
+        this.persistCycleCache(connection, cycle.team.id);
+        this.cycleEditDraftConflict.set(true);
+        return;
+      }
+      if (linearCycleEditValuesEqual(draft.values, current)) {
+        this.applyCycleEditValues(current);
+        this.writeLocal(this.cycleEditDraftKey(connection, cycle.id), null);
+        this.hasCycleEditDraft.set(false);
+        this.cycleEditBase.set(current);
+        this.cycles.update((items) => ({ ...items, [cycle.team.id]: latestCycles }));
+        this.persistCycleCache(connection, cycle.team.id);
+        this.editingCycleId.set(null);
+        return;
+      }
       const updated = await this.tauri.linearUpdateCycle(
         connection.organizationId,
-        cycle.id,
-        this.editCycleName().trim(),
-        this.editCycleDescription(),
-        this.canEditCycle(cycle, cycle.team) && !cycle.isActive
-          ? cycleDateToIso(this.editCycleStartDate(), cycle.team.timezone)
+        currentCycle.id,
+        draft.values.name.trim(),
+        draft.values.description,
+        this.canEditCycle(currentCycle, currentCycle.team) && !currentCycle.isActive
+          ? cycleDateToIso(draft.values.startDate, currentCycle.team.timezone)
           : null,
-        this.canEditCycle(cycle, cycle.team)
-          ? cycleDateToIso(this.editCycleEndDate(), cycle.team.timezone)
+        this.canEditCycle(currentCycle, currentCycle.team)
+          ? cycleDateToIso(draft.values.endDate, currentCycle.team.timezone)
           : null,
       );
+      if (
+        this.selected()?.organizationId !== connection.organizationId ||
+        this.selected()?.viewerId !== connection.viewerId
+      ) {
+        return;
+      }
       this.cycles.update((cycles) => ({
         ...cycles,
-        [cycle.team.id]: (cycles[cycle.team.id] ?? []).map((item) =>
-          item.id === updated.id ? updated : item,
-        ),
+        [cycle.team.id]: latestCycles.map((item) => (item.id === updated.id ? updated : item)),
       }));
+      this.writeLocal(this.cycleEditDraftKey(connection, cycle.id), null);
+      this.hasCycleEditDraft.set(false);
+      this.cycleEditDraftConflict.set(false);
+      this.cycleEditBase.set(null);
       this.persistCycleCache(connection, cycle.team.id);
       this.editingCycleId.set(null);
     } catch (error) {
@@ -5865,6 +5978,51 @@ export class Linear {
     } finally {
       this.savingCycle.set(false);
     }
+  }
+
+  private cycleEditValues(cycle: LinearCycle): LinearCycleEditValues {
+    return {
+      name: cycle.name ?? '',
+      description: cycle.description ?? '',
+      startDate: cycle.startsAt ? cycleDateInTimezone(cycle.startsAt, cycle.team.timezone) : '',
+      endDate: cycle.endsAt ? cycleDateInTimezone(cycle.endsAt, cycle.team.timezone) : '',
+    };
+  }
+
+  private currentCycleEditValues(): LinearCycleEditValues {
+    return {
+      name: this.editCycleName(),
+      description: this.editCycleDescription(),
+      startDate: this.editCycleStartDate(),
+      endDate: this.editCycleEndDate(),
+    };
+  }
+
+  private applyCycleEditValues(values: LinearCycleEditValues): void {
+    this.editCycleName.set(values.name);
+    this.editCycleDescription.set(values.description);
+    this.editCycleStartDate.set(values.startDate);
+    this.editCycleEndDate.set(values.endDate);
+  }
+
+  private saveCycleEditDraft(connection: LinearConnection, cycle: LinearCycle): void {
+    const values = this.currentCycleEditValues();
+    const original = this.readCycleEditDraft(connection, cycle.id);
+    const draft: LinearCycleEditDraft = {
+      values,
+      base: original?.base ?? this.cycleEditBase() ?? this.cycleEditValues(cycle),
+    };
+    const hasDraft = !linearCycleEditValuesEqual(draft.values, draft.base);
+    this.writeLocal(this.cycleEditDraftKey(connection, cycle.id), hasDraft ? draft : null);
+    this.hasCycleEditDraft.set(hasDraft);
+  }
+
+  private readCycleEditDraft(
+    connection: LinearConnection,
+    cycleId: string,
+  ): LinearCycleEditDraft | null {
+    const value = this.readLocal<unknown>(this.cycleEditDraftKey(connection, cycleId));
+    return isLinearCycleEditDraft(value) ? value : null;
   }
 
   protected async loadProjects(): Promise<void> {
@@ -8187,6 +8345,10 @@ export class Linear {
 
   private cycleDraftKey(connection: LinearConnection, teamId: string): string {
     return `relay.linear.cycleDraft.${connection.organizationId}.${connection.viewerId}.${teamId}`;
+  }
+
+  private cycleEditDraftKey(connection: LinearConnection, cycleId: string): string {
+    return `relay.linear.cycleEditDraft.${connection.organizationId}.${connection.viewerId}.${cycleId}`;
   }
 
   private initiativeCacheKey(

@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   codexFailureRestoreTarget,
   isLinearCycleDraft,
+  isLinearCycleEditDraft,
   isLinearCommentDraft,
   isLinearInitiativeDraft,
   isLinearInitiativeUpdateDraft,
@@ -20,6 +21,8 @@ import {
   isLinearMilestoneEditDraft,
   linearCodexPrompt,
   linearCommentDraftConflicts,
+  linearCycleEditDraftConflicts,
+  linearCycleEditValuesEqual,
   linearEstimateOptions,
   linearIssueConflicts,
   linearIssueValues,
@@ -270,6 +273,7 @@ describe('Linear organization cache cleanup', () => {
       'relay.linear.issueDetail.org.viewer.issue',
       'relay.linear.issueDetailsDraft.org.viewer.issue',
       'relay.linear.milestoneEditDraft.org.viewer.project.milestone',
+      'relay.linear.cycleEditDraft.org.viewer.cycle',
       'relay.linear.issueRelationDraft.org.viewer.issue',
       'relay.linear.issueLabelDraft.org.viewer',
       'relay.linear.subIssueDraft.org.viewer.issue',
@@ -375,6 +379,21 @@ describe('Linear roadmap drafts', () => {
     expect(isLinearCycleDraft({ name: 'Sprint 1', startsAt: '2026-10-01', endsAt: null })).toBe(
       false,
     );
+  });
+
+  it('validates cycle edit drafts and flags overlapping remote changes', () => {
+    const base = {
+      name: 'Sprint 1',
+      description: '',
+      startDate: '2026-10-01',
+      endDate: '2026-10-14',
+    };
+    const draft = { base, values: { ...base, name: 'Sprint 1 Relay' } };
+    expect(isLinearCycleEditDraft(draft)).toBe(true);
+    expect(isLinearCycleEditDraft({ ...draft, values: { ...base, endDate: 3 } })).toBe(false);
+    expect(linearCycleEditDraftConflicts(draft, { ...base, endDate: '2026-10-15' })).toBe(true);
+    expect(linearCycleEditDraftConflicts(draft, { ...base, name: 'Sprint 1 Relay' })).toBe(false);
+    expect(linearCycleEditValuesEqual(base, { ...base })).toBe(true);
   });
 
   it('validates initiative creation and update drafts before restoring them', () => {
