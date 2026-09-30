@@ -219,8 +219,19 @@ const PROJECT_ICONS = [
       background: var(--tint-selected);
     }
 
+    .icon-option:focus-visible {
+      outline: none;
+      box-shadow: var(--focus-ring);
+    }
+
     .icon-option.selected {
       box-shadow: inset 0 0 0 1px var(--border-focus);
+    }
+
+    .icon-option.selected:focus-visible {
+      box-shadow:
+        inset 0 0 0 1px var(--border-focus),
+        var(--focus-ring);
     }
 
     .empty {

@@ -29,4 +29,19 @@ describe('IconPicker', () => {
     (options[0] as HTMLButtonElement).click();
     expect(selected).toBe('star');
   });
+
+  it('renders focusable icon option buttons with accessibility attributes', () => {
+    const fixture = TestBed.createComponent(IconPicker);
+    fixture.detectChanges();
+
+    const host = fixture.nativeElement as HTMLElement;
+    (host.querySelector('[rlPopoverTrigger]') as HTMLButtonElement).click();
+    fixture.detectChanges();
+
+    const options = host.querySelectorAll<HTMLButtonElement>('.icon-option');
+    expect(options.length).toBeGreaterThan(0);
+    expect(options[0].getAttribute('type')).toBe('button');
+    expect(options[0].getAttribute('role')).toBe('option');
+    expect(options[0].getAttribute('aria-label')).toBeTruthy();
+  });
 });
