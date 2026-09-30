@@ -3,11 +3,11 @@
   color: var(--text-body);
 }
 
-:host([data-variant="linear"]) {
+:host([data-variant='linear']) {
   width: 100%;
 }
 
-:host([data-variant="circular"]) {
+:host([data-variant='circular']) {
   display: inline-block;
   width: var(--space-10);
   aspect-ratio: 1;

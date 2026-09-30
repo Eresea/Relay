@@ -16,21 +16,22 @@ opted into with `class="light"` or `data-theme="light"` on `<html>`.
 
 ## Structure
 
-| Path | Purpose |
-| --- | --- |
-| `src/styles/umbra/umbra.scss` | The complete token and baseline style entry point. |
-| `src/styles/umbra/_*.scss` | Colour, typography, spacing, radius, elevation, motion and entity tokens. |
-| `src/components/` | Reusable UI components. |
-| `docs/components.md` | Component identities and their public contracts. |
-| `.agents/skills/umbra-component/` | The Umbra-specific component audit and migration workflow. |
+| Path                              | Purpose                                                                   |
+| --------------------------------- | ------------------------------------------------------------------------- |
+| `src/styles/umbra/umbra.scss`     | The complete token and baseline style entry point.                        |
+| `src/styles/umbra/_*.scss`        | Colour, typography, spacing, radius, elevation, motion and entity tokens. |
+| `src/components/`                 | Reusable UI components.                                                   |
+| `docs/components.md`              | Component identities and their public contracts.                          |
+| `.agents/skills/umbra-component/` | The Umbra-specific component audit and migration workflow.                |
 
 Umbra is the source of truth for shared visual decisions. Consumer-specific layout and behavior stay in the consuming project.
+
 ## The rules
 
 ### Content
 
-**Voice: quiet, exact, second person.** The interface addresses the user as *you*
-and never refers to itself as *I*. It states what is true and what will happen — it
+**Voice: quiet, exact, second person.** The interface addresses the user as _you_
+and never refers to itself as _I_. It states what is true and what will happen — it
 does not enthuse.
 
 **Sentence case everywhere** — buttons, menu items, dialog titles, tabs, field
@@ -54,8 +55,8 @@ recently". Sizes, counts, durations and paths are set in Geist Mono at
 **Buttons name the action, not the assent.** `Create`, `Delete`, `Resume`,
 `Save changes` — never `OK`, `Submit`, `Yes`.
 
-**Say what it costs.** A blocked action names its blocker (*Blocked — needs 2 more
-requirements*). A missing value says `Unavailable` rather than showing a zero that
+**Say what it costs.** A blocked action names its blocker (_Blocked — needs 2 more
+requirements_). A missing value says `Unavailable` rather than showing a zero that
 reads as real data. An unconfigured widget states what is missing and offers the
 next action instead of rendering fake data. Never present a state-changing action as a dry run.
 
@@ -93,7 +94,7 @@ same object keeps the same hue everywhere.
 
 Three rules keep this from becoming confetti:
 
-1. **Hue means *which*. Status means *how it is going*.** Never colour a tile red
+1. **Hue means _which_. Status means _how it is going_.** Never colour a tile red
    to mean failure — that is `--status-blocked` on the dot and the track.
 2. **Hue only appears on tiles, dots and tracks.** Not on text, not on container
    borders, not on backgrounds, not on section headers.
@@ -105,13 +106,13 @@ Three rules keep this from becoming confetti:
 
 Surfaces stack **by value, not by shadow**:
 
-| Token | Role |
-| --- | --- |
-| `--bg-sunken` | Sidebars, rails, input wells |
-| `--bg-app` | The canvas |
-| `--surface-card` | Grouped content |
-| `--surface-raised` | Controls that should feel pressable |
-| `--surface-overlay` | Menus, dialogs, the palette |
+| Token               | Role                                |
+| ------------------- | ----------------------------------- |
+| `--bg-sunken`       | Sidebars, rails, input wells        |
+| `--bg-app`          | The canvas                          |
+| `--surface-card`    | Grouped content                     |
+| `--surface-raised`  | Controls that should feel pressable |
+| `--surface-overlay` | Menus, dialogs, the palette         |
 
 Never nest a painted surface inside a painted surface. When you want a second
 level, the answer is open rows and a separator. A dashboard owns one surface frame
@@ -137,6 +138,7 @@ constants: sidebar 248 (collapsed 56), title bar 38, toolbar 44, list row 34,
 overlay minimum width 192, content column max 760px centred. **Content panes are
 centred with a max width even on a 2560px monitor** — never let a line of prose
 run the width of the display.
+
 ### Radii
 
 3 / 5 / 7 / 10 / 14, plus a pill for switches, tracks and dots. Small controls get
@@ -196,7 +198,7 @@ reads as a hang.
 **The cursor never changes.** Nothing sets `cursor: pointer`; affordance is carried by the hover tint and the ink lift. Only `not-allowed` on disabled controls overrides the default arrow.
 
 - **Hover** — a 4% white tint plus ink lifting from `--text-muted` to
-  `--text-body`. Solid buttons go *lighter* and gain a 3px translucent halo in
+  `--text-body`. Solid buttons go _lighter_ and gain a 3px translucent halo in
   their own colour; bordered controls step from `--border-default` to
   `--border-strong`; link buttons pick up a tint and an underline. Every variant
   must change on hover, since the cursor never does.
@@ -209,7 +211,7 @@ reads as a hang.
   a hairline `--border-default`; hover brightens it to `--border-strong`; focus
   raises the fill from `--bg-sunken` to `--bg-app`, takes the border to
   `--border-focus` and adds a single 3px haze outside it. One surrounding border
-  that changes with state — never a recoloured border *plus* an inner ring, and
+  that changes with state — never a recoloured border _plus_ an inner ring, and
   never the native `<input>` outline. The caret takes `--primary`. Invalid keeps a
   red border in every state. Selected text in inputs and textareas uses a visible
   accent tint from `--input-selection-background` while keeping `--text-body` for
@@ -281,6 +283,7 @@ icon registry.
 
 Never use emoji or text pictographs as icons. Inline SVG remains appropriate for
 charts, maps, flags and illustrations — things that are drawings, not glyphs.
+
 ## Building on this
 
 - Reuse tokens. Do not hard-code component dimensions, colours, radii, shadows, durations or fonts in a stylesheet, template or style binding.

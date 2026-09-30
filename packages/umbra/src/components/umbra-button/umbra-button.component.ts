@@ -12,8 +12,7 @@ import { Observable, isObservable, lastValueFrom } from 'rxjs';
 export type UmbraButtonVariant =
   'default' | 'secondary' | 'outline' | 'ghost' | 'destructive' | 'link';
 export type UmbraButtonSize = 'sm' | 'md' | 'lg' | 'icon';
-export type UmbraButtonAction = () =>
-  void | Promise<void> | Observable<unknown>;
+export type UmbraButtonAction = () => void | Promise<void> | Observable<unknown>;
 
 @Component({
   selector: 'umbra-button',
@@ -52,9 +51,7 @@ export class UmbraButtonComponent {
   constructor() {
     effect(() => {
       if (this.size() === 'icon' && !this.ariaLabel() && !this.ariaLabelledBy())
-        throw new Error(
-          'UmbraButtonComponent: icon buttons require ariaLabel or ariaLabelledBy.',
-        );
+        throw new Error('UmbraButtonComponent: icon buttons require ariaLabel or ariaLabelledBy.');
     });
   }
 

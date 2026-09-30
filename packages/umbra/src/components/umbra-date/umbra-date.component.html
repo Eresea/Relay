@@ -2,7 +2,9 @@
   @if (label()) {
     <label class="date-label" [for]="controlId()">
       {{ label() }}
-      @if (required()) { <span aria-hidden="true">*</span> }
+      @if (required()) {
+        <span aria-hidden="true">*</span>
+      }
     </label>
   }
 
@@ -84,7 +86,9 @@
 
     @if (showClear() && value() && !disabled() && !readonly()) {
       <button type="button" class="date-action" aria-label="Clear date" (click)="clearDate()">
-        <svg class="date-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18" /></svg>
+        <svg class="date-icon" viewBox="0 0 24 24" aria-hidden="true">
+          <path d="m6 6 12 12M18 6 6 18" />
+        </svg>
       </button>
     }
 
@@ -99,20 +103,37 @@
       [disabled]="disabled() || readonly()"
       (click)="openCalendar()"
     >
-      <svg class="date-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="2" /><path d="M16 3v4M8 3v4M3 10h18" /></svg>
+      <svg class="date-icon" viewBox="0 0 24 24" aria-hidden="true">
+        <rect x="3" y="5" width="18" height="16" rx="2" />
+        <path d="M16 3v4M8 3v4M3 10h18" />
+      </svg>
     </button>
 
     <ng-template #calendarTemplate>
-      <div [id]="calendarId" class="calendar" role="dialog" aria-label="Choose date" (keydown.escape)="closeCalendar($event)">
+      <div
+        [id]="calendarId"
+        class="calendar"
+        role="dialog"
+        aria-label="Choose date"
+        (keydown.escape)="closeCalendar($event)"
+      >
         <div class="calendar-heading">
           <button
             type="button"
             class="calendar-nav"
-            [attr.aria-label]="calendarView() === 'days' ? 'Previous month' : calendarView() === 'months' ? 'Previous year' : 'Previous decade'"
+            [attr.aria-label]="
+              calendarView() === 'days'
+                ? 'Previous month'
+                : calendarView() === 'months'
+                  ? 'Previous year'
+                  : 'Previous decade'
+            "
             [disabled]="!canGoPrevious()"
             (click)="previousPeriod()"
           >
-            <svg class="date-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m15 18-6-6 6-6" /></svg>
+            <svg class="date-icon" viewBox="0 0 24 24" aria-hidden="true">
+              <path d="m15 18-6-6 6-6" />
+            </svg>
           </button>
           <div class="calendar-period">
             <button
@@ -122,7 +143,9 @@
               [attr.aria-expanded]="calendarView() === 'months'"
               [attr.aria-label]="'Choose month, ' + monthLabel()"
               (click)="showMonths()"
-            >{{ monthLabel() }}</button>
+            >
+              {{ monthLabel() }}
+            </button>
             <button
               type="button"
               class="calendar-period-button"
@@ -130,23 +153,35 @@
               [attr.aria-expanded]="calendarView() === 'years'"
               [attr.aria-label]="'Choose year, ' + yearLabel()"
               (click)="showYears()"
-            >{{ yearLabel() }}</button>
+            >
+              {{ yearLabel() }}
+            </button>
           </div>
           <button
             type="button"
             class="calendar-nav"
-            [attr.aria-label]="calendarView() === 'days' ? 'Next month' : calendarView() === 'months' ? 'Next year' : 'Next decade'"
+            [attr.aria-label]="
+              calendarView() === 'days'
+                ? 'Next month'
+                : calendarView() === 'months'
+                  ? 'Next year'
+                  : 'Next decade'
+            "
             [disabled]="!canGoNext()"
             (click)="nextPeriod()"
           >
-            <svg class="date-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m9 18 6-6-6-6" /></svg>
+            <svg class="date-icon" viewBox="0 0 24 24" aria-hidden="true">
+              <path d="m9 18 6-6-6-6" />
+            </svg>
           </button>
         </div>
 
         @switch (calendarView()) {
           @case ('days') {
             <div class="calendar-grid calendar-weekdays" aria-hidden="true">
-              @for (day of weekdays; track day) { <span>{{ day }}</span> }
+              @for (day of weekdays; track day) {
+                <span>{{ day }}</span>
+              }
             </div>
             <div class="calendar-grid calendar-days">
               @for (item of calendarDays(); track item.date.getTime()) {
@@ -159,20 +194,30 @@
                   [attr.aria-current]="item.today ? 'date' : null"
                   [attr.aria-label]="item.ariaLabel"
                   (click)="selectDate(item.date)"
-                >{{ item.date.getDate() }}</button>
+                >
+                  {{ item.date.getDate() }}
+                </button>
               }
             </div>
           }
           @case ('months') {
-            <div class="calendar-choice-grid calendar-months" role="group" aria-label="Choose month">
+            <div
+              class="calendar-choice-grid calendar-months"
+              role="group"
+              aria-label="Choose month"
+            >
               @for (month of months; track $index) {
                 <button
                   type="button"
                   class="calendar-choice"
                   [attr.data-viewed]="$index === viewDate().getMonth() ? '' : null"
-                  [attr.aria-label]="month + ($index === viewDate().getMonth() ? ', currently displayed' : '')"
+                  [attr.aria-label]="
+                    month + ($index === viewDate().getMonth() ? ', currently displayed' : '')
+                  "
                   (click)="selectMonth($index)"
-                >{{ month.slice(0, 3) }}</button>
+                >
+                  {{ month.slice(0, 3) }}
+                </button>
               }
             </div>
           }
@@ -183,9 +228,13 @@
                   type="button"
                   class="calendar-choice"
                   [attr.data-viewed]="year === viewDate().getFullYear() ? '' : null"
-                  [attr.aria-label]="year + (year === viewDate().getFullYear() ? ', currently displayed' : '')"
+                  [attr.aria-label]="
+                    year + (year === viewDate().getFullYear() ? ', currently displayed' : '')
+                  "
                   (click)="selectYear(year)"
-                >{{ year }}</button>
+                >
+                  {{ year }}
+                </button>
               }
             </div>
           }

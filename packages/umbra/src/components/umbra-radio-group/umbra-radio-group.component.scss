@@ -28,7 +28,7 @@ legend {
   gap: var(--space-3);
 }
 
-:host([data-orientation="horizontal"]) .options {
+:host([data-orientation='horizontal']) .options {
   flex-flow: row wrap;
   gap: var(--space-3) var(--space-8);
 }
@@ -83,13 +83,11 @@ input:focus-visible + .indicator {
   box-shadow: var(--focus-ring);
 }
 
-fieldset[aria-invalid="true"] .indicator {
+fieldset[aria-invalid='true'] .indicator {
   border-color: var(--danger);
 }
 
-:host(:hover:not([data-disabled="true"]))
-  input:not(:checked):not(:disabled)
-  + .indicator {
+:host(:hover:not([data-disabled='true'])) input:not(:checked):not(:disabled) + .indicator {
   border-color: var(--border-strong);
 }
 
@@ -117,13 +115,13 @@ fieldset[aria-invalid="true"] .indicator {
   color: var(--danger);
 }
 
-.option[data-disabled="true"] {
+.option[data-disabled='true'] {
   color: var(--text-muted);
   cursor: not-allowed;
   opacity: 0.5;
 }
 
-:host([data-disabled="true"]) .options {
+:host([data-disabled='true']) .options {
   cursor: not-allowed;
   opacity: 0.5;
 }

@@ -121,11 +121,14 @@ export class NexusAccount {
     if (this.busy() || !this.available) return;
     this.busy.set(true);
     this.error.set('');
-    this.googleTimeout = setTimeout(() => {
-      this.clearGooglePending();
-      this.busy.set(false);
-      this.error.set('Google sign-in timed out. Try again.');
-    }, 5 * 60 * 1000);
+    this.googleTimeout = setTimeout(
+      () => {
+        this.clearGooglePending();
+        this.busy.set(false);
+        this.error.set('Google sign-in timed out. Try again.');
+      },
+      5 * 60 * 1000,
+    );
     try {
       await this.tauri.nexusAuthGoogleStart();
     } catch (error) {
