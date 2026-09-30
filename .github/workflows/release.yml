@@ -131,6 +131,7 @@ jobs:
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
           RELAY_UPDATER_PUBLIC_KEY: ${{ vars.RELAY_UPDATER_PUBLIC_KEY }}
           RELAY_UPDATE_ENDPOINT: ${{ vars.RELAY_UPDATE_ENDPOINT }}
+          RELAY_LINEAR_CLIENT_ID: ${{ vars.RELAY_LINEAR_CLIENT_ID }}
         with:
           releaseId: ${{ needs.release.outputs.release_id }}
           tagName: ${{ needs.release.outputs.release_tag }}
@@ -235,6 +236,7 @@ jobs:
 
       - name: Build signed Android artifacts
         env:
+          RELAY_LINEAR_CLIENT_ID: ${{ vars.RELAY_LINEAR_CLIENT_ID }}
           ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
           ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
           ANDROID_KEYSTORE_PATH: ${{ runner.temp }}/relay-upload.jks

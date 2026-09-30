@@ -4,6 +4,7 @@ import { TauriBridge } from '@core/tauri';
 import { ThemeService } from '@core/theme';
 import { Github } from '@features/github/github';
 import { Gmail } from '@features/gmail/gmail';
+import { LinearSettings } from '@features/linear/linear-settings';
 import { UmbraButtonComponent } from '@umbra/components/umbra-button/umbra-button.component';
 import { UmbraInputComponent } from '@umbra/components/umbra-input/umbra-input.component';
 import { UmbraSwitchComponent } from '@umbra/components/umbra-switch/umbra-switch.component';
@@ -32,7 +33,14 @@ const MAX_HUD_TOP_OFFSET = 2000;
 @Component({
   selector: 'rl-settings',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [Github, Gmail, UmbraButtonComponent, UmbraInputComponent, UmbraSwitchComponent],
+  imports: [
+    Github,
+    Gmail,
+    LinearSettings,
+    UmbraButtonComponent,
+    UmbraInputComponent,
+    UmbraSwitchComponent,
+  ],
   template: `
     <nav class="tabs">
       <button
@@ -58,6 +66,14 @@ const MAX_HUD_TOP_OFFSET = 2000;
         (click)="tab.set('gmail')"
       >
         Gmail
+      </button>
+      <button
+        type="button"
+        class="tab"
+        [class.active]="tab() === 'linear'"
+        (click)="tab.set('linear')"
+      >
+        Linear
       </button>
     </nav>
 
@@ -115,6 +131,10 @@ const MAX_HUD_TOP_OFFSET = 2000;
 
     <div [hidden]="tab() !== 'gmail'">
       <rl-gmail />
+    </div>
+
+    <div [hidden]="tab() !== 'linear'">
+      <rl-linear-settings />
     </div>
   `,
   styles: `
@@ -204,12 +224,12 @@ const MAX_HUD_TOP_OFFSET = 2000;
 })
 export class Settings {
   /** Which tab to select right now. Home sets this from which palette command opened Settings. */
-  readonly initialTab = input<'general' | 'github' | 'gmail'>('general');
+  readonly initialTab = input<'general' | 'github' | 'gmail' | 'linear'>('general');
 
   private readonly tauri = inject(TauriBridge);
   protected readonly theme = inject(ThemeService);
 
-  protected readonly tab = signal<'general' | 'github' | 'gmail'>('general');
+  protected readonly tab = signal<'general' | 'github' | 'gmail' | 'linear'>('general');
   protected readonly launchAtLogin = signal(false);
   protected readonly launchAtLoginPending = signal(true);
   protected readonly hudTopOffset = signal(DEFAULT_HUD_TOP_OFFSET);

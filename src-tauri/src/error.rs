@@ -172,6 +172,9 @@ pub enum Error {
     #[error("Gmail API request failed: {0}")]
     GmailApi(String),
 
+    #[error("Linear API request failed: {0}")]
+    LinearApi(String),
+
     #[cfg(any(mobile, test))]
     #[allow(dead_code)]
     #[error("mobile update version is invalid: {0}")]

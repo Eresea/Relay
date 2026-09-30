@@ -16,7 +16,7 @@ Nexus login enables these connected features. Relay's local features still start
 ## What exists
 
 - Relay's GitHub Device Flow, token refresh, API client, PR diff/rules, notification pipeline, and keychain token are in `src-tauri/src/github`. Relay has Nexus account sign-in and a generic vault handoff; Relay deposits the GitHub token bundle with create-only permission and uses Nexus after the explicit read grant is approved.
-- Nexus has browser authorization code + PKCE for the `relay` client (`relay://auth/callback`). Relay requests `openid profile email credentials:create`; Nexus vault creation and grant management require `credentials:manage`, currently assigned to `roots-web`. Granted clients can read a credential and can replace its secret only with an explicit replace grant.
+- Nexus has browser authorization code + PKCE for the `relay` client (`relay://auth/callback`). Relay requests `openid profile email credentials:create credentials:grant:self`. It can create credentials and grant or revoke access only for credentials it created, while `credentials:manage` remains restricted to user-facing administration. Granted clients can read a credential and can replace its secret only with an explicit replace grant.
 - Nexus event endpoints are bound to `(user_id, client_id)`. Ingress supports both the existing `X-Nexus-*` HMAC and generic raw-body HMAC; accepted JSON is stored in the shared client inbox and erased on ack. A new delivery publishes a payload-free `events.available` wakeup to the authenticated OAuth client's user WebSocket.
 
 ## Implemented flow
@@ -25,6 +25,7 @@ Nexus login enables these connected features. Relay's local features still start
 - Relay drains claimed inbox events after WebSocket connection and each authenticated `events.available` wakeup. It acknowledges only after persisting the delivery marker and any notification; unsupported and rule-suppressed deliveries get a durable ignored marker first.
 - Repository hooks cover `pull_request` and `check_run`, mapping the app's PR lifecycle, review request, and CI notification rules. Existing hooks are upgraded when Relay reconnects to Nexus.
 - Relay sends WebSocket pings, checks for session changes, and reconnects with backoff. It drains the durable Nexus inbox after reconnect so missed wakeups do not lose accepted deliveries.
+- Linear uses a separate PKCE flow in Relay and stores its user and optional agent token bundles in the Nexus vault. Each device discovers grants for the signed-in Nexus user, refreshes locally, then updates the shared secret with an ETag so concurrent refreshes merge the latest token and per-device Codex links. Disconnect revokes Relay's shared grant; pause stays local to the device.
 
 ## Verification boundary
 

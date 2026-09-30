@@ -24,6 +24,7 @@ import { NotificationPopover } from '@shared/notification-popover';
 import { Projects } from '@features/projects/projects';
 import { Runtime } from '@features/runtime/runtime';
 import { Codex } from '@features/codex/codex';
+import { Linear } from '@features/linear/linear';
 
 const RAIL_EXPANDED_SETTING_KEY = 'rail.expanded';
 
@@ -44,6 +45,7 @@ const RAIL_EXPANDED_SETTING_KEY = 'rail.expanded';
     PopoverTrigger,
     BackgroundTaskIndicator,
     Codex,
+    Linear,
     Icon,
     NotificationPopover,
     Projects,
@@ -98,6 +100,16 @@ const RAIL_EXPANDED_SETTING_KEY = 'rail.expanded';
             [attr.aria-label]="railExpanded() ? 'Collapse sidebar' : 'Expand sidebar'"
           >
             <rl-icon name="panel-left" [size]="16" />
+          </button>
+          <button
+            type="button"
+            class="rail-item"
+            [class.active]="view() === 'linear'"
+            (click)="view.set('linear')"
+            aria-label="My work"
+          >
+            <span class="rail-icon"><rl-icon name="inbox" [size]="16" /></span>
+            <span class="rail-label">My work</span>
           </button>
           <button
             type="button"
@@ -194,199 +206,225 @@ const RAIL_EXPANDED_SETTING_KEY = 'rail.expanded';
       </nav>
 
       @if (accountDialogOpen()) {
-          <dialog
-            #accountDialog
-            class="account-dialog"
-            aria-labelledby="account-dialog-title"
-            (click)="onAccountDialogClick($event)"
-            (cancel)="closeNexusDialog()"
-          >
-            <header class="account-dialog-heading">
-              <div>
-                <p class="u-caption">Nexus account</p>
-                <h2 id="account-dialog-title">{{ authDialogTitle() }}</h2>
+        <dialog
+          #accountDialog
+          class="account-dialog"
+          aria-labelledby="account-dialog-title"
+          (click)="onAccountDialogClick($event)"
+          (cancel)="closeNexusDialog()"
+        >
+          <header class="account-dialog-heading">
+            <div>
+              <p class="u-caption">Nexus account</p>
+              <h2 id="account-dialog-title">{{ authDialogTitle() }}</h2>
+            </div>
+            <button
+              type="button"
+              class="account-dialog-close"
+              aria-label="Close sign-in"
+              (click)="closeNexusDialog()"
+            >
+              <rl-icon name="x" [size]="16" />
+            </button>
+          </header>
+          @if (account.error()) {
+            <p class="account-dialog-error" role="alert">{{ account.error() }}</p>
+          }
+          @switch (authView()) {
+            @case ('social') {
+              <div class="account-dialog-options">
+                <button
+                  class="account-dialog-google"
+                  type="button"
+                  [disabled]="account.busy()"
+                  (click)="account.googleLogin()"
+                >
+                  <svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24">
+                    <path
+                      d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
+                      fill="#4285F4"
+                    />
+                    <path
+                      d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
+                      fill="#34A853"
+                    />
+                    <path
+                      d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z"
+                      fill="#FBBC05"
+                    />
+                    <path
+                      d="M12 5.38c1.62 0 3.06.56 4.21 1.66l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"
+                      fill="#EA4335"
+                    />
+                  </svg>
+                  {{ account.busy() ? 'Waiting for Google…' : 'Continue with Google' }}
+                </button>
+                <p class="account-dialog-hint">
+                  Google opens in your browser, then returns you to Relay.
+                </p>
+                <div class="account-dialog-divider">or</div>
+                <button
+                  class="account-dialog-secondary"
+                  type="button"
+                  (click)="setAuthView('email')"
+                >
+                  Use email address
+                </button>
               </div>
-              <button
-                type="button"
-                class="account-dialog-close"
-                aria-label="Close sign-in"
-                (click)="closeNexusDialog()"
-              >
-                <rl-icon name="x" [size]="16" />
-              </button>
-            </header>
-            @if (account.error()) {
-              <p class="account-dialog-error" role="alert">{{ account.error() }}</p>
             }
-            @switch (authView()) {
-              @case ('social') {
-                <div class="account-dialog-options">
-                  <button
-                    class="account-dialog-google"
-                    type="button"
-                    [disabled]="account.busy()"
-                    (click)="account.googleLogin()"
-                  >
-                    <svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24">
-                      <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4" />
-                      <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853" />
-                      <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z" fill="#FBBC05" />
-                      <path d="M12 5.38c1.62 0 3.06.56 4.21 1.66l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335" />
-                    </svg>
-                    {{ account.busy() ? 'Waiting for Google…' : 'Continue with Google' }}
-                  </button>
-                  <p class="account-dialog-hint">Google opens in your browser, then returns you to Relay.</p>
-                  <div class="account-dialog-divider">or</div>
-                  <button class="account-dialog-secondary" type="button" (click)="setAuthView('email')">
-                    Use email address
-                  </button>
-                </div>
-              }
-              @case ('email') {
-                <form (submit)="submitNexusLogin($event)">
-                  <label for="nexus-email">Email</label>
-                  <input
-                    id="nexus-email"
-                    name="email"
-                    type="email"
-                    autocomplete="username"
-                    required
-                    autofocus
-                    [value]="authEmail()"
-                    (input)="authEmail.set($any($event.target).value)"
-                  />
-                  <label for="nexus-password">Password</label>
-                  <input
-                    id="nexus-password"
-                    name="password"
-                    type="password"
-                    autocomplete="current-password"
-                    required
-                    [value]="authPassword()"
-                    (input)="authPassword.set($any($event.target).value)"
-                  />
-                  <button class="account-dialog-submit" type="submit" [disabled]="account.busy()">
-                    {{ account.busy() ? 'Signing in…' : 'Sign in' }}
-                  </button>
-                  <button class="account-dialog-secondary" type="button" (click)="setAuthView('create')">
-                    Create account
-                  </button>
-                  <button class="account-dialog-back" type="button" (click)="setAuthView('social')">
-                    Go back
-                  </button>
-                </form>
-              }
-              @case ('create') {
-                <form (submit)="submitNexusRegister($event)">
-                  <label for="nexus-display-name">Name</label>
-                  <input
-                    id="nexus-display-name"
-                    name="displayName"
-                    autocomplete="name"
-                    required
-                    [value]="authDisplayName()"
-                    (input)="authDisplayName.set($any($event.target).value)"
-                  />
-                  <label for="nexus-create-email">Email</label>
-                  <input
-                    id="nexus-create-email"
-                    name="email"
-                    type="email"
-                    autocomplete="email"
-                    required
-                    [value]="authEmail()"
-                    (input)="authEmail.set($any($event.target).value)"
-                  />
-                  <label for="nexus-create-password">Password</label>
-                  <input
-                    id="nexus-create-password"
-                    name="password"
-                    type="password"
-                    autocomplete="new-password"
-                    minlength="8"
-                    required
-                    [value]="authPassword()"
-                    (input)="authPassword.set($any($event.target).value)"
-                  />
-                  <p class="account-dialog-hint">Use at least 8 characters.</p>
-                  <label for="nexus-confirm-password">Confirm password</label>
-                  <input
-                    id="nexus-confirm-password"
-                    name="confirmPassword"
-                    type="password"
-                    autocomplete="new-password"
-                    required
-                    [value]="authPasswordConfirm()"
-                    (input)="authPasswordConfirm.set($any($event.target).value)"
-                  />
-                  @if (authPasswordConfirm() && authPassword() !== authPasswordConfirm()) {
-                    <p class="account-dialog-hint">Passwords do not match.</p>
-                  }
-                  <button
-                    class="account-dialog-submit"
-                    type="submit"
-                    [disabled]="account.busy() || authPassword().length < 8 || authPassword() !== authPasswordConfirm()"
-                  >
-                    {{ account.busy() ? 'Creating account…' : 'Create account' }}
-                  </button>
-                  <button class="account-dialog-back" type="button" (click)="setAuthView('email')">
-                    Go back
-                  </button>
-                </form>
-              }
-              @case ('verify-email') {
-                <form (submit)="submitNexusEmailVerification($event)">
-                  <p class="account-dialog-hint">
-                    Enter the verification token sent to {{ authEmail() }}.
-                  </p>
-                  <label for="nexus-verification-token">Email verification token</label>
-                  <input
-                    id="nexus-verification-token"
-                    name="token"
-                    autocomplete="one-time-code"
-                    required
-                    autofocus
-                    [value]="emailVerificationToken()"
-                    (input)="emailVerificationToken.set($any($event.target).value)"
-                  />
-                  <button class="account-dialog-submit" type="submit" [disabled]="account.busy()">
-                    {{ account.busy() ? 'Verifying…' : 'Verify and connect' }}
-                  </button>
-                  <button class="account-dialog-back" type="button" (click)="setAuthView('email')">
-                    Go back
-                  </button>
-                </form>
-              }
-              @case ('mfa') {
-                <form (submit)="submitNexusMfa($event)">
-                  <p class="account-dialog-hint">Continue with one of your sign-in checks.</p>
-                  <label for="nexus-mfa-code">Authenticator code</label>
-                  <input
-                    id="nexus-mfa-code"
-                    name="code"
-                    autocomplete="one-time-code"
-                    [value]="mfaCode()"
-                    (input)="mfaCode.set($any($event.target).value)"
-                    autofocus
-                  />
-                  <label for="nexus-recovery-code">Recovery code</label>
-                  <input
-                    id="nexus-recovery-code"
-                    name="recoveryCode"
-                    autocomplete="off"
-                    [value]="recoveryCode()"
-                    (input)="recoveryCode.set($any($event.target).value)"
-                  />
-                  <button class="account-dialog-submit" type="submit" [disabled]="account.busy()">
-                    {{ account.busy() ? 'Verifying…' : 'Verify identity' }}
-                  </button>
-                  <button class="account-dialog-back" type="button" (click)="cancelMfa()">
-                    Cancel
-                  </button>
-                </form>
-              }
+            @case ('email') {
+              <form (submit)="submitNexusLogin($event)">
+                <label for="nexus-email">Email</label>
+                <input
+                  id="nexus-email"
+                  name="email"
+                  type="email"
+                  autocomplete="username"
+                  required
+                  autofocus
+                  [value]="authEmail()"
+                  (input)="authEmail.set($any($event.target).value)"
+                />
+                <label for="nexus-password">Password</label>
+                <input
+                  id="nexus-password"
+                  name="password"
+                  type="password"
+                  autocomplete="current-password"
+                  required
+                  [value]="authPassword()"
+                  (input)="authPassword.set($any($event.target).value)"
+                />
+                <button class="account-dialog-submit" type="submit" [disabled]="account.busy()">
+                  {{ account.busy() ? 'Signing in…' : 'Sign in' }}
+                </button>
+                <button
+                  class="account-dialog-secondary"
+                  type="button"
+                  (click)="setAuthView('create')"
+                >
+                  Create account
+                </button>
+                <button class="account-dialog-back" type="button" (click)="setAuthView('social')">
+                  Go back
+                </button>
+              </form>
             }
-          </dialog>
+            @case ('create') {
+              <form (submit)="submitNexusRegister($event)">
+                <label for="nexus-display-name">Name</label>
+                <input
+                  id="nexus-display-name"
+                  name="displayName"
+                  autocomplete="name"
+                  required
+                  [value]="authDisplayName()"
+                  (input)="authDisplayName.set($any($event.target).value)"
+                />
+                <label for="nexus-create-email">Email</label>
+                <input
+                  id="nexus-create-email"
+                  name="email"
+                  type="email"
+                  autocomplete="email"
+                  required
+                  [value]="authEmail()"
+                  (input)="authEmail.set($any($event.target).value)"
+                />
+                <label for="nexus-create-password">Password</label>
+                <input
+                  id="nexus-create-password"
+                  name="password"
+                  type="password"
+                  autocomplete="new-password"
+                  minlength="8"
+                  required
+                  [value]="authPassword()"
+                  (input)="authPassword.set($any($event.target).value)"
+                />
+                <p class="account-dialog-hint">Use at least 8 characters.</p>
+                <label for="nexus-confirm-password">Confirm password</label>
+                <input
+                  id="nexus-confirm-password"
+                  name="confirmPassword"
+                  type="password"
+                  autocomplete="new-password"
+                  required
+                  [value]="authPasswordConfirm()"
+                  (input)="authPasswordConfirm.set($any($event.target).value)"
+                />
+                @if (authPasswordConfirm() && authPassword() !== authPasswordConfirm()) {
+                  <p class="account-dialog-hint">Passwords do not match.</p>
+                }
+                <button
+                  class="account-dialog-submit"
+                  type="submit"
+                  [disabled]="
+                    account.busy() ||
+                    authPassword().length < 8 ||
+                    authPassword() !== authPasswordConfirm()
+                  "
+                >
+                  {{ account.busy() ? 'Creating account…' : 'Create account' }}
+                </button>
+                <button class="account-dialog-back" type="button" (click)="setAuthView('email')">
+                  Go back
+                </button>
+              </form>
+            }
+            @case ('verify-email') {
+              <form (submit)="submitNexusEmailVerification($event)">
+                <p class="account-dialog-hint">
+                  Enter the verification token sent to {{ authEmail() }}.
+                </p>
+                <label for="nexus-verification-token">Email verification token</label>
+                <input
+                  id="nexus-verification-token"
+                  name="token"
+                  autocomplete="one-time-code"
+                  required
+                  autofocus
+                  [value]="emailVerificationToken()"
+                  (input)="emailVerificationToken.set($any($event.target).value)"
+                />
+                <button class="account-dialog-submit" type="submit" [disabled]="account.busy()">
+                  {{ account.busy() ? 'Verifying…' : 'Verify and connect' }}
+                </button>
+                <button class="account-dialog-back" type="button" (click)="setAuthView('email')">
+                  Go back
+                </button>
+              </form>
+            }
+            @case ('mfa') {
+              <form (submit)="submitNexusMfa($event)">
+                <p class="account-dialog-hint">Continue with one of your sign-in checks.</p>
+                <label for="nexus-mfa-code">Authenticator code</label>
+                <input
+                  id="nexus-mfa-code"
+                  name="code"
+                  autocomplete="one-time-code"
+                  [value]="mfaCode()"
+                  (input)="mfaCode.set($any($event.target).value)"
+                  autofocus
+                />
+                <label for="nexus-recovery-code">Recovery code</label>
+                <input
+                  id="nexus-recovery-code"
+                  name="recoveryCode"
+                  autocomplete="off"
+                  [value]="recoveryCode()"
+                  (input)="recoveryCode.set($any($event.target).value)"
+                />
+                <button class="account-dialog-submit" type="submit" [disabled]="account.busy()">
+                  {{ account.busy() ? 'Verifying…' : 'Verify identity' }}
+                </button>
+                <button class="account-dialog-back" type="button" (click)="cancelMfa()">
+                  Cancel
+                </button>
+              </form>
+            }
+          }
+        </dialog>
       }
 
       <main class="content">
@@ -418,8 +456,14 @@ const RAIL_EXPANDED_SETTING_KEY = 'rail.expanded';
                   <rl-icon name="lock" [size]="16" />
                 </div>
                 <dl>
-                  <div><dt>Name</dt><dd>{{ account.status().displayName || 'Not provided' }}</dd></div>
-                  <div><dt>Email</dt><dd>{{ account.status().email || 'Not provided' }}</dd></div>
+                  <div>
+                    <dt>Name</dt>
+                    <dd>{{ account.status().displayName || 'Not provided' }}</dd>
+                  </div>
+                  <div>
+                    <dt>Email</dt>
+                    <dd>{{ account.status().email || 'Not provided' }}</dd>
+                  </div>
                   <div class="account-id-row">
                     <dt>Nexus account ID</dt>
                     <dd>{{ account.status().userId || 'Not available' }}</dd>
@@ -453,12 +497,17 @@ const RAIL_EXPANDED_SETTING_KEY = 'rail.expanded';
             [openThreadId]="requestedAgentThreadId()"
             (threadHandled)="requestedAgentThreadId.set(null)"
           />
+        } @else if (view() === 'linear') {
+          <rl-linear
+            [projectRequest]="linearProjectRequest()"
+            (projectRequestHandled)="handleLinearProjectRequest($event)"
+          />
         } @else if (view() === 'vault') {
           <rl-vault />
         } @else if (view() === 'runtime') {
           <rl-runtime />
         } @else {
-          <rl-projects />
+          <rl-projects (linearProjectSelected)="openLinearProject($event)" />
         }
       </main>
     </div>
@@ -812,7 +861,9 @@ const RAIL_EXPANDED_SETTING_KEY = 'rail.expanded';
       padding: var(--space-5);
     }
 
-    .account-details-card dl { margin: 0; }
+    .account-details-card dl {
+      margin: 0;
+    }
     .account-details-card dl > div {
       display: grid;
       grid-template-columns: minmax(110px, 0.7fr) minmax(0, 1.3fr);
@@ -838,7 +889,9 @@ const RAIL_EXPANDED_SETTING_KEY = 'rail.expanded';
       color: var(--text-muted);
     }
 
-    .account-details-card dl > div:last-child { border: 0; }
+    .account-details-card dl > div:last-child {
+      border: 0;
+    }
 
     .account-page-actions {
       display: flex;
@@ -873,9 +926,17 @@ const RAIL_EXPANDED_SETTING_KEY = 'rail.expanded';
     }
 
     @media (max-width: 540px) {
-      .account-page { inline-size: calc(100% - 32px); }
-      .account-details-card dl > div { grid-template-columns: 1fr; gap: var(--space-1); }
-      .account-page-actions { align-items: flex-start; flex-direction: column; }
+      .account-page {
+        inline-size: calc(100% - 32px);
+      }
+      .account-details-card dl > div {
+        grid-template-columns: 1fr;
+        gap: var(--space-1);
+      }
+      .account-page-actions {
+        align-items: flex-start;
+        flex-direction: column;
+      }
     }
 
     .account-dialog {
@@ -1093,7 +1154,9 @@ const RAIL_EXPANDED_SETTING_KEY = 'rail.expanded';
 export class Home {
   protected readonly accountDialogOpen = signal(false);
   protected readonly account = inject(NexusAccount);
-  protected readonly authView = signal<'social' | 'email' | 'create' | 'verify-email' | 'mfa'>('social');
+  protected readonly authView = signal<'social' | 'email' | 'create' | 'verify-email' | 'mfa'>(
+    'social',
+  );
   protected readonly authEmail = signal('');
   protected readonly authPassword = signal('');
   protected readonly authPasswordConfirm = signal('');
@@ -1124,12 +1187,18 @@ export class Home {
     this.account.status().connected ? this.accountName().trim().charAt(0).toLocaleUpperCase() : 'N',
   );
   protected readonly theme = inject(ThemeService);
-  protected readonly view = signal<'home' | 'settings' | 'vault' | 'runtime' | 'codex' | 'account'>('home');
+  protected readonly view = signal<
+    'home' | 'linear' | 'settings' | 'vault' | 'runtime' | 'codex' | 'account'
+  >('home');
   protected readonly requestedAgentThreadId = signal<string | null>(null);
+  protected readonly linearProjectRequest = signal<{
+    organizationId: string;
+    projectId: string;
+  } | null>(null);
   /** Starts collapsed — the safe default while the persisted value (below) is
    * still loading — then reconciles with whatever the user last left it as. */
   protected readonly railExpanded = signal(false);
-  protected readonly settingsTab = signal<'general' | 'github'>('general');
+  protected readonly settingsTab = signal<'general' | 'github' | 'linear'>('general');
 
   private readonly tauri = inject(TauriBridge);
   protected readonly maximized = signal(false);
@@ -1139,6 +1208,23 @@ export class Home {
     this.authView.set('social');
     this.account.error.set('');
     this.accountDialogOpen.set(true);
+  }
+
+  protected openLinearProject(request: { organizationId: string; projectId: string }): void {
+    this.linearProjectRequest.set(request);
+    this.view.set('linear');
+  }
+
+  protected handleLinearProjectRequest(
+    request: { organizationId: string; projectId: string },
+  ): void {
+    const current = this.linearProjectRequest();
+    if (
+      current?.organizationId === request.organizationId &&
+      current.projectId === request.projectId
+    ) {
+      this.linearProjectRequest.set(null);
+    }
   }
 
   protected closeNexusDialog(): void {
@@ -1174,7 +1260,9 @@ export class Home {
   protected async submitNexusRegister(event: Event): Promise<void> {
     event.preventDefault();
     if (this.authPassword() !== this.authPasswordConfirm()) return;
-    if (await this.account.register(this.authEmail(), this.authPassword(), this.authDisplayName())) {
+    if (
+      await this.account.register(this.authEmail(), this.authPassword(), this.authDisplayName())
+    ) {
       this.emailVerificationToken.set('');
       this.setAuthView('verify-email');
     }
@@ -1257,6 +1345,9 @@ export class Home {
         if (event.type === 'openGithubRequested') {
           this.view.set('settings');
           this.settingsTab.set('github');
+        }
+        if (event.type === 'openLinearRequested') {
+          this.view.set('linear');
         }
       })
       .then((unlisten) => destroyRef.onDestroy(unlisten));
