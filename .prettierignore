@@ -6,3 +6,4 @@ package-lock.json
 .agents/
 .claude/
 .Jules/
+packages/nexus-client-rs/
