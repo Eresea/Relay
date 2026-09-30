@@ -186,6 +186,21 @@ shows the main window and emits `AppEvent::OpenVaultRequested` for `Home` to
 switch views to, since the palette and the main window are separate webviews
 with no shared JS state.
 
+## Nexus account
+
+`src-tauri/src/nexus_auth.rs` wraps the `nexus-client` SDK (vendored in
+`packages/nexus-client-rs`, see its `SOURCE`; refresh with
+`scripts/sync-nexus-client.sh`). There is one sign-in path: "Sign in with
+Nexus" opens the hosted page in the system browser and the
+`relay://auth/callback` deep link completes it in `handle_callback`. Relay has
+no password, MFA or registration UI. The session lives in the keychain
+(`relay-nexus-auth` / `oauth-session`); sign-out revokes it, "Sign out
+everywhere" ends every session of the account. The auth state is emitted to
+the UI as `nexus://auth`, and the event stream runs only while signed in. A
+`session.revoked` just returns the UI to signed out. The API base comes from
+`RELAY_NEXUS_ISSUER`, else `nexus.issuer` in `settings.json`, else
+`https://nexus.eresea.net/api/v1`, and is read at startup.
+
 ## GitHub connector
 
 `src-tauri/src/github/` is one of Relay's first two external service
@@ -217,16 +232,23 @@ to test in isolation:
   this trait, exactly the way `jobs::spawn` is generic over `EventSink`, so
   `FakeGitHubClient` (canned, ownership-consumed responses) exercises the
   whole pipeline in `cargo test` with no network and no live GitHub.
-- `token_store.rs` — where the access/refresh token lives at rest. This is
+- `token_store.rs` — the local fallback for the access/refresh token. This is
   the one place the connector deliberately does **not** follow `vault.rs`'s
   pattern: a password-derived key would gate every read behind a master
-  password prompt, which a background poll job running with no window open
+  password prompt, which a background job running with no window open
   cannot supply. Instead the token goes into the OS's own secret store
   (Keychain / Credential Manager / Secret Service) through the `keyring`
-  crate — the same place a browser or a git credential helper keeps a saved
-  login, already access-controlled per-OS-user without Relay reimplementing
-  that. `TokenStore` is a trait for the same reason `EventSink` is: tests run
+  crate. `TokenStore` is a trait for the same reason `EventSink` is: tests run
   against an in-memory fake rather than a real keychain.
+- `nexus_store.rs` — the `TokenStore` Relay actually uses. Signed in to Nexus,
+  the token bundle is a `github` connection on the account, written and read
+  with the SDK's `connections()` (auto-granted to Relay because Relay created
+  it; replaces are conditional with `If-Match` and retried on
+  `credential_revision_conflict`). Signed out, it stays in the local keychain,
+  and a local token found while signed in is moved to Nexus. A GitHub
+  connection created by another app is offered in the UI ("Use GitHub
+  connection from <app>"): `request_grant` opens the consent page and the UI
+  polls until Relay is granted.
 - `rules.rs` — `GithubConnectorSettings`: `NotificationSettings`
   (one `NotificationTypeRule` per `PrEventKind` — an on/off switch plus a
   `*`-glob repo pattern and optional branch include/exclude globs), and a
@@ -243,17 +265,19 @@ to test in isolation:
   failed build, but not a passing one or a plain close — the one status that
   mostly confirms nothing is wrong, which gets noisy fast if it fires on
   every PR you touch.
-- `events.rs` — Nexus WebSocket connection and durable inbox consumer. It
-  drains on connection and `events.available`, claims one event at a time, refreshes PR
-  and CI state through the GitHub API, applies the same per-event rules, and
-  acknowledges only after the local delivery/notification transaction commits.
-  The socket pings, checks the current Nexus session, and reconnects with
-  backoff; accepted inbox deliveries survive Relay being offline.
+- `events.rs` — the handler for the SDK's event stream (`NexusClient::events`),
+  started by `nexus_auth` while a Nexus session exists. The SDK owns the
+  WebSocket, reconnects, and drains this installation's inbox (the cursor is
+  per Nexus session) after every connect and on `events.available`; it
+  acknowledges an event only after the handler returns `Ok`. The handler
+  refreshes PR and CI state through the GitHub API, applies the per-event
+  rules, and writes the durable delivery marker and notification before
+  returning, so a redelivery is a no-op. Event endpoints for repository hooks
+  are created and revoked through `event_endpoints()`.
 - `poll.rs` — OAuth Device Flow polling plus the on-disk PR snapshot cache
   (`github-poll-cache.json`). GitHub event notifications no longer use a
   recurring Search API poll. Repository hooks cover `pull_request` and
-  `check_run`; polling the Nexus inbox is limited to startup/reconnect and
-  WebSocket wakeups.
+  `check_run`.
 
 Repository hooks are enabled only for repositories explicitly selected in
 Relay and where the user can manage hooks. CI state comes from GitHub Checks
@@ -265,7 +289,7 @@ when sync code needs one async result — see the note on why commands stay
 synchronous, above) to fetch the device code, then hands the wait for the
 user's approval to a background job and returns immediately with the code to
 display. That job reports `Waiting` while it polls GitHub's Device Flow
-endpoint. On success it stores the token; the Nexus WebSocket consumer runs
+endpoint. On success it stores the token; the Nexus event stream runs
 independently and resumes from the durable inbox after startup or reconnect.
 
 Every failure path in that job — denied, expired, a malformed response, a

@@ -55,28 +55,42 @@ it('manages Nexus sign-in from the avatar below Settings and reports failures', 
   );
   expect(trigger.querySelector('.avatar')?.textContent?.trim()).toBe('N');
 
+  const item = (label: string) =>
+    [...host.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')].find((button) =>
+      button.textContent?.includes(label),
+    )!;
+
   trigger.click();
   fixture.detectChanges();
   expect(trigger.getAttribute('aria-expanded')).toBe('true');
-  host.querySelector<HTMLButtonElement>('[role="menuitem"]')!.click();
+  item('Sign in with Nexus').click();
   await fixture.whenStable();
   expect(bridge.nexusAuthStart).toHaveBeenCalledOnce();
+  fixture.detectChanges();
   expect(host.textContent).toContain('Waiting for sign-in');
 
   onAuth({ connected: true, userId: 'user', email: 'alex@example.com', displayName: 'Alex' });
   fixture.detectChanges();
   expect(trigger.querySelector('.avatar')?.textContent?.trim()).toBe('A');
   expect(host.querySelector('.account-menu')?.textContent).toContain('alex@example.com');
-  host.querySelector<HTMLButtonElement>('[role="menuitem"]')!.click();
+  item('Sign out everywhere').click();
   await fixture.whenStable();
-  expect(bridge.nexusAuthLogout).toHaveBeenCalledOnce();
-  expect(host.textContent).toContain('Connect through Nexus');
+  expect(bridge.nexusAuthLogout).toHaveBeenLastCalledWith(true);
+
+  // The session was revoked elsewhere: back to signed out, no error shown.
+  onAuth({ connected: true, userId: 'user', email: 'alex@example.com', displayName: 'Alex' });
+  fixture.detectChanges();
+  onAuth(disconnected);
+  fixture.detectChanges();
+  expect(host.textContent).toContain('Sign in with Nexus');
+  expect(host.querySelector('[role="alert"]')).toBeNull();
 
   bridge.nexusAuthStart.mockRejectedValueOnce('Could not open browser');
-  host.querySelector<HTMLButtonElement>('[role="menuitem"]')!.click();
+  item('Sign in with Nexus').click();
   await fixture.whenStable();
+  fixture.detectChanges();
   expect(host.querySelector('[role="alert"]')?.textContent).toContain('Could not open browser');
-  expect(host.querySelector<HTMLButtonElement>('[role="menuitem"]')!.disabled).toBe(false);
+  expect(item('Sign in with Nexus').disabled).toBe(false);
 
   document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
   fixture.detectChanges();

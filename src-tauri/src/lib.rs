@@ -68,7 +68,6 @@ pub fn run() {
         .manage(VaultState::default())
         .manage(HttpGitHubClient::default())
         .manage(GmailState::default())
-        .manage(nexus_auth::NexusAuthState::default())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_deep_link::init())
         .plugin(tauri_plugin_store::Builder::default().build())
@@ -124,12 +123,9 @@ pub fn run() {
                 commands::github_disconnect,
                 commands::nexus_auth_status,
                 commands::nexus_auth_start,
-                commands::nexus_auth_login,
-                commands::nexus_auth_register,
-                commands::nexus_auth_verify_email,
-                commands::nexus_auth_verify_mfa,
-                commands::nexus_auth_google_start,
                 commands::nexus_auth_logout,
+                commands::github_use_nexus_connection,
+                commands::github_adopt_connection,
                 commands::gmail_status,
                 commands::gmail_get_settings,
                 commands::gmail_set_settings,
@@ -197,12 +193,9 @@ pub fn run() {
             commands::github_disconnect,
             commands::nexus_auth_status,
             commands::nexus_auth_start,
-            commands::nexus_auth_login,
-            commands::nexus_auth_register,
-            commands::nexus_auth_verify_email,
-            commands::nexus_auth_verify_mfa,
-            commands::nexus_auth_google_start,
             commands::nexus_auth_logout,
+            commands::github_use_nexus_connection,
+            commands::github_adopt_connection,
             commands::gmail_status,
             commands::gmail_get_settings,
             commands::gmail_set_settings,
@@ -303,7 +296,9 @@ pub fn run() {
                 let _ = overlay::show_main(app.handle());
             }
 
-            github::events::start(app.handle().clone());
+            if let Err(error) = nexus_auth::init(app.handle()) {
+                log::warn!("Nexus sign-in is unavailable: {error}");
+            }
 
             // A connector that stopped polling every time the window closed
             // would be pointless — resume whatever was connected before the

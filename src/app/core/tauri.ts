@@ -511,8 +511,7 @@ export class TauriBridge {
       (await this.invoke<GithubStatus>('github_status')) ?? {
         connected: false,
         username: null,
-        nexusCredentialReady: false,
-        nexusCredentialPending: false,
+        available: null,
       }
     );
   }
@@ -535,7 +534,6 @@ export class TauriBridge {
     return (
       (await this.invoke<NexusAuthStatus>('nexus_auth_status')) ?? {
         connected: false,
-        mfaRequired: false,
         userId: null,
         email: null,
         displayName: null,
@@ -543,34 +541,24 @@ export class TauriBridge {
     );
   }
 
+  /** Opens the hosted Nexus sign-in page in the system browser. */
   async nexusAuthStart(): Promise<void> {
     await this.invoke('nexus_auth_start');
   }
 
-  async nexusAuthLogin(email: string, password: string): Promise<NexusAuthLoginResult> {
-    const result = await this.invoke<NexusAuthLoginResult>('nexus_auth_login', { email, password });
-    if (!result) throw new Error('Nexus returned no sign-in result.');
-    return result;
+  /** Ends this installation's session, or every session of the account. */
+  async nexusAuthLogout(everywhere = false): Promise<void> {
+    await this.invoke('nexus_auth_logout', { everywhere });
   }
 
-  async nexusAuthRegister(email: string, password: string, displayName: string): Promise<void> {
-    await this.invoke('nexus_auth_register', { email, password, displayName });
+  /** Requests access to a GitHub connection another app created; opens the consent page. */
+  async githubUseNexusConnection(credentialId: string): Promise<void> {
+    await this.invoke('github_use_nexus_connection', { credentialId });
   }
 
-  async nexusAuthVerifyEmail(token: string): Promise<void> {
-    await this.invoke('nexus_auth_verify_email', { token });
-  }
-
-  async nexusAuthVerifyMfa(code: string, recoveryCode = ''): Promise<void> {
-    await this.invoke('nexus_auth_verify_mfa', { code, recoveryCode });
-  }
-
-  async nexusAuthGoogleStart(): Promise<void> {
-    await this.invoke('nexus_auth_google_start');
-  }
-
-  async nexusAuthLogout(): Promise<void> {
-    await this.invoke('nexus_auth_logout');
+  /** Loads a GitHub connection Nexus has granted to Relay, then reports the status. */
+  async githubAdoptConnection(): Promise<GithubStatus | null> {
+    return this.invoke<GithubStatus>('github_adopt_connection');
   }
 
   async onNexusAuth(handler: (status: NexusAuthStatus) => void): Promise<() => void> {
@@ -877,21 +865,23 @@ export interface PasswordOptions {
 export interface GithubStatus {
   readonly connected: boolean;
   readonly username: string | null;
-  readonly nexusCredentialReady: boolean;
-  readonly nexusCredentialPending: boolean;
+  /** A GitHub connection in the Nexus account that another app created; Relay may request it. */
+  readonly available: AvailableGithubConnection | null;
+}
+
+export interface AvailableGithubConnection {
+  readonly id: string;
+  readonly label: string;
+  /** Name of the app that created it. */
+  readonly app: string;
 }
 
 export interface NexusAuthStatus {
   readonly connected: boolean;
-  readonly mfaRequired?: boolean;
   readonly userId: string | null;
   readonly email: string | null;
   readonly displayName: string | null;
   readonly error?: string | null;
-}
-
-export interface NexusAuthLoginResult {
-  readonly mfaRequired: boolean;
 }
 
 /** Mirrors `github::oauth::DeviceAuthorization`. */
