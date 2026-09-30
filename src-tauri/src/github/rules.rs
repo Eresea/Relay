@@ -118,7 +118,7 @@ impl Default for NotificationSettings {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct GithubConnectorSettings {
     #[serde(default)]
@@ -134,16 +134,6 @@ pub struct GithubConnectorSettings {
     /// means connecting is not configured yet.
     #[serde(default)]
     pub client_id: Option<String>,
-}
-
-impl Default for GithubConnectorSettings {
-    fn default() -> Self {
-        Self {
-            notifications: NotificationSettings::default(),
-            muted: Vec::new(),
-            client_id: None,
-        }
-    }
 }
 
 /// A configured, non-blank client id, or `None` if connecting has not been

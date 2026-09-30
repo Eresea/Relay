@@ -207,7 +207,7 @@ async fn connect_and_drain(
                 if last_pong.elapsed() > Duration::from_secs(55) {
                     return Err(Error::NexusAuth("Nexus realtime heartbeat timed out".into()));
                 }
-                socket.send(Message::Ping(Vec::new().into())).await
+                socket.send(Message::Ping(Vec::new())).await
                     .map_err(|error| Error::NexusAuth(error.to_string()))?;
             }
             _ = auth_check.tick() => {
