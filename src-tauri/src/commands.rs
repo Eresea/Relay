@@ -304,55 +304,32 @@ pub async fn github_disconnect(app: AppHandle) -> Result<()> {
 }
 
 #[tauri::command]
-pub fn nexus_auth_status() -> Result<nexus_auth::NexusAuthStatus> {
-    nexus_auth::status()
+pub async fn nexus_auth_status(app: AppHandle) -> Result<nexus_auth::NexusAuthStatus> {
+    nexus_auth::status(&app).await
 }
 
+/// Opens the hosted Nexus sign-in page in the system browser.
 #[tauri::command]
 pub fn nexus_auth_start(app: AppHandle) -> Result<()> {
     nexus_auth::start(&app)
 }
 
+/// Ends this installation's Nexus session, or every session of the account.
 #[tauri::command]
-pub async fn nexus_auth_login(
-    app: AppHandle,
-    email: String,
-    password: String,
-) -> Result<nexus_auth::LoginResult> {
-    nexus_auth::login(&app, email, password).await
+pub async fn nexus_auth_logout(app: AppHandle, everywhere: bool) -> Result<()> {
+    nexus_auth::sign_out(&app, everywhere).await
 }
 
+/// Asks Nexus for access to a GitHub connection another app created.
 #[tauri::command]
-pub async fn nexus_auth_register(
-    email: String,
-    password: String,
-    display_name: String,
-) -> Result<()> {
-    nexus_auth::register(email, password, display_name).await
+pub async fn github_use_nexus_connection(app: AppHandle, credential_id: String) -> Result<()> {
+    github::use_connection(&app, credential_id).await
 }
 
+/// Loads a GitHub connection Nexus has granted to Relay and returns the status.
 #[tauri::command]
-pub async fn nexus_auth_verify_email(token: String) -> Result<()> {
-    nexus_auth::verify_email(token).await
-}
-
-#[tauri::command]
-pub async fn nexus_auth_verify_mfa(
-    app: AppHandle,
-    code: String,
-    recovery_code: String,
-) -> Result<()> {
-    nexus_auth::verify_mfa(&app, code, recovery_code).await
-}
-
-#[tauri::command]
-pub fn nexus_auth_google_start(app: AppHandle) -> Result<()> {
-    nexus_auth::google_start(&app)
-}
-
-#[tauri::command]
-pub fn nexus_auth_logout(app: AppHandle) -> Result<()> {
-    nexus_auth::logout(&app)
+pub async fn github_adopt_connection(app: AppHandle) -> Result<GithubStatus> {
+    github::adopt_connection(&app).await
 }
 
 /// Whether Gmail is connected, mid-handshake, or neither.
