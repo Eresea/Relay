@@ -207,17 +207,8 @@ pub async fn handle_callback(app: AppHandle, url: url::Url) {
 }
 
 pub async fn status(app: &AppHandle) -> Result<Vec<LinearConnection>> {
-    if crate::nexus_auth::status().is_ok_and(|status| status.connected) {
-        let mut pending = pending_revokes(app)?;
-        let original_pending = pending.clone();
-        for organization_id in pending.clone() {
-            if nexus_sync::revoke(app, &organization_id).await.is_ok() {
-                update_pending_revoke(&mut pending, &organization_id, true);
-            }
-        }
-        if pending != original_pending {
-            save_pending_revokes(app, &pending)?;
-        }
+    if crate::nexus_auth::is_signed_in(app) {
+        let pending = pending_revokes(app)?;
         if let Ok(remote) = nexus_sync::discover(app).await {
             let pending_set = pending.iter().collect::<std::collections::HashSet<_>>();
             let remote_ids = remote
@@ -251,11 +242,10 @@ pub async fn status(app: &AppHandle) -> Result<Vec<LinearConnection>> {
                     continue;
                 }
                 let local_bundle = stored_bundle(&connection.organization_id).ok();
-                let bundle = local_bundle
-                    .as_ref()
-                    .map_or_else(|| remote_bundle.clone(), |local| {
-                        nexus_sync::merge_bundle(local, &remote_bundle)
-                    });
+                let bundle = local_bundle.as_ref().map_or_else(
+                    || remote_bundle.clone(),
+                    |local| nexus_sync::merge_bundle(local, &remote_bundle),
+                );
                 if bundle != remote_bundle {
                     let _ = persist_bundle_to_nexus(app, &mut connection, &bundle).await;
                 } else {
@@ -296,8 +286,10 @@ pub fn pause_on_device(app: &AppHandle, organization_id: &str, paused: bool) -> 
     set_paused_on_device(app, organization_id, paused)
 }
 
+/// Apps cannot revoke a Nexus connection (that needs the account page), so
+/// disconnecting removes the workspace on this device and remembers it, which
+/// stops discovery from loading it again until it is reconnected here.
 pub async fn disconnect(app: &AppHandle, organization_id: &str) -> Result<Option<String>> {
-    let remote_revoke = nexus_sync::revoke(app, organization_id).await;
     let entry = token_entry(organization_id)?;
     match entry.delete_credential() {
         Ok(()) | Err(keyring::Error::NoEntry) => {}
@@ -307,9 +299,12 @@ pub async fn disconnect(app: &AppHandle, organization_id: &str) -> Result<Option
         .store("settings.json")
         .map_err(|error| Error::LinearApi(error.to_string()))?;
     let mut connections = connections(app)?;
+    let synced = connections.iter().any(|connection| {
+        connection.organization_id == organization_id && connection.nexus_credential_id.is_some()
+    });
     connections.retain(|connection| connection.organization_id != organization_id);
     let mut pending = pending_revokes(app)?;
-    update_pending_revoke(&mut pending, organization_id, remote_revoke.is_ok());
+    update_pending_revoke(&mut pending, organization_id, false);
     set_paused_on_device(app, organization_id, false)?;
     store.set(
         CONNECTIONS_KEY,
@@ -322,8 +317,8 @@ pub async fn disconnect(app: &AppHandle, organization_id: &str) -> Result<Option
     store
         .save()
         .map_err(|error| Error::LinearApi(error.to_string()))?;
-    Ok(remote_revoke.err().map(|_| {
-        "Disconnected on this device; Nexus will revoke access on other devices when it reconnects."
+    Ok(synced.then(|| {
+        "Disconnected on this device. Remove the Linear connection in your Nexus account to disconnect other devices."
             .to_owned()
     }))
 }
@@ -1081,7 +1076,7 @@ pub async fn agent_access_token(app: &AppHandle, organization_id: &str) -> Resul
     let agent = match oauth::refresh_agent(agent).await {
         Ok(agent) => agent,
         Err(refresh_error) => {
-            let remote = if crate::nexus_auth::status().is_ok_and(|status| status.connected) {
+            let remote = if crate::nexus_auth::is_signed_in(app) {
                 nexus_sync::discover(app)
                     .await
                     .ok()
@@ -1103,7 +1098,7 @@ pub async fn agent_access_token(app: &AppHandle, organization_id: &str) -> Resul
     };
     bundle.agent = Some(agent.clone());
     save_bundle(organization_id, &bundle)?;
-    if crate::nexus_auth::status().is_ok_and(|status| status.connected) {
+    if crate::nexus_auth::is_signed_in(app) {
         if let Some(connection) = connections(app)?
             .into_iter()
             .find(|connection| connection.organization_id == organization_id)
@@ -1196,7 +1191,7 @@ async fn update_bundle(
     token_entry(organization_id)?
         .set_password(&encoded)
         .map_err(|error| Error::SecretStoreUnavailable(error.to_string()))?;
-    if crate::nexus_auth::status().is_ok_and(|status| status.connected) {
+    if crate::nexus_auth::is_signed_in(app) {
         if let Some(connection) = connections(app)?
             .into_iter()
             .find(|connection| connection.organization_id == organization_id)
@@ -1356,7 +1351,7 @@ async fn access_token(app: &AppHandle, organization_id: &str) -> Result<String> 
         bundle = match oauth::refresh(bundle).await {
             Ok(bundle) => bundle,
             Err(refresh_error) => {
-                let current = if crate::nexus_auth::status().is_ok_and(|status| status.connected) {
+                let current = if crate::nexus_auth::is_signed_in(app) {
                     nexus_sync::discover(app)
                         .await
                         .ok()
@@ -1382,7 +1377,7 @@ async fn access_token(app: &AppHandle, organization_id: &str) -> Result<String> 
                     .map_err(|error| Error::LinearApi(error.to_string()))?,
             )
             .map_err(|error| Error::SecretStoreUnavailable(error.to_string()))?;
-        if crate::nexus_auth::status().is_ok_and(|status| status.connected) {
+        if crate::nexus_auth::is_signed_in(app) {
             if let Some(connection) = connections(app)?
                 .into_iter()
                 .find(|connection| connection.organization_id == organization_id)

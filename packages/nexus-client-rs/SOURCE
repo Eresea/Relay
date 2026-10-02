@@ -1,0 +1,4 @@
+repo: Nexus
+commit: d428e496a92406896ae07ccfba536405cece12c8
+path: sdk/rust
+note: clean
