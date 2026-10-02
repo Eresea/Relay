@@ -6,6 +6,7 @@ mod events;
 mod github;
 mod gmail;
 mod jobs;
+mod linear;
 #[cfg(any(mobile, test))]
 #[allow(dead_code)]
 mod mobile_updates;
@@ -31,6 +32,7 @@ use tauri_plugin_deep_link::DeepLinkExt;
 use github::client::HttpGitHubClient;
 use gmail::GmailState;
 use jobs::JobRegistry;
+use linear::LinearState;
 use vault::VaultState;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -49,7 +51,11 @@ pub fn run() {
                 if let Ok(url) = url::Url::parse(&arg) {
                     let app = app.clone();
                     tauri::async_runtime::spawn(async move {
-                        nexus_auth::handle_callback(app, url).await;
+                        if url.host_str() == Some("linear") {
+                            linear::handle_callback(app, url).await;
+                        } else {
+                            nexus_auth::handle_callback(app, url).await;
+                        }
                     });
                 }
             }
@@ -68,6 +74,7 @@ pub fn run() {
         .manage(VaultState::default())
         .manage(HttpGitHubClient::default())
         .manage(GmailState::default())
+        .manage(LinearState::default())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_deep_link::init())
         .plugin(tauri_plugin_store::Builder::default().build())
@@ -121,6 +128,74 @@ pub fn run() {
                 commands::github_pull_requests,
                 commands::github_connect_start,
                 commands::github_disconnect,
+                commands::linear_status,
+                commands::linear_pause_on_device,
+                commands::linear_oauth_configured,
+                commands::linear_connect_start,
+                commands::linear_connect_cancel,
+                commands::linear_agent_install_start,
+                commands::linear_agent_update_issue_state,
+                commands::linear_agent_create_comment,
+                commands::linear_disconnect,
+                commands::linear_sync_connection,
+                commands::linear_teams,
+                commands::linear_users,
+                commands::linear_issue_labels,
+                commands::linear_create_issue_label,
+                commands::linear_update_issue_label,
+                commands::linear_delete_issue_label,
+                commands::linear_projects,
+                commands::linear_archive_project,
+                commands::linear_unarchive_project,
+                commands::linear_project_statuses,
+                commands::linear_create_project,
+                commands::linear_update_project,
+                commands::linear_project_resources,
+                commands::linear_create_project_document,
+                commands::linear_project_document,
+                commands::linear_update_project_document,
+                commands::linear_create_project_external_link,
+                commands::linear_delete_project_external_link,
+                commands::linear_project_milestones,
+                commands::linear_project_updates,
+                commands::linear_archive_project_update,
+                commands::linear_unarchive_project_update,
+                commands::linear_create_project_update,
+                commands::linear_update_project_update,
+                commands::linear_create_milestone,
+                commands::linear_update_milestone,
+                commands::linear_delete_milestone,
+                commands::linear_initiatives,
+                commands::linear_create_initiative_update,
+                commands::linear_update_initiative_update,
+                commands::linear_archive_initiative_update,
+                commands::linear_unarchive_initiative_update,
+                commands::linear_archive_initiative,
+                commands::linear_unarchive_initiative,
+                commands::linear_create_initiative,
+                commands::linear_update_initiative,
+                commands::linear_add_project_to_initiative,
+                commands::linear_remove_project_from_initiative,
+                commands::linear_cycles,
+                commands::linear_create_cycle,
+                commands::linear_update_cycle,
+                commands::linear_workflow_states,
+                commands::linear_create_issue,
+                commands::linear_issue_detail,
+                commands::linear_create_issue_relation,
+                commands::linear_delete_issue_relation,
+                commands::linear_create_comment,
+                commands::linear_update_comment,
+                commands::linear_delete_comment,
+                commands::linear_codex_context,
+                commands::linear_set_codex_project_allowed,
+                commands::linear_save_codex_link,
+                commands::linear_update_issue,
+                commands::linear_my_issues,
+                commands::linear_team_issues,
+                commands::linear_project_issues,
+                commands::linear_archive_issue,
+                commands::linear_unarchive_issue,
                 commands::nexus_auth_status,
                 commands::nexus_auth_start,
                 commands::nexus_auth_logout,
@@ -191,6 +266,73 @@ pub fn run() {
             commands::github_pull_requests,
             commands::github_connect_start,
             commands::github_disconnect,
+            commands::linear_status,
+            commands::linear_oauth_configured,
+            commands::linear_connect_start,
+            commands::linear_connect_cancel,
+            commands::linear_agent_install_start,
+            commands::linear_agent_update_issue_state,
+            commands::linear_agent_create_comment,
+            commands::linear_disconnect,
+            commands::linear_sync_connection,
+            commands::linear_teams,
+            commands::linear_users,
+            commands::linear_issue_labels,
+            commands::linear_create_issue_label,
+            commands::linear_update_issue_label,
+            commands::linear_delete_issue_label,
+            commands::linear_projects,
+            commands::linear_archive_project,
+            commands::linear_unarchive_project,
+            commands::linear_project_statuses,
+            commands::linear_create_project,
+            commands::linear_update_project,
+            commands::linear_project_resources,
+            commands::linear_create_project_document,
+            commands::linear_project_document,
+            commands::linear_update_project_document,
+            commands::linear_create_project_external_link,
+            commands::linear_delete_project_external_link,
+            commands::linear_project_milestones,
+            commands::linear_project_updates,
+            commands::linear_archive_project_update,
+            commands::linear_unarchive_project_update,
+            commands::linear_create_project_update,
+            commands::linear_update_project_update,
+            commands::linear_create_milestone,
+            commands::linear_update_milestone,
+            commands::linear_delete_milestone,
+            commands::linear_initiatives,
+            commands::linear_create_initiative_update,
+            commands::linear_update_initiative_update,
+            commands::linear_archive_initiative_update,
+            commands::linear_unarchive_initiative_update,
+            commands::linear_archive_initiative,
+            commands::linear_unarchive_initiative,
+            commands::linear_create_initiative,
+            commands::linear_update_initiative,
+            commands::linear_add_project_to_initiative,
+            commands::linear_remove_project_from_initiative,
+            commands::linear_cycles,
+            commands::linear_create_cycle,
+            commands::linear_update_cycle,
+            commands::linear_workflow_states,
+            commands::linear_create_issue,
+            commands::linear_issue_detail,
+            commands::linear_create_issue_relation,
+            commands::linear_delete_issue_relation,
+            commands::linear_create_comment,
+            commands::linear_update_comment,
+            commands::linear_delete_comment,
+            commands::linear_codex_context,
+            commands::linear_set_codex_project_allowed,
+            commands::linear_save_codex_link,
+            commands::linear_update_issue,
+            commands::linear_my_issues,
+            commands::linear_team_issues,
+            commands::linear_project_issues,
+            commands::linear_archive_issue,
+            commands::linear_unarchive_issue,
             commands::nexus_auth_status,
             commands::nexus_auth_start,
             commands::nexus_auth_logout,
@@ -252,7 +394,11 @@ pub fn run() {
                     let app = callback_app.clone();
                     let url = url.clone();
                     tauri::async_runtime::spawn(async move {
-                        nexus_auth::handle_callback(app, url).await;
+                        if url.host_str() == Some("linear") {
+                            linear::handle_callback(app, url).await;
+                        } else {
+                            nexus_auth::handle_callback(app, url).await;
+                        }
                     });
                 }
             });
@@ -260,7 +406,11 @@ pub fn run() {
                 for url in urls {
                     let app = app.handle().clone();
                     tauri::async_runtime::spawn(async move {
-                        nexus_auth::handle_callback(app, url).await;
+                        if url.host_str() == Some("linear") {
+                            linear::handle_callback(app, url).await;
+                        } else {
+                            nexus_auth::handle_callback(app, url).await;
+                        }
                     });
                 }
             }

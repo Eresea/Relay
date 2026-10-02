@@ -20,6 +20,7 @@ import { NotificationPopover } from '@shared/notification-popover';
 import { Projects } from '@features/projects/projects';
 import { Runtime } from '@features/runtime/runtime';
 import { Codex } from '@features/codex/codex';
+import { Linear } from '@features/linear/linear';
 
 const RAIL_EXPANDED_SETTING_KEY = 'rail.expanded';
 
@@ -40,6 +41,7 @@ const RAIL_EXPANDED_SETTING_KEY = 'rail.expanded';
     PopoverTrigger,
     BackgroundTaskIndicator,
     Codex,
+    Linear,
     Icon,
     NotificationPopover,
     Projects,
@@ -94,6 +96,16 @@ const RAIL_EXPANDED_SETTING_KEY = 'rail.expanded';
             [attr.aria-label]="railExpanded() ? 'Collapse sidebar' : 'Expand sidebar'"
           >
             <rl-icon name="panel-left" [size]="16" />
+          </button>
+          <button
+            type="button"
+            class="rail-item"
+            [class.active]="view() === 'linear'"
+            (click)="view.set('linear')"
+            aria-label="My work"
+          >
+            <span class="rail-icon"><rl-icon name="inbox" [size]="16" /></span>
+            <span class="rail-label">My work</span>
           </button>
           <button
             type="button"
@@ -229,8 +241,14 @@ const RAIL_EXPANDED_SETTING_KEY = 'rail.expanded';
                   <rl-icon name="lock" [size]="16" />
                 </div>
                 <dl>
-                  <div><dt>Name</dt><dd>{{ account.status().displayName || 'Not provided' }}</dd></div>
-                  <div><dt>Email</dt><dd>{{ account.status().email || 'Not provided' }}</dd></div>
+                  <div>
+                    <dt>Name</dt>
+                    <dd>{{ account.status().displayName || 'Not provided' }}</dd>
+                  </div>
+                  <div>
+                    <dt>Email</dt>
+                    <dd>{{ account.status().email || 'Not provided' }}</dd>
+                  </div>
                   <div class="account-id-row">
                     <dt>Nexus account ID</dt>
                     <dd>{{ account.status().userId || 'Not available' }}</dd>
@@ -282,12 +300,17 @@ const RAIL_EXPANDED_SETTING_KEY = 'rail.expanded';
             [openThreadId]="requestedAgentThreadId()"
             (threadHandled)="requestedAgentThreadId.set(null)"
           />
+        } @else if (view() === 'linear') {
+          <rl-linear
+            [projectRequest]="linearProjectRequest()"
+            (projectRequestHandled)="handleLinearProjectRequest($event)"
+          />
         } @else if (view() === 'vault') {
           <rl-vault />
         } @else if (view() === 'runtime') {
           <rl-runtime />
         } @else {
-          <rl-projects />
+          <rl-projects (linearProjectSelected)="openLinearProject($event)" />
         }
       </main>
     </div>
@@ -641,7 +664,9 @@ const RAIL_EXPANDED_SETTING_KEY = 'rail.expanded';
       padding: var(--space-5);
     }
 
-    .account-details-card dl { margin: 0; }
+    .account-details-card dl {
+      margin: 0;
+    }
     .account-details-card dl > div {
       display: grid;
       grid-template-columns: minmax(110px, 0.7fr) minmax(0, 1.3fr);
@@ -667,7 +692,9 @@ const RAIL_EXPANDED_SETTING_KEY = 'rail.expanded';
       color: var(--text-muted);
     }
 
-    .account-details-card dl > div:last-child { border: 0; }
+    .account-details-card dl > div:last-child {
+      border: 0;
+    }
 
     .account-page-actions {
       display: flex;
@@ -702,9 +729,17 @@ const RAIL_EXPANDED_SETTING_KEY = 'rail.expanded';
     }
 
     @media (max-width: 540px) {
-      .account-page { inline-size: calc(100% - 32px); }
-      .account-details-card dl > div { grid-template-columns: 1fr; gap: var(--space-1); }
-      .account-page-actions { align-items: flex-start; flex-direction: column; }
+      .account-page {
+        inline-size: calc(100% - 32px);
+      }
+      .account-details-card dl > div {
+        grid-template-columns: 1fr;
+        gap: var(--space-1);
+      }
+      .account-page-actions {
+        align-items: flex-start;
+        flex-direction: column;
+      }
     }
 
     .rail-icon {
@@ -765,15 +800,38 @@ export class Home {
     this.account.status().connected ? this.accountName().trim().charAt(0).toLocaleUpperCase() : 'N',
   );
   protected readonly theme = inject(ThemeService);
-  protected readonly view = signal<'home' | 'settings' | 'vault' | 'runtime' | 'codex' | 'account'>('home');
+  protected readonly view = signal<
+    'home' | 'linear' | 'settings' | 'vault' | 'runtime' | 'codex' | 'account'
+  >('home');
   protected readonly requestedAgentThreadId = signal<string | null>(null);
+  protected readonly linearProjectRequest = signal<{
+    organizationId: string;
+    projectId: string;
+  } | null>(null);
   /** Starts collapsed — the safe default while the persisted value (below) is
    * still loading — then reconciles with whatever the user last left it as. */
   protected readonly railExpanded = signal(false);
-  protected readonly settingsTab = signal<'general' | 'github'>('general');
+  protected readonly settingsTab = signal<'general' | 'github' | 'linear'>('general');
 
   private readonly tauri = inject(TauriBridge);
   protected readonly maximized = signal(false);
+  protected openLinearProject(request: { organizationId: string; projectId: string }): void {
+    this.linearProjectRequest.set(request);
+    this.view.set('linear');
+  }
+
+  protected handleLinearProjectRequest(request: {
+    organizationId: string;
+    projectId: string;
+  }): void {
+    const current = this.linearProjectRequest();
+    if (
+      current?.organizationId === request.organizationId &&
+      current.projectId === request.projectId
+    ) {
+      this.linearProjectRequest.set(null);
+    }
+  }
 
   constructor() {
     void this.tauri
@@ -809,6 +867,9 @@ export class Home {
         if (event.type === 'openGithubRequested') {
           this.view.set('settings');
           this.settingsTab.set('github');
+        }
+        if (event.type === 'openLinearRequested') {
+          this.view.set('linear');
         }
       })
       .then((unlisten) => destroyRef.onDestroy(unlisten));

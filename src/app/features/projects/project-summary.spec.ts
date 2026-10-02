@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import type {
   GithubPullRequestSummary,
   GithubRepositorySummary,
+  LinearProject,
   WorkspaceSummary,
 } from '@core/tauri';
 
@@ -63,6 +64,41 @@ describe('mergeProjectSummaries', () => {
     expect(projects.map((project) => [project.name, project.path])).toEqual([
       ['remote', null],
       ['local', 'F:/Code/local'],
+    ]);
+  });
+
+  it('links Linear projects to Relay projects only by an exact GitHub repository URL', () => {
+    const linkedProject: LinearProject = {
+      id: 'linear-project-1',
+      name: 'Relay release',
+      description: null,
+      url: 'https://linear.app/acme/project/relay-release',
+      startDate: null,
+      targetDate: null,
+      archivedAt: null,
+      status: null,
+      lead: null,
+      teams: [],
+      externalLinks: [
+        { id: 'link-1', label: 'Renamed label', url: 'https://github.com/OpenAI/Relay' },
+        { id: 'link-2', label: 'GitHub: openai/relay', url: 'https://example.com/openai/relay' },
+      ],
+    };
+    const [project] = mergeProjectSummaries(
+      [workspace('F:/Code/relay', 'openai/relay')],
+      [],
+      [],
+      [{ ...linkedProject, organizationId: 'org-1', organizationName: 'Acme' }],
+    );
+
+    expect(project.linearProjects).toEqual([
+      {
+        id: 'linear-project-1',
+        name: 'Relay release',
+        url: 'https://linear.app/acme/project/relay-release',
+        organizationId: 'org-1',
+        organizationName: 'Acme',
+      },
     ]);
   });
 });

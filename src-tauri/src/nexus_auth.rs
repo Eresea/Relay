@@ -163,6 +163,10 @@ pub fn signed_in_client(app: &AppHandle) -> Result<NexusClient> {
     }
 }
 
+pub fn is_signed_in(app: &AppHandle) -> bool {
+    signed_in_client(app).is_ok()
+}
+
 pub fn nexus_error(error: NexusError) -> Error {
     if error.is_signed_out() {
         Error::NexusSignedOut

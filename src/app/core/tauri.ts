@@ -530,6 +530,808 @@ export class TauriBridge {
     await this.invoke('github_disconnect');
   }
 
+  async linearStatus(): Promise<readonly LinearConnection[]> {
+    return (await this.invoke<LinearConnection[]>('linear_status')) ?? [];
+  }
+
+  async linearOauthConfigured(): Promise<boolean> {
+    return (await this.invoke<boolean>('linear_oauth_configured')) ?? false;
+  }
+
+  async linearConnectStart(): Promise<void> {
+    await this.invoke('linear_connect_start');
+  }
+
+  async linearConnectCancel(): Promise<void> {
+    await this.invoke('linear_connect_cancel');
+  }
+
+  async linearAgentInstallStart(organizationId: string): Promise<void> {
+    await this.invoke('linear_agent_install_start', { organizationId });
+  }
+
+  async linearAgentUpdateIssueState(
+    organizationId: string,
+    projectId: string,
+    issueId: string,
+    stateId: string,
+  ): Promise<LinearIssue> {
+    const issue = await this.invoke<LinearIssue>('linear_agent_update_issue_state', {
+      organizationId,
+      projectId,
+      issueId,
+      stateId,
+    });
+    if (!issue) throw new Error('Linear agent returned no updated issue.');
+    return issue;
+  }
+
+  async linearAgentCreateComment(
+    organizationId: string,
+    projectId: string,
+    issueId: string,
+    body: string,
+  ): Promise<LinearComment> {
+    const comment = await this.invoke<LinearComment>('linear_agent_create_comment', {
+      organizationId,
+      projectId,
+      issueId,
+      body,
+    });
+    if (!comment) throw new Error('Linear agent returned no result comment.');
+    return comment;
+  }
+
+  async linearDisconnect(organizationId: string): Promise<string | null> {
+    return (await this.invoke<string | null>('linear_disconnect', { organizationId })) ?? null;
+  }
+
+  async linearPauseOnDevice(organizationId: string, paused: boolean): Promise<void> {
+    await this.invoke<void>('linear_pause_on_device', { organizationId, paused });
+  }
+
+  async linearSyncConnection(organizationId: string): Promise<LinearConnection> {
+    const connection = await this.invoke<LinearConnection>('linear_sync_connection', {
+      organizationId,
+    });
+    if (!connection) throw new Error('Linear connection was not synced through Nexus.');
+    return connection;
+  }
+
+  async linearTeams(organizationId: string): Promise<readonly LinearTeam[]> {
+    return (await this.invoke<LinearTeam[]>('linear_teams', { organizationId })) ?? [];
+  }
+
+  async linearUsers(organizationId: string): Promise<readonly LinearPerson[]> {
+    return (await this.invoke<LinearPerson[]>('linear_users', { organizationId })) ?? [];
+  }
+
+  async linearIssueLabels(organizationId: string): Promise<readonly LinearLabel[]> {
+    return (await this.invoke<LinearLabel[]>('linear_issue_labels', { organizationId })) ?? [];
+  }
+
+  async linearCreateIssueLabel(
+    organizationId: string,
+    name: string,
+    color: string,
+    teamId: string | null,
+  ): Promise<LinearLabel> {
+    const label = await this.invoke<LinearLabel>('linear_create_issue_label', {
+      organizationId,
+      name,
+      color,
+      teamId,
+    });
+    if (!label) throw new Error('Linear returned no label.');
+    return label;
+  }
+
+  async linearUpdateIssueLabel(
+    organizationId: string,
+    labelId: string,
+    name: string,
+    color: string,
+  ): Promise<LinearLabel> {
+    const label = await this.invoke<LinearLabel>('linear_update_issue_label', {
+      organizationId,
+      labelId,
+      name,
+      color,
+    });
+    if (!label) throw new Error('Linear returned no label.');
+    return label;
+  }
+
+  async linearDeleteIssueLabel(organizationId: string, labelId: string): Promise<void> {
+    await this.invoke('linear_delete_issue_label', { organizationId, labelId });
+  }
+
+  async linearProjects(
+    organizationId: string,
+    includeArchived = false,
+  ): Promise<readonly LinearProject[]> {
+    return (
+      (await this.invoke<LinearProject[]>('linear_projects', {
+        organizationId,
+        includeArchived,
+      })) ?? []
+    );
+  }
+
+  async linearArchiveProject(organizationId: string, projectId: string): Promise<void> {
+    await this.invoke('linear_archive_project', { organizationId, projectId });
+  }
+
+  async linearUnarchiveProject(organizationId: string, projectId: string): Promise<void> {
+    await this.invoke('linear_unarchive_project', { organizationId, projectId });
+  }
+
+  async linearProjectStatuses(organizationId: string): Promise<readonly LinearProjectStatus[]> {
+    return (
+      (await this.invoke<LinearProjectStatus[]>('linear_project_statuses', { organizationId })) ??
+      []
+    );
+  }
+
+  async linearProjectResources(
+    organizationId: string,
+    projectId: string,
+  ): Promise<LinearProjectResources> {
+    return (
+      (await this.invoke<LinearProjectResources>('linear_project_resources', {
+        organizationId,
+        projectId,
+      })) ?? { documents: [], externalLinks: [] }
+    );
+  }
+
+  async linearCreateProjectDocument(
+    organizationId: string,
+    projectId: string,
+    title: string,
+    content: string,
+  ): Promise<LinearDocument> {
+    const document = await this.invoke<LinearDocument>('linear_create_project_document', {
+      organizationId,
+      projectId,
+      title,
+      content,
+    });
+    if (!document) throw new Error('Linear returned no project document.');
+    return document;
+  }
+
+  async linearProjectDocument(organizationId: string, documentId: string): Promise<LinearDocument> {
+    const document = await this.invoke<LinearDocument>('linear_project_document', {
+      organizationId,
+      documentId,
+    });
+    if (!document) throw new Error('Linear returned no project document.');
+    return document;
+  }
+
+  async linearUpdateProjectDocument(
+    organizationId: string,
+    documentId: string,
+    expectedUpdatedAt: string,
+    title: string,
+    content: string,
+  ): Promise<LinearDocument> {
+    const document = await this.invoke<LinearDocument>('linear_update_project_document', {
+      organizationId,
+      documentId,
+      expectedUpdatedAt,
+      title,
+      content,
+    });
+    if (!document) throw new Error('Linear returned no updated project document.');
+    return document;
+  }
+
+  async linearCreateProjectExternalLink(
+    organizationId: string,
+    projectId: string,
+    label: string,
+    url: string,
+  ): Promise<LinearExternalLink> {
+    const link = await this.invoke<LinearExternalLink>('linear_create_project_external_link', {
+      organizationId,
+      projectId,
+      label,
+      url,
+    });
+    if (!link) throw new Error('Linear returned no project link.');
+    return link;
+  }
+
+  async linearDeleteProjectExternalLink(organizationId: string, linkId: string): Promise<void> {
+    await this.invoke('linear_delete_project_external_link', { organizationId, linkId });
+  }
+
+  async linearCreateProject(
+    organizationId: string,
+    teamIds: readonly string[],
+    name: string,
+    description: string,
+    startDate: string,
+    targetDate: string,
+    statusId: string,
+    leadId: string,
+  ): Promise<LinearProject> {
+    const project = await this.invoke<LinearProject>('linear_create_project', {
+      organizationId,
+      teamIds,
+      name,
+      description: description || null,
+      startDate: startDate || null,
+      targetDate: targetDate || null,
+      statusId: statusId || null,
+      leadId: leadId || null,
+    });
+    if (!project) throw new Error('Linear returned no project.');
+    return project;
+  }
+
+  async linearUpdateProject(
+    organizationId: string,
+    projectId: string,
+    name: string,
+    description: string,
+    startDate: string,
+    targetDate: string,
+    statusId: string,
+    leadId: string,
+    clearLead: boolean,
+    teamIds: readonly string[],
+  ): Promise<LinearProject> {
+    const project = await this.invoke<LinearProject>('linear_update_project', {
+      organizationId,
+      projectId,
+      name,
+      description,
+      startDate: startDate || null,
+      targetDate: targetDate || null,
+      statusId: statusId || null,
+      leadId: leadId || null,
+      clearLead,
+      teamIds,
+    });
+    if (!project) throw new Error('Linear returned no project.');
+    return project;
+  }
+
+  async linearProjectMilestones(
+    organizationId: string,
+    projectId: string,
+  ): Promise<readonly LinearMilestone[]> {
+    return (
+      (await this.invoke<LinearMilestone[]>('linear_project_milestones', {
+        organizationId,
+        projectId,
+      })) ?? []
+    );
+  }
+
+  async linearProjectUpdates(
+    organizationId: string,
+    projectId: string,
+    includeArchived = false,
+  ): Promise<readonly LinearProjectUpdate[]> {
+    return (
+      (await this.invoke<LinearProjectUpdate[]>('linear_project_updates', {
+        organizationId,
+        projectId,
+        includeArchived,
+      })) ?? []
+    );
+  }
+
+  async linearArchiveProjectUpdate(organizationId: string, updateId: string): Promise<void> {
+    await this.invoke('linear_archive_project_update', { organizationId, updateId });
+  }
+
+  async linearUnarchiveProjectUpdate(organizationId: string, updateId: string): Promise<void> {
+    await this.invoke('linear_unarchive_project_update', { organizationId, updateId });
+  }
+
+  async linearCreateProjectUpdate(
+    organizationId: string,
+    projectId: string,
+    body: string,
+    health: LinearProjectHealth,
+  ): Promise<LinearProjectUpdate> {
+    const update = await this.invoke<LinearProjectUpdate>('linear_create_project_update', {
+      organizationId,
+      projectId,
+      body,
+      health,
+    });
+    if (!update) throw new Error('Linear returned no project update.');
+    return update;
+  }
+
+  async linearUpdateProjectUpdate(
+    organizationId: string,
+    updateId: string,
+    body: string,
+    health: LinearProjectHealth,
+  ): Promise<LinearProjectUpdate> {
+    const update = await this.invoke<LinearProjectUpdate>('linear_update_project_update', {
+      organizationId,
+      updateId,
+      body,
+      health,
+    });
+    if (!update) throw new Error('Linear returned no updated project update.');
+    return update;
+  }
+
+  async linearCreateMilestone(
+    organizationId: string,
+    projectId: string,
+    name: string,
+    description: string,
+    targetDate: string,
+  ): Promise<LinearMilestone> {
+    const milestone = await this.invoke<LinearMilestone>('linear_create_milestone', {
+      organizationId,
+      projectId,
+      name,
+      description: description || null,
+      targetDate: targetDate || null,
+    });
+    if (!milestone) throw new Error('Linear returned no milestone.');
+    return milestone;
+  }
+
+  async linearUpdateMilestone(
+    organizationId: string,
+    milestoneId: string,
+    name: string,
+    description: string,
+    targetDate: string,
+  ): Promise<LinearMilestone> {
+    const milestone = await this.invoke<LinearMilestone>('linear_update_milestone', {
+      organizationId,
+      milestoneId,
+      name,
+      description,
+      targetDate: targetDate || null,
+    });
+    if (!milestone) throw new Error('Linear returned no milestone.');
+    return milestone;
+  }
+
+  async linearDeleteMilestone(organizationId: string, milestoneId: string): Promise<void> {
+    await this.invoke('linear_delete_milestone', { organizationId, milestoneId });
+  }
+
+  async linearInitiatives(
+    organizationId: string,
+    includeArchived = false,
+    includeArchivedUpdates = false,
+  ): Promise<readonly LinearInitiative[]> {
+    return (
+      (await this.invoke<LinearInitiative[]>('linear_initiatives', {
+        organizationId,
+        includeArchived,
+        includeArchivedUpdates,
+      })) ?? []
+    );
+  }
+
+  async linearCreateInitiativeUpdate(
+    organizationId: string,
+    initiativeId: string,
+    body: string,
+    health: LinearProjectHealth,
+  ): Promise<LinearInitiativeUpdate> {
+    const update = await this.invoke<LinearInitiativeUpdate>('linear_create_initiative_update', {
+      organizationId,
+      initiativeId,
+      body,
+      health,
+    });
+    if (!update) throw new Error('Linear returned no initiative update.');
+    return update;
+  }
+
+  async linearUpdateInitiativeUpdate(
+    organizationId: string,
+    updateId: string,
+    body: string,
+    health: LinearProjectHealth,
+  ): Promise<LinearInitiativeUpdate> {
+    const update = await this.invoke<LinearInitiativeUpdate>('linear_update_initiative_update', {
+      organizationId,
+      updateId,
+      body,
+      health,
+    });
+    if (!update) throw new Error('Linear returned no initiative update.');
+    return update;
+  }
+
+  async linearArchiveInitiativeUpdate(organizationId: string, updateId: string): Promise<void> {
+    await this.invoke('linear_archive_initiative_update', { organizationId, updateId });
+  }
+
+  async linearUnarchiveInitiativeUpdate(organizationId: string, updateId: string): Promise<void> {
+    await this.invoke('linear_unarchive_initiative_update', { organizationId, updateId });
+  }
+
+  async linearArchiveInitiative(organizationId: string, initiativeId: string): Promise<void> {
+    await this.invoke('linear_archive_initiative', { organizationId, initiativeId });
+  }
+
+  async linearUnarchiveInitiative(organizationId: string, initiativeId: string): Promise<void> {
+    await this.invoke('linear_unarchive_initiative', { organizationId, initiativeId });
+  }
+
+  async linearCreateInitiative(
+    organizationId: string,
+    name: string,
+    description: string,
+    targetDate: string,
+  ): Promise<LinearInitiative> {
+    const initiative = await this.invoke<LinearInitiative>('linear_create_initiative', {
+      organizationId,
+      name,
+      description: description || null,
+      targetDate: targetDate || null,
+    });
+    if (!initiative) throw new Error('Linear returned no initiative.');
+    return initiative;
+  }
+
+  async linearUpdateInitiative(
+    organizationId: string,
+    initiativeId: string,
+    name: string,
+    description: string,
+    targetDate: string,
+  ): Promise<LinearInitiative> {
+    const initiative = await this.invoke<LinearInitiative>('linear_update_initiative', {
+      organizationId,
+      initiativeId,
+      name,
+      description,
+      targetDate: targetDate || null,
+    });
+    if (!initiative) throw new Error('Linear returned no initiative.');
+    return initiative;
+  }
+
+  async linearAddProjectToInitiative(
+    organizationId: string,
+    initiativeId: string,
+    projectId: string,
+  ): Promise<LinearInitiativeProject> {
+    const link = await this.invoke<LinearInitiativeProject>('linear_add_project_to_initiative', {
+      organizationId,
+      initiativeId,
+      projectId,
+    });
+    if (!link) throw new Error('Linear returned no project link.');
+    return link;
+  }
+
+  async linearRemoveProjectFromInitiative(organizationId: string, linkId: string): Promise<void> {
+    await this.invoke('linear_remove_project_from_initiative', { organizationId, linkId });
+  }
+
+  async linearCycles(organizationId: string, teamId: string): Promise<readonly LinearCycle[]> {
+    return (await this.invoke<LinearCycle[]>('linear_cycles', { organizationId, teamId })) ?? [];
+  }
+
+  async linearCreateCycle(
+    organizationId: string,
+    teamId: string,
+    name: string,
+    startsAt: string,
+    endsAt: string,
+  ): Promise<LinearCycle> {
+    const cycle = await this.invoke<LinearCycle>('linear_create_cycle', {
+      organizationId,
+      teamId,
+      name: name || null,
+      startsAt,
+      endsAt,
+    });
+    if (!cycle) throw new Error('Linear returned no cycle.');
+    return cycle;
+  }
+
+  async linearUpdateCycle(
+    organizationId: string,
+    cycleId: string,
+    name: string,
+    description: string,
+    startsAt: string | null,
+    endsAt: string | null,
+  ): Promise<LinearCycle> {
+    const cycle = await this.invoke<LinearCycle>('linear_update_cycle', {
+      organizationId,
+      cycleId,
+      name,
+      description,
+      startsAt,
+      endsAt,
+    });
+    if (!cycle) throw new Error('Linear returned no cycle.');
+    return cycle;
+  }
+
+  async linearWorkflowStates(
+    organizationId: string,
+    teamId: string,
+  ): Promise<readonly LinearWorkflowState[]> {
+    return (
+      (await this.invoke<LinearWorkflowState[]>('linear_workflow_states', {
+        organizationId,
+        teamId,
+      })) ?? []
+    );
+  }
+
+  async linearCreateIssue(
+    organizationId: string,
+    teamId: string,
+    title: string,
+    description: string,
+    projectId: string | null = null,
+    projectMilestoneId: string | null = null,
+    parentId: string | null = null,
+    estimate?: number,
+    assigneeId?: string,
+    priority?: number,
+    dueDate?: string,
+    labelIds?: readonly string[],
+    stateId?: string,
+    cycleId?: string,
+  ): Promise<LinearIssue> {
+    const issue = await this.invoke<LinearIssue>('linear_create_issue', {
+      organizationId,
+      teamId,
+      title,
+      description: description || null,
+      projectId,
+      projectMilestoneId,
+      parentId,
+      estimate,
+      assigneeId,
+      priority,
+      dueDate,
+      labelIds,
+      stateId,
+      cycleId,
+    });
+    if (!issue) throw new Error('Linear returned no issue.');
+    return issue;
+  }
+
+  async linearIssueDetail(organizationId: string, issueId: string): Promise<LinearIssueDetail> {
+    const detail = await this.invoke<LinearIssueDetail>('linear_issue_detail', {
+      organizationId,
+      issueId,
+    });
+    if (!detail) throw new Error('Linear returned no issue detail.');
+    return detail;
+  }
+
+  async linearCreateIssueRelation(
+    organizationId: string,
+    issueId: string,
+    relatedIssueId: string,
+    type: LinearIssueRelationType,
+  ): Promise<LinearIssueRelation> {
+    const relation = await this.invoke<LinearIssueRelation>('linear_create_issue_relation', {
+      organizationId,
+      issueId,
+      relatedIssueId,
+      kind: type,
+    });
+    if (!relation) throw new Error('Linear returned no issue relation.');
+    return relation;
+  }
+
+  async linearDeleteIssueRelation(organizationId: string, relationId: string): Promise<void> {
+    await this.invoke('linear_delete_issue_relation', { organizationId, relationId });
+  }
+
+  async linearCreateComment(
+    organizationId: string,
+    issueId: string,
+    body: string,
+  ): Promise<LinearComment> {
+    const comment = await this.invoke<LinearComment>('linear_create_comment', {
+      organizationId,
+      issueId,
+      body,
+    });
+    if (!comment) throw new Error('Linear returned no comment.');
+    return comment;
+  }
+
+  async linearUpdateComment(
+    organizationId: string,
+    commentId: string,
+    body: string,
+  ): Promise<LinearComment> {
+    const comment = await this.invoke<LinearComment>('linear_update_comment', {
+      organizationId,
+      commentId,
+      body,
+    });
+    if (!comment) throw new Error('Linear returned no updated comment.');
+    return comment;
+  }
+
+  async linearDeleteComment(organizationId: string, commentId: string): Promise<void> {
+    await this.invoke('linear_delete_comment', { organizationId, commentId });
+  }
+
+  async linearCodexContext(organizationId: string, issueId = ''): Promise<LinearCodexContext> {
+    const context = await this.invoke<LinearCodexContext>('linear_codex_context', {
+      organizationId,
+      issueId,
+    });
+    if (!context) throw new Error('Linear returned no Codex link context.');
+    return context;
+  }
+
+  async linearSetCodexProjectAllowed(
+    organizationId: string,
+    projectId: string,
+    allowed: boolean,
+    workspaceRepo: string | null,
+  ): Promise<void> {
+    await this.invoke('linear_set_codex_project_allowed', {
+      organizationId,
+      projectId,
+      allowed,
+      workspaceRepo,
+    });
+  }
+
+  async linearSaveCodexLink(
+    organizationId: string,
+    issueId: string,
+    workspaceRepo: string,
+    workspaceName: string,
+    threadId: string,
+  ): Promise<void> {
+    await this.invoke('linear_save_codex_link', {
+      organizationId,
+      issueId,
+      workspaceRepo,
+      workspaceName,
+      threadId,
+    });
+  }
+
+  async linearUpdateIssue(
+    organizationId: string,
+    issueId: string,
+    update: {
+      title?: string;
+      description?: string;
+      projectId?: string;
+      clearProject?: boolean;
+      projectMilestoneId?: string;
+      clearProjectMilestone?: boolean;
+      dueDate?: string;
+      clearDueDate?: boolean;
+      estimate?: number;
+      clearEstimate?: boolean;
+      stateId?: string;
+      assigneeId?: string;
+      clearAssignee?: boolean;
+      cycleId?: string;
+      clearCycle?: boolean;
+      priority?: number;
+      labelIds?: readonly string[];
+    },
+  ): Promise<LinearIssue> {
+    const issue = await this.invoke<LinearIssue>('linear_update_issue', {
+      organizationId,
+      issueId,
+      ...update,
+    });
+    if (!issue) throw new Error('Linear returned no issue.');
+    return issue;
+  }
+
+  async linearArchiveIssue(organizationId: string, issueId: string): Promise<void> {
+    await this.invoke('linear_archive_issue', { organizationId, issueId });
+  }
+
+  async linearUnarchiveIssue(organizationId: string, issueId: string): Promise<void> {
+    await this.invoke('linear_unarchive_issue', { organizationId, issueId });
+  }
+
+  async linearMyIssues(
+    organizationId: string,
+    after: string | null = null,
+    includeArchived = false,
+    search = '',
+    stateId?: string,
+    priority?: number,
+    labelId?: string,
+  ): Promise<LinearIssuePage> {
+    const result = await this.invoke<LinearIssuePage>('linear_my_issues', {
+      organizationId,
+      after,
+      includeArchived,
+      search,
+      stateId,
+      priority,
+      labelId,
+    });
+    if (!result) throw new Error('Linear returned no issues.');
+    return result;
+  }
+
+  async linearTeamIssues(
+    organizationId: string,
+    teamId: string,
+    after: string | null = null,
+    includeArchived = false,
+    search = '',
+    stateId?: string,
+    priority?: number,
+    assigneeId?: string,
+    labelId?: string,
+    cycleId?: string,
+  ): Promise<LinearIssuePage> {
+    const result = await this.invoke<LinearIssuePage>('linear_team_issues', {
+      organizationId,
+      teamId,
+      after,
+      includeArchived,
+      search,
+      stateId,
+      priority,
+      assigneeId,
+      labelId,
+      cycleId,
+    });
+    if (!result) throw new Error('Linear returned no team issues.');
+    return result;
+  }
+
+  async linearProjectIssues(
+    organizationId: string,
+    projectId: string,
+    after: string | null = null,
+    includeArchived = false,
+    search = '',
+    stateId?: string,
+    priority?: number,
+    assigneeId?: string,
+    labelId?: string,
+  ): Promise<LinearIssuePage> {
+    const result = await this.invoke<LinearIssuePage>('linear_project_issues', {
+      organizationId,
+      projectId,
+      after,
+      includeArchived,
+      search,
+      stateId,
+      priority,
+      assigneeId,
+      labelId,
+    });
+    if (!result) throw new Error('Linear returned no project issues.');
+    return result;
+  }
+
+  async onLinearAuth(handler: (event: LinearAuthEvent) => void): Promise<() => void> {
+    if (!this.available) return () => undefined;
+    const { listen } = await import('@tauri-apps/api/event');
+    return listen<LinearAuthEvent>('linear://auth', (message) => handler(message.payload));
+  }
+
   async nexusAuthStatus(): Promise<NexusAuthStatus> {
     return (
       (await this.invoke<NexusAuthStatus>('nexus_auth_status')) ?? {
@@ -605,6 +1407,7 @@ export type CoreCommand =
   | { readonly id: 'hide_hud' }
   | { readonly id: 'open_vault' }
   | { readonly id: 'open_github' }
+  | { readonly id: 'open_linear' }
   | { readonly id: 'open_runtime' }
   | { readonly id: 'open_agents' }
   | { readonly id: 'open_agent_thread'; readonly args: { readonly threadId: string } }
@@ -882,6 +1685,229 @@ export interface NexusAuthStatus {
   readonly email: string | null;
   readonly displayName: string | null;
   readonly error?: string | null;
+}
+
+export interface LinearConnection {
+  readonly organizationId: string;
+  readonly organizationName: string;
+  readonly urlKey: string;
+  readonly viewerId: string;
+  readonly viewerName: string;
+  readonly viewerEmail: string;
+  readonly nexusCredentialId?: string;
+  readonly agentInstalled: boolean;
+  readonly pausedOnDevice: boolean;
+  readonly nexusSyncPending?: boolean;
+}
+
+export interface LinearTeam {
+  readonly id: string;
+  readonly name: string;
+  readonly key: string;
+  readonly timezone?: string | null;
+  readonly issueEstimationType?: string;
+  readonly issueEstimationExtended?: boolean;
+  readonly issueEstimationAllowZero?: boolean;
+}
+
+export interface LinearPerson {
+  readonly id: string;
+  readonly name: string;
+}
+
+export interface LinearLabel {
+  readonly id: string;
+  readonly name: string;
+  readonly color: string | null;
+  readonly team?: { readonly id: string } | null;
+}
+
+export interface LinearProject {
+  readonly id: string;
+  readonly name: string;
+  readonly description: string | null;
+  readonly url: string;
+  readonly startDate: string | null;
+  readonly targetDate: string | null;
+  readonly archivedAt: string | null;
+  readonly status: LinearProjectStatus | null;
+  readonly lead: LinearPerson | null;
+  readonly teams: readonly LinearProjectTeam[];
+  readonly externalLinks: readonly LinearExternalLink[];
+}
+
+export interface LinearProjectTeam {
+  readonly id: string;
+  readonly name: string;
+  readonly key: string;
+}
+
+export interface LinearDocument {
+  readonly id: string;
+  readonly title: string;
+  readonly url: string;
+  readonly updatedAt: string;
+  readonly content?: string | null;
+  readonly creator: LinearPerson | null;
+}
+
+export interface LinearExternalLink {
+  readonly id: string;
+  readonly label: string;
+  readonly url: string;
+}
+
+export interface LinearProjectResources {
+  readonly documents: readonly LinearDocument[];
+  readonly externalLinks: readonly LinearExternalLink[];
+}
+
+export interface LinearProjectStatus {
+  readonly id: string;
+  readonly name: string;
+  readonly kind: string;
+}
+
+export interface LinearMilestone {
+  readonly id: string;
+  readonly name: string;
+  readonly description: string | null;
+  readonly targetDate: string | null;
+}
+
+export type LinearProjectHealth = 'onTrack' | 'atRisk' | 'offTrack';
+
+export interface LinearProjectUpdate {
+  readonly id: string;
+  readonly body: string;
+  readonly health: LinearProjectHealth;
+  readonly createdAt: string;
+  readonly user: LinearPerson;
+  readonly archivedAt: string | null;
+}
+
+export interface LinearInitiative {
+  readonly id: string;
+  readonly name: string;
+  readonly description: string | null;
+  readonly targetDate: string | null;
+  readonly archivedAt: string | null;
+  readonly projects: readonly LinearInitiativeProject[];
+  readonly updates: readonly LinearInitiativeUpdate[];
+}
+
+export type LinearInitiativeUpdate = LinearProjectUpdate;
+
+export interface LinearInitiativeProject {
+  readonly id: string;
+  readonly project: { readonly id: string; readonly name: string };
+}
+
+export interface LinearCycle {
+  readonly id: string;
+  readonly name: string | null;
+  readonly description: string | null;
+  readonly number: number;
+  readonly startsAt: string | null;
+  readonly endsAt: string | null;
+  readonly isActive: boolean;
+  readonly team: LinearTeam;
+}
+
+export interface LinearWorkflowState {
+  readonly id: string;
+  readonly name: string;
+  readonly kind: string;
+  readonly team?: { readonly id: string } | null;
+}
+
+export interface LinearIssue {
+  readonly id: string;
+  readonly identifier: string;
+  readonly title: string;
+  readonly description: string | null;
+  readonly url: string;
+  readonly priority: number;
+  readonly estimate?: number | null;
+  readonly dueDate?: string | null;
+  readonly updatedAt: string;
+  readonly archivedAt?: string | null;
+  readonly state: { readonly id: string; readonly name: string; readonly kind: string } | null;
+  readonly assignee: { readonly id: string; readonly name: string } | null;
+  readonly project: { readonly id: string; readonly name: string } | null;
+  readonly projectMilestone?: { readonly id: string; readonly name: string } | null;
+  readonly cycle: {
+    readonly id: string;
+    readonly name: string | null;
+    readonly number: number;
+  } | null;
+  readonly labels: readonly LinearLabel[];
+  readonly team: LinearTeam;
+}
+
+export interface LinearIssuePage {
+  readonly issues: readonly LinearIssue[];
+  readonly endCursor: string | null;
+  readonly hasNextPage: boolean;
+}
+
+export interface LinearComment {
+  readonly id: string;
+  readonly body: string;
+  readonly createdAt: string;
+  readonly editedAt: string | null;
+  readonly user: { readonly id: string; readonly name: string } | null;
+}
+
+export interface LinearCodexLink {
+  readonly issueId: string;
+  readonly deviceId: string;
+  readonly workspaceRepo: string;
+  readonly workspaceName: string;
+  readonly threadId: string;
+}
+
+export interface LinearCodexContext {
+  readonly deviceId: string;
+  readonly links: readonly LinearCodexLink[];
+  readonly allowedProjects: readonly LinearCodexProjectPolicy[];
+}
+
+export interface LinearCodexProjectPolicy {
+  readonly projectId: string;
+  readonly allowed: boolean;
+  readonly workspaceRepo: string | null;
+  readonly updatedAt: number;
+}
+
+export interface LinearIssueDetail {
+  readonly issue: LinearIssue;
+  readonly children: readonly LinearIssue[];
+  readonly comments: readonly LinearComment[];
+  readonly relations: readonly LinearIssueRelation[];
+  readonly inverseRelations: readonly LinearIssueRelation[];
+}
+
+export type LinearIssueRelationType = 'blocks' | 'duplicate' | 'related' | 'similar';
+
+export interface LinearIssueRelation {
+  readonly id: string;
+  readonly type: LinearIssueRelationType;
+  readonly issue: LinearIssueRelationRef | null;
+  readonly relatedIssue: LinearIssueRelationRef | null;
+}
+
+export interface LinearIssueRelationRef {
+  readonly id: string;
+  readonly identifier: string;
+  readonly title: string;
+  readonly url: string;
+}
+
+export interface LinearAuthEvent {
+  readonly connected: boolean;
+  readonly connection: LinearConnection | null;
+  readonly error: string | null;
 }
 
 /** Mirrors `github::oauth::DeviceAuthorization`. */

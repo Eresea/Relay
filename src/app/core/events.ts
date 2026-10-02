@@ -48,6 +48,7 @@ export type AppEvent =
   | { readonly type: 'openSettingsRequested' }
   | { readonly type: 'openVaultRequested' }
   | { readonly type: 'openGithubRequested' }
+  | { readonly type: 'openLinearRequested' }
   | { readonly type: 'openRuntimeRequested' }
   | { readonly type: 'openAgentsRequested' }
   | { readonly type: 'openAgentThreadRequested'; readonly threadId: string }

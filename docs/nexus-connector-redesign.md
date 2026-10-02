@@ -42,6 +42,14 @@ Relay before the SDK stored a session under the same keychain entry with the sam
 - Nexus retains events while Relay is offline. Each installation has its own cursor, so two installations each receive every event. Deliveries GitHub cannot get to Nexus (Nexus outage, oversized payload) are not in the inbox and need GitHub redelivery.
 - PR payloads drive notifications; Relay fetches current PR/check state from GitHub for accurate details. There is no recurring GitHub search poll.
 
+## Linear connector
+
+- Linear keeps its own PKCE flow in Relay (`relay://linear/...` callback) and requires a Nexus sign-in first. Tokens live per workspace in the local keychain (service `relay-linear`); Nexus is the cross-device vault.
+- Signed in, each workspace's user and optional agent token bundle is a `linear` / `oauth-token-bundle` connection on the account (metadata: workspace and viewer), written through the SDK `connections()` API exactly like GitHub. Relay creates it, so it is auto-granted to Relay; no grant call, no `credentials:create` or `credentials:grant:self` scope.
+- Each installation discovers `connections().granted()` entries in namespace `linear`, refreshes locally, and writes back with `If-Match`. On `409 credential_revision_conflict` it re-reads, merges (newest token, newest agent token, per-device Codex links and project policies) and retries up to three times. Settings shows a retry when a sync failed (`nexusSyncPending`).
+- Connect, agent install and sync fail with a prompt to sign in when Nexus is signed out; Relay does not reintroduce an in-app login.
+- Disconnect removes the workspace on this device and remembers it so discovery does not load it again until it is reconnected here. Apps cannot revoke a connection or its grants (that needs `credentials:manage`); the connection stays in the Nexus account and is removed on the account page to disconnect other installations. Pause stays local to the device.
+
 ## Verification boundary
 
 `cargo check`, `cargo test` and `npm test` verify compilation and Relay's own logic. The SDK is tested against a mock and, upstream, a live Nexus. Nothing here proves live sign-in, consent, hook registration, WebSocket reconnect or offline replay against Nexus and GitHub; that is the manual checklist below.
@@ -60,6 +68,7 @@ Run against a staging Nexus (`RELAY_NEXUS_ISSUER=https://<staging>/api/v1`) and 
 - [ ] Connect GitHub while signed out, then sign in: the token moves to Nexus and the local copy is removed.
 - [ ] Second installation, same account: after sign-in GitHub shows connected without Device Flow.
 - [ ] Create a GitHub connection from another app (e.g. Roots); on a Relay with no GitHub connection "Use GitHub connection from <app>" appears, opens the consent page, and after approval Relay shows connected.
+- [ ] Connect Linear while signed in: a `linear` connection appears on the account page; a second installation lists the workspace after sign-in; concurrent token refreshes merge without losing Codex links.
 - [ ] Token refresh on two installations: no lost update (a `credential_revision_conflict` is retried, both keep working).
 - [ ] Enable a webhook for a repo: GitHub shows a delivery URL under the Nexus issuer and ping succeeds; removing it deletes the hook and revokes the endpoint.
 - [ ] Open, review-request and CI events produce one notification each; quit Relay, generate events, restart: they are delivered once.

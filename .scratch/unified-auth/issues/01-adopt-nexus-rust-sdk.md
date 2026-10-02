@@ -27,4 +27,3 @@
 - `nexus_sync.rs` does not depend on the removed auth code and is untouched. `runtime.rs` still probes `https://nexus.eresea.net/readyz` (hard-coded; not part of auth).
 - Not done here: live E2E against staging Nexus/GitHub (checklist in `docs/nexus-connector-redesign.md` is updated but unticked), so the last box stays open.
 - Pre-existing failures on the base commit, unrelated: `npm test` has 3 failures in `projects.spec.ts` (2) and `update-center.spec.ts` (1) (`home.spec.ts` also failed on base and now passes); `cargo clippy -- -D warnings` fails on `derivable_impls` in `github/rules.rs` (newer clippy); `npm run lint` fails parsing `packages/umbra` files; `prettier --check` fails on 39 files including `home.ts` and `packages/umbra`; the Angular CLI refuses the installed Node 22.22.2 (needs >= 22.22.3), so Angular commands were run with Node 24.21.0.
-

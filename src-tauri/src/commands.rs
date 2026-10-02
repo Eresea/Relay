@@ -27,6 +27,12 @@ use crate::github::{
 };
 use crate::gmail::{self, GmailSettings, GmailState, GmailStatus, HttpGoogleApi, OsKeyStore};
 use crate::jobs::{JobId, JobRegistry};
+use crate::linear::{
+    self, Initiative, InitiativeProject, InitiativeUpdate, Issue, IssueDetail, IssuePage,
+    IssueRelation, LinearCodexContext, LinearComment, LinearConnection, LinearCycle,
+    LinearDocument, LinearExternalLink, LinearLabel, LinearMilestone, LinearProject,
+    LinearProjectResources, LinearProjectStatus, LinearProjectUpdate, Person, Team, WorkflowState,
+};
 #[cfg(mobile)]
 use crate::mobile_updates;
 use crate::nexus_auth;
@@ -79,6 +85,7 @@ pub enum CoreCommand {
     HideHud,
     OpenVault,
     OpenGithub,
+    OpenLinear,
     OpenRuntime,
     OpenAgents,
     OpenAgentThread(OpenAgentThreadArgs),
@@ -109,6 +116,11 @@ pub fn run_core_command(app: AppHandle, command: CoreCommand) -> Result<()> {
         CoreCommand::OpenGithub => {
             overlay::show_main(&app)?;
             app.emit(AppEvent::OpenGithubRequested);
+            Ok(())
+        }
+        CoreCommand::OpenLinear => {
+            overlay::show_main(&app)?;
+            app.emit(AppEvent::OpenLinearRequested);
             Ok(())
         }
         CoreCommand::OpenRuntime => {
@@ -301,6 +313,1331 @@ pub fn github_connect_start(
 #[tauri::command]
 pub async fn github_disconnect(app: AppHandle) -> Result<()> {
     github::disconnect(&app).await
+}
+
+#[tauri::command]
+pub async fn linear_status(app: AppHandle) -> Result<Vec<LinearConnection>> {
+    linear::status(&app).await
+}
+
+#[tauri::command]
+pub fn linear_pause_on_device(app: AppHandle, organization_id: String, paused: bool) -> Result<()> {
+    if organization_id.trim().is_empty() {
+        return Err(std::io::Error::other("A Linear workspace is required").into());
+    }
+    linear::pause_on_device(&app, &organization_id, paused)
+}
+
+#[tauri::command]
+pub fn linear_oauth_configured() -> bool {
+    linear::oauth_configured()
+}
+
+#[tauri::command]
+pub async fn linear_connect_start(app: AppHandle) -> Result<()> {
+    linear::connect_start(app).await
+}
+
+#[tauri::command]
+pub fn linear_connect_cancel(app: AppHandle) {
+    linear::cancel_connect(&app);
+}
+
+#[tauri::command]
+pub async fn linear_agent_install_start(app: AppHandle, organization_id: String) -> Result<()> {
+    if organization_id.trim().is_empty() {
+        return Err(std::io::Error::other("A Linear workspace is required").into());
+    }
+    linear::agent_install_start(app, organization_id).await
+}
+
+#[tauri::command]
+pub async fn linear_agent_update_issue_state(
+    app: AppHandle,
+    organization_id: String,
+    project_id: String,
+    issue_id: String,
+    state_id: String,
+) -> Result<Issue> {
+    if organization_id.trim().is_empty()
+        || project_id.trim().is_empty()
+        || issue_id.trim().is_empty()
+        || state_id.trim().is_empty()
+    {
+        return Err(std::io::Error::other("Linear agent issue details are required").into());
+    }
+    linear::agent_update_issue_state(&app, &organization_id, &project_id, &issue_id, &state_id)
+        .await
+}
+
+#[tauri::command]
+pub async fn linear_agent_create_comment(
+    app: AppHandle,
+    organization_id: String,
+    project_id: String,
+    issue_id: String,
+    body: String,
+) -> Result<LinearComment> {
+    if organization_id.trim().is_empty()
+        || project_id.trim().is_empty()
+        || issue_id.trim().is_empty()
+        || body.trim().is_empty()
+        || body.chars().count() > 50_000
+    {
+        return Err(std::io::Error::other("Linear agent comment is invalid").into());
+    }
+    linear::agent_create_comment(&app, &organization_id, &project_id, &issue_id, &body).await
+}
+
+#[tauri::command]
+pub async fn linear_disconnect(app: AppHandle, organization_id: String) -> Result<Option<String>> {
+    if organization_id.trim().is_empty() {
+        return Err(std::io::Error::other("A Linear workspace is required").into());
+    }
+    linear::disconnect(&app, &organization_id).await
+}
+
+#[tauri::command]
+pub async fn linear_sync_connection(
+    app: AppHandle,
+    organization_id: String,
+) -> Result<LinearConnection> {
+    if organization_id.trim().is_empty() {
+        return Err(std::io::Error::other("Linear workspace is required").into());
+    }
+    linear::sync_connection(&app, &organization_id).await
+}
+
+#[tauri::command]
+pub async fn linear_teams(app: AppHandle, organization_id: String) -> Result<Vec<Team>> {
+    linear::teams(&app, &organization_id).await
+}
+
+#[tauri::command]
+pub async fn linear_users(app: AppHandle, organization_id: String) -> Result<Vec<Person>> {
+    linear::users(&app, &organization_id).await
+}
+
+#[tauri::command]
+pub async fn linear_issue_labels(
+    app: AppHandle,
+    organization_id: String,
+) -> Result<Vec<LinearLabel>> {
+    linear::issue_labels(&app, &organization_id).await
+}
+
+#[tauri::command]
+pub async fn linear_create_issue_label(
+    app: AppHandle,
+    organization_id: String,
+    name: String,
+    color: String,
+    team_id: Option<String>,
+) -> Result<LinearLabel> {
+    let name = name.trim();
+    let color = color.trim();
+    if organization_id.trim().is_empty()
+        || name.is_empty()
+        || name.len() > 255
+        || color.len() != 7
+        || !color.starts_with('#')
+        || !color[1..].bytes().all(|byte| byte.is_ascii_hexdigit())
+    {
+        return Err(std::io::Error::other("A valid label is required").into());
+    }
+    let team_id = team_id
+        .as_deref()
+        .map(str::trim)
+        .filter(|id| !id.is_empty());
+    linear::create_issue_label(&app, organization_id.trim(), name, color, team_id).await
+}
+
+#[tauri::command]
+pub async fn linear_update_issue_label(
+    app: AppHandle,
+    organization_id: String,
+    label_id: String,
+    name: String,
+    color: String,
+) -> Result<LinearLabel> {
+    let name = name.trim();
+    let color = color.trim();
+    if organization_id.trim().is_empty()
+        || label_id.trim().is_empty()
+        || name.is_empty()
+        || name.len() > 255
+        || color.len() != 7
+        || !color.starts_with('#')
+        || !color[1..].bytes().all(|byte| byte.is_ascii_hexdigit())
+    {
+        return Err(std::io::Error::other("A valid label is required").into());
+    }
+    linear::update_issue_label(&app, organization_id.trim(), label_id.trim(), name, color).await
+}
+
+#[tauri::command]
+pub async fn linear_delete_issue_label(
+    app: AppHandle,
+    organization_id: String,
+    label_id: String,
+) -> Result<()> {
+    if organization_id.trim().is_empty() || label_id.trim().is_empty() {
+        return Err(std::io::Error::other("Issue label is required").into());
+    }
+    linear::delete_issue_label(&app, organization_id.trim(), label_id.trim()).await
+}
+
+#[tauri::command]
+pub async fn linear_projects(
+    app: AppHandle,
+    organization_id: String,
+    include_archived: bool,
+) -> Result<Vec<LinearProject>> {
+    linear::projects(&app, &organization_id, include_archived).await
+}
+
+#[tauri::command]
+pub async fn linear_archive_project(
+    app: AppHandle,
+    organization_id: String,
+    project_id: String,
+) -> Result<()> {
+    if organization_id.trim().is_empty() || project_id.trim().is_empty() {
+        return Err(std::io::Error::other("Project is required").into());
+    }
+    linear::archive_project(&app, &organization_id, &project_id).await
+}
+
+#[tauri::command]
+pub async fn linear_unarchive_project(
+    app: AppHandle,
+    organization_id: String,
+    project_id: String,
+) -> Result<()> {
+    if organization_id.trim().is_empty() || project_id.trim().is_empty() {
+        return Err(std::io::Error::other("Project is required").into());
+    }
+    linear::unarchive_project(&app, &organization_id, &project_id).await
+}
+
+#[tauri::command]
+pub async fn linear_create_project(
+    app: AppHandle,
+    organization_id: String,
+    team_ids: Vec<String>,
+    name: String,
+    description: Option<String>,
+    start_date: Option<String>,
+    target_date: Option<String>,
+    status_id: Option<String>,
+    lead_id: Option<String>,
+) -> Result<LinearProject> {
+    if name.trim().is_empty()
+        || name.chars().count() > 255
+        || team_ids.is_empty()
+        || team_ids.iter().any(|id| id.trim().is_empty())
+        || team_ids
+            .iter()
+            .collect::<std::collections::HashSet<_>>()
+            .len()
+            != team_ids.len()
+        || status_id.as_ref().is_some_and(|id| id.trim().is_empty())
+        || lead_id.as_ref().is_some_and(|id| id.trim().is_empty())
+    {
+        return Err(std::io::Error::other("Project name and team are required").into());
+    }
+    linear::create_project(
+        &app,
+        &organization_id,
+        &team_ids,
+        name.trim(),
+        description.as_deref(),
+        start_date.as_deref(),
+        target_date.as_deref(),
+        status_id.as_deref(),
+        lead_id.as_deref(),
+    )
+    .await
+}
+
+#[tauri::command]
+pub async fn linear_update_project(
+    app: AppHandle,
+    organization_id: String,
+    project_id: String,
+    name: String,
+    description: String,
+    start_date: Option<String>,
+    target_date: Option<String>,
+    status_id: Option<String>,
+    lead_id: Option<String>,
+    clear_lead: Option<bool>,
+    team_ids: Vec<String>,
+) -> Result<LinearProject> {
+    if project_id.trim().is_empty()
+        || name.chars().count() > 255
+        || team_ids.is_empty()
+        || team_ids.iter().any(|id| id.trim().is_empty())
+        || team_ids
+            .iter()
+            .collect::<std::collections::HashSet<_>>()
+            .len()
+            != team_ids.len()
+        || status_id.as_ref().is_some_and(|id| id.trim().is_empty())
+        || lead_id.as_ref().is_some_and(|id| id.trim().is_empty())
+        || (clear_lead.unwrap_or(false) && lead_id.is_some())
+    {
+        return Err(std::io::Error::other("Project name is required").into());
+    }
+    linear::update_project(
+        &app,
+        &organization_id,
+        &project_id,
+        name.trim(),
+        &description,
+        start_date.as_deref(),
+        target_date.as_deref(),
+        status_id.as_deref(),
+        lead_id.as_deref(),
+        clear_lead.unwrap_or(false),
+        &team_ids,
+    )
+    .await
+}
+
+#[tauri::command]
+pub async fn linear_project_resources(
+    app: AppHandle,
+    organization_id: String,
+    project_id: String,
+) -> Result<LinearProjectResources> {
+    if organization_id.trim().is_empty() || project_id.trim().is_empty() {
+        return Err(std::io::Error::other("Project is required").into());
+    }
+    linear::project_resources(&app, &organization_id, &project_id).await
+}
+
+#[tauri::command]
+pub async fn linear_create_project_document(
+    app: AppHandle,
+    organization_id: String,
+    project_id: String,
+    title: String,
+    content: String,
+) -> Result<LinearDocument> {
+    if organization_id.trim().is_empty()
+        || project_id.trim().is_empty()
+        || title.trim().is_empty()
+        || title.chars().count() > 255
+        || content.trim().is_empty()
+        || content.chars().count() > 50_000
+    {
+        return Err(std::io::Error::other("Project document title or content is invalid").into());
+    }
+    linear::create_project_document(&app, &organization_id, &project_id, title.trim(), &content)
+        .await
+}
+
+#[tauri::command]
+pub async fn linear_project_document(
+    app: AppHandle,
+    organization_id: String,
+    document_id: String,
+) -> Result<LinearDocument> {
+    if organization_id.trim().is_empty() || document_id.trim().is_empty() {
+        return Err(std::io::Error::other("Project document is required").into());
+    }
+    linear::project_document(&app, &organization_id, &document_id).await
+}
+
+#[tauri::command]
+pub async fn linear_update_project_document(
+    app: AppHandle,
+    organization_id: String,
+    document_id: String,
+    expected_updated_at: String,
+    title: String,
+    content: String,
+) -> Result<LinearDocument> {
+    if organization_id.trim().is_empty()
+        || document_id.trim().is_empty()
+        || expected_updated_at.trim().is_empty()
+        || title.trim().is_empty()
+        || title.chars().count() > 255
+        || content.chars().count() > 50_000
+    {
+        return Err(std::io::Error::other("Project document title or content is invalid").into());
+    }
+    linear::update_project_document(
+        &app,
+        &organization_id,
+        &document_id,
+        &expected_updated_at,
+        title.trim(),
+        &content,
+    )
+    .await
+}
+
+#[tauri::command]
+pub async fn linear_create_project_external_link(
+    app: AppHandle,
+    organization_id: String,
+    project_id: String,
+    label: String,
+    url: String,
+) -> Result<LinearExternalLink> {
+    let parsed_url = url::Url::parse(&url)
+        .map_err(|_| std::io::Error::other("A label and valid web URL are required"))?;
+    if organization_id.trim().is_empty()
+        || project_id.trim().is_empty()
+        || label.trim().is_empty()
+        || label.chars().count() > 255
+        || url.len() > 2048
+        || !matches!(parsed_url.scheme(), "http" | "https")
+        || parsed_url.host_str().is_none()
+    {
+        return Err(std::io::Error::other("A label and valid web URL are required").into());
+    }
+    linear::create_project_external_link(
+        &app,
+        &organization_id,
+        &project_id,
+        label.trim(),
+        parsed_url.as_str(),
+    )
+    .await
+}
+
+#[tauri::command]
+pub async fn linear_delete_project_external_link(
+    app: AppHandle,
+    organization_id: String,
+    link_id: String,
+) -> Result<()> {
+    if organization_id.trim().is_empty() || link_id.trim().is_empty() {
+        return Err(std::io::Error::other("Project link is required").into());
+    }
+    linear::delete_project_external_link(&app, &organization_id, &link_id).await
+}
+
+#[tauri::command]
+pub async fn linear_project_statuses(
+    app: AppHandle,
+    organization_id: String,
+) -> Result<Vec<LinearProjectStatus>> {
+    if organization_id.trim().is_empty() {
+        return Err(std::io::Error::other("Linear workspace is required").into());
+    }
+    linear::project_statuses(&app, &organization_id).await
+}
+
+#[tauri::command]
+pub async fn linear_project_milestones(
+    app: AppHandle,
+    organization_id: String,
+    project_id: String,
+) -> Result<Vec<LinearMilestone>> {
+    if project_id.trim().is_empty() {
+        return Err(std::io::Error::other("Project is required").into());
+    }
+    linear::project_milestones(&app, &organization_id, &project_id).await
+}
+
+#[tauri::command]
+pub async fn linear_project_updates(
+    app: AppHandle,
+    organization_id: String,
+    project_id: String,
+    include_archived: Option<bool>,
+) -> Result<Vec<LinearProjectUpdate>> {
+    if project_id.trim().is_empty() {
+        return Err(std::io::Error::other("Project is required").into());
+    }
+    linear::project_updates(
+        &app,
+        &organization_id,
+        &project_id,
+        include_archived.unwrap_or(false),
+    )
+    .await
+}
+
+#[tauri::command]
+pub async fn linear_archive_project_update(
+    app: AppHandle,
+    organization_id: String,
+    update_id: String,
+) -> Result<()> {
+    if update_id.trim().is_empty() {
+        return Err(std::io::Error::other("Project update is required").into());
+    }
+    linear::archive_project_update(&app, &organization_id, &update_id).await
+}
+
+#[tauri::command]
+pub async fn linear_unarchive_project_update(
+    app: AppHandle,
+    organization_id: String,
+    update_id: String,
+) -> Result<()> {
+    if update_id.trim().is_empty() {
+        return Err(std::io::Error::other("Project update is required").into());
+    }
+    linear::unarchive_project_update(&app, &organization_id, &update_id).await
+}
+
+#[tauri::command]
+pub async fn linear_create_project_update(
+    app: AppHandle,
+    organization_id: String,
+    project_id: String,
+    body: String,
+    health: String,
+) -> Result<LinearProjectUpdate> {
+    let body = body.trim();
+    if project_id.trim().is_empty() || body.is_empty() || body.chars().count() > 10_000 {
+        return Err(
+            std::io::Error::other("A project update up to 10,000 characters is required").into(),
+        );
+    }
+    if !matches!(health.as_str(), "onTrack" | "atRisk" | "offTrack") {
+        return Err(
+            std::io::Error::other("Project health must be onTrack, atRisk, or offTrack").into(),
+        );
+    }
+    linear::create_project_update(&app, &organization_id, &project_id, body, &health).await
+}
+
+#[tauri::command]
+pub async fn linear_update_project_update(
+    app: AppHandle,
+    organization_id: String,
+    update_id: String,
+    body: String,
+    health: String,
+) -> Result<LinearProjectUpdate> {
+    let body = body.trim();
+    if update_id.trim().is_empty() || body.is_empty() || body.chars().count() > 10_000 {
+        return Err(
+            std::io::Error::other("A project update up to 10,000 characters is required").into(),
+        );
+    }
+    if !matches!(health.as_str(), "onTrack" | "atRisk" | "offTrack") {
+        return Err(
+            std::io::Error::other("Project health must be onTrack, atRisk, or offTrack").into(),
+        );
+    }
+    linear::update_project_update(&app, &organization_id, &update_id, body, &health).await
+}
+
+#[tauri::command]
+pub async fn linear_create_milestone(
+    app: AppHandle,
+    organization_id: String,
+    project_id: String,
+    name: String,
+    description: Option<String>,
+    target_date: Option<String>,
+) -> Result<LinearMilestone> {
+    if project_id.trim().is_empty() || name.trim().is_empty() || name.chars().count() > 255 {
+        return Err(std::io::Error::other("Milestone name is required").into());
+    }
+    linear::create_milestone(
+        &app,
+        &organization_id,
+        &project_id,
+        name.trim(),
+        description.as_deref(),
+        target_date.as_deref(),
+    )
+    .await
+}
+
+#[tauri::command]
+pub async fn linear_update_milestone(
+    app: AppHandle,
+    organization_id: String,
+    milestone_id: String,
+    name: String,
+    description: String,
+    target_date: Option<String>,
+) -> Result<LinearMilestone> {
+    if milestone_id.trim().is_empty() || name.trim().is_empty() || name.chars().count() > 255 {
+        return Err(std::io::Error::other("Milestone name is required").into());
+    }
+    linear::update_milestone(
+        &app,
+        &organization_id,
+        &milestone_id,
+        name.trim(),
+        &description,
+        target_date.as_deref(),
+    )
+    .await
+}
+
+#[tauri::command]
+pub async fn linear_delete_milestone(
+    app: AppHandle,
+    organization_id: String,
+    milestone_id: String,
+) -> Result<()> {
+    if organization_id.trim().is_empty() || milestone_id.trim().is_empty() {
+        return Err(std::io::Error::other("Milestone is required").into());
+    }
+    linear::delete_milestone(&app, &organization_id, &milestone_id).await
+}
+
+#[tauri::command]
+pub async fn linear_initiatives(
+    app: AppHandle,
+    organization_id: String,
+    include_archived: Option<bool>,
+    include_archived_updates: Option<bool>,
+) -> Result<Vec<Initiative>> {
+    linear::initiatives(
+        &app,
+        &organization_id,
+        include_archived.unwrap_or(false),
+        include_archived_updates.unwrap_or(false),
+    )
+    .await
+}
+
+#[tauri::command]
+pub async fn linear_create_initiative_update(
+    app: AppHandle,
+    organization_id: String,
+    initiative_id: String,
+    body: String,
+    health: String,
+) -> Result<InitiativeUpdate> {
+    if organization_id.trim().is_empty()
+        || initiative_id.trim().is_empty()
+        || body.trim().is_empty()
+        || body.chars().count() > 10_000
+        || !matches!(health.as_str(), "onTrack" | "atRisk" | "offTrack")
+    {
+        return Err(std::io::Error::other("A valid initiative update is required").into());
+    }
+    linear::create_initiative_update(&app, &organization_id, &initiative_id, body.trim(), &health)
+        .await
+}
+
+#[tauri::command]
+pub async fn linear_archive_initiative(
+    app: AppHandle,
+    organization_id: String,
+    initiative_id: String,
+) -> Result<()> {
+    if initiative_id.trim().is_empty() {
+        return Err(std::io::Error::other("Initiative is required").into());
+    }
+    linear::archive_initiative(&app, &organization_id, &initiative_id).await
+}
+
+#[tauri::command]
+pub async fn linear_unarchive_initiative(
+    app: AppHandle,
+    organization_id: String,
+    initiative_id: String,
+) -> Result<()> {
+    if initiative_id.trim().is_empty() {
+        return Err(std::io::Error::other("Initiative is required").into());
+    }
+    linear::unarchive_initiative(&app, &organization_id, &initiative_id).await
+}
+
+#[tauri::command]
+pub async fn linear_create_initiative(
+    app: AppHandle,
+    organization_id: String,
+    name: String,
+    description: Option<String>,
+    target_date: Option<String>,
+) -> Result<Initiative> {
+    if organization_id.trim().is_empty() || name.trim().is_empty() || name.chars().count() > 255 {
+        return Err(std::io::Error::other("Initiative name is required").into());
+    }
+    linear::create_initiative(
+        &app,
+        &organization_id,
+        name.trim(),
+        description.as_deref(),
+        target_date.as_deref(),
+    )
+    .await
+}
+
+#[tauri::command]
+pub async fn linear_update_initiative_update(
+    app: AppHandle,
+    organization_id: String,
+    update_id: String,
+    body: String,
+    health: String,
+) -> Result<InitiativeUpdate> {
+    if organization_id.trim().is_empty()
+        || update_id.trim().is_empty()
+        || body.trim().is_empty()
+        || body.chars().count() > 10_000
+        || !matches!(health.as_str(), "onTrack" | "atRisk" | "offTrack")
+    {
+        return Err(std::io::Error::other("A valid initiative update is required").into());
+    }
+    linear::update_initiative_update(&app, &organization_id, &update_id, body.trim(), &health).await
+}
+
+#[tauri::command]
+pub async fn linear_archive_initiative_update(
+    app: AppHandle,
+    organization_id: String,
+    update_id: String,
+) -> Result<()> {
+    if organization_id.trim().is_empty() || update_id.trim().is_empty() {
+        return Err(std::io::Error::other("Initiative update is required").into());
+    }
+    linear::archive_initiative_update(&app, &organization_id, &update_id).await
+}
+
+#[tauri::command]
+pub async fn linear_unarchive_initiative_update(
+    app: AppHandle,
+    organization_id: String,
+    update_id: String,
+) -> Result<()> {
+    if organization_id.trim().is_empty() || update_id.trim().is_empty() {
+        return Err(std::io::Error::other("Initiative update is required").into());
+    }
+    linear::unarchive_initiative_update(&app, &organization_id, &update_id).await
+}
+
+#[tauri::command]
+pub async fn linear_update_initiative(
+    app: AppHandle,
+    organization_id: String,
+    initiative_id: String,
+    name: String,
+    description: String,
+    target_date: Option<String>,
+) -> Result<Initiative> {
+    if organization_id.trim().is_empty()
+        || initiative_id.trim().is_empty()
+        || name.trim().is_empty()
+        || name.chars().count() > 255
+    {
+        return Err(std::io::Error::other("Initiative name is required").into());
+    }
+    linear::update_initiative(
+        &app,
+        &organization_id,
+        &initiative_id,
+        name.trim(),
+        &description,
+        target_date.as_deref(),
+    )
+    .await
+}
+
+#[tauri::command]
+pub async fn linear_add_project_to_initiative(
+    app: AppHandle,
+    organization_id: String,
+    initiative_id: String,
+    project_id: String,
+) -> Result<InitiativeProject> {
+    if organization_id.trim().is_empty()
+        || initiative_id.trim().is_empty()
+        || project_id.trim().is_empty()
+    {
+        return Err(std::io::Error::other("Initiative and project are required").into());
+    }
+    linear::add_project_to_initiative(&app, &organization_id, &initiative_id, &project_id).await
+}
+
+#[tauri::command]
+pub async fn linear_remove_project_from_initiative(
+    app: AppHandle,
+    organization_id: String,
+    link_id: String,
+) -> Result<()> {
+    if organization_id.trim().is_empty() || link_id.trim().is_empty() {
+        return Err(std::io::Error::other("Initiative project link is required").into());
+    }
+    linear::remove_project_from_initiative(&app, &organization_id, &link_id).await
+}
+
+#[tauri::command]
+pub async fn linear_cycles(
+    app: AppHandle,
+    organization_id: String,
+    team_id: String,
+) -> Result<Vec<LinearCycle>> {
+    linear::cycles(&app, &organization_id, &team_id).await
+}
+
+#[tauri::command]
+pub async fn linear_create_cycle(
+    app: AppHandle,
+    organization_id: String,
+    team_id: String,
+    name: Option<String>,
+    starts_at: String,
+    ends_at: String,
+) -> Result<LinearCycle> {
+    if organization_id.trim().is_empty()
+        || team_id.trim().is_empty()
+        || starts_at.trim().is_empty()
+        || ends_at.trim().is_empty()
+        || starts_at >= ends_at
+        || name
+            .as_ref()
+            .is_some_and(|value| value.chars().count() > 255)
+    {
+        return Err(std::io::Error::other("A valid cycle schedule is required").into());
+    }
+    linear::create_cycle(
+        &app,
+        &organization_id,
+        &team_id,
+        name.as_deref(),
+        &starts_at,
+        &ends_at,
+    )
+    .await
+}
+
+#[tauri::command]
+pub async fn linear_update_cycle(
+    app: AppHandle,
+    organization_id: String,
+    cycle_id: String,
+    name: String,
+    description: String,
+    starts_at: Option<String>,
+    ends_at: Option<String>,
+) -> Result<LinearCycle> {
+    if organization_id.trim().is_empty()
+        || cycle_id.trim().is_empty()
+        || name.chars().count() > 255
+        || description.chars().count() > 10_000
+        || starts_at
+            .as_ref()
+            .is_some_and(|date| date.trim().is_empty())
+        || ends_at.as_ref().is_some_and(|date| date.trim().is_empty())
+    {
+        return Err(std::io::Error::other("Cycle details are required").into());
+    }
+    linear::update_cycle(
+        &app,
+        &organization_id,
+        &cycle_id,
+        name.trim(),
+        &description,
+        starts_at.as_deref(),
+        ends_at.as_deref(),
+    )
+    .await
+}
+
+#[tauri::command]
+pub async fn linear_workflow_states(
+    app: AppHandle,
+    organization_id: String,
+    team_id: String,
+) -> Result<Vec<WorkflowState>> {
+    linear::workflow_states(&app, &organization_id, &team_id).await
+}
+
+#[tauri::command]
+pub async fn linear_create_issue(
+    app: AppHandle,
+    organization_id: String,
+    team_id: String,
+    title: String,
+    description: Option<String>,
+    estimate: Option<u32>,
+    assignee_id: Option<String>,
+    priority: Option<u8>,
+    due_date: Option<String>,
+    label_ids: Option<Vec<String>>,
+    project_id: Option<String>,
+    project_milestone_id: Option<String>,
+    parent_id: Option<String>,
+    state_id: Option<String>,
+    cycle_id: Option<String>,
+) -> Result<Issue> {
+    if title.trim().is_empty()
+        || title.chars().count() > 255
+        || estimate.is_some_and(|value| value > 64)
+        || priority.is_some_and(|value| value > 4)
+        || assignee_id
+            .as_ref()
+            .is_some_and(|value| value.trim().is_empty())
+        || due_date.as_ref().is_some_and(|date| date.trim().is_empty())
+        || label_ids.as_ref().is_some_and(|labels| {
+            labels.len() > 100 || labels.iter().any(|label| label.trim().is_empty())
+        })
+        || project_id
+            .as_ref()
+            .is_some_and(|value| value.trim().is_empty())
+        || project_milestone_id
+            .as_ref()
+            .is_some_and(|value| value.trim().is_empty())
+        || parent_id
+            .as_ref()
+            .is_some_and(|value| value.trim().is_empty())
+        || state_id
+            .as_ref()
+            .is_some_and(|value| value.trim().is_empty())
+        || cycle_id
+            .as_ref()
+            .is_some_and(|value| value.trim().is_empty())
+    {
+        return Err(std::io::Error::other("Issue title must be 1–255 characters").into());
+    }
+    linear::create_issue(
+        &app,
+        &organization_id,
+        &team_id,
+        title.trim(),
+        description.as_deref(),
+        estimate,
+        assignee_id.as_deref(),
+        priority,
+        due_date.as_deref(),
+        label_ids.as_deref(),
+        project_id.as_deref(),
+        project_milestone_id.as_deref(),
+        parent_id.as_deref(),
+        state_id.as_deref(),
+        cycle_id.as_deref(),
+    )
+    .await
+}
+
+#[tauri::command]
+pub async fn linear_issue_detail(
+    app: AppHandle,
+    organization_id: String,
+    issue_id: String,
+) -> Result<IssueDetail> {
+    if issue_id.trim().is_empty() {
+        return Err(std::io::Error::other("Issue is required").into());
+    }
+    linear::issue_detail(&app, &organization_id, &issue_id).await
+}
+
+#[tauri::command]
+pub async fn linear_create_issue_relation(
+    app: AppHandle,
+    organization_id: String,
+    issue_id: String,
+    related_issue_id: String,
+    kind: String,
+) -> Result<IssueRelation> {
+    if organization_id.trim().is_empty()
+        || issue_id.trim().is_empty()
+        || related_issue_id.trim().is_empty()
+        || issue_id
+            .trim()
+            .eq_ignore_ascii_case(related_issue_id.trim())
+        || !matches!(
+            kind.as_str(),
+            "blocks" | "duplicate" | "related" | "similar"
+        )
+    {
+        return Err(std::io::Error::other("A valid issue relation is required").into());
+    }
+    linear::create_issue_relation(
+        &app,
+        &organization_id,
+        issue_id.trim(),
+        related_issue_id.trim(),
+        &kind,
+    )
+    .await
+}
+
+#[tauri::command]
+pub async fn linear_delete_issue_relation(
+    app: AppHandle,
+    organization_id: String,
+    relation_id: String,
+) -> Result<()> {
+    if organization_id.trim().is_empty() || relation_id.trim().is_empty() {
+        return Err(std::io::Error::other("Issue relation is required").into());
+    }
+    linear::delete_issue_relation(&app, &organization_id, relation_id.trim()).await
+}
+
+#[tauri::command]
+pub async fn linear_create_comment(
+    app: AppHandle,
+    organization_id: String,
+    issue_id: String,
+    body: String,
+) -> Result<LinearComment> {
+    if issue_id.trim().is_empty() || body.trim().is_empty() || body.chars().count() > 10_000 {
+        return Err(std::io::Error::other("Comment must be 1–10,000 characters").into());
+    }
+    linear::create_comment(&app, &organization_id, &issue_id, body.trim()).await
+}
+
+#[tauri::command]
+pub async fn linear_update_comment(
+    app: AppHandle,
+    organization_id: String,
+    comment_id: String,
+    body: String,
+) -> Result<LinearComment> {
+    if organization_id.trim().is_empty()
+        || comment_id.trim().is_empty()
+        || body.trim().is_empty()
+        || body.chars().count() > 10_000
+    {
+        return Err(std::io::Error::other("Comment must be 1–10,000 characters").into());
+    }
+    linear::update_comment(&app, &organization_id, &comment_id, body.trim()).await
+}
+
+#[tauri::command]
+pub async fn linear_delete_comment(
+    app: AppHandle,
+    organization_id: String,
+    comment_id: String,
+) -> Result<()> {
+    if organization_id.trim().is_empty() || comment_id.trim().is_empty() {
+        return Err(std::io::Error::other("Comment is required").into());
+    }
+    linear::delete_comment(&app, &organization_id, &comment_id).await
+}
+
+#[tauri::command]
+pub fn linear_codex_context(
+    app: AppHandle,
+    organization_id: String,
+    issue_id: String,
+) -> Result<LinearCodexContext> {
+    if organization_id.trim().is_empty() {
+        return Err(std::io::Error::other("Linear workspace is required").into());
+    }
+    linear::codex_context(&app, &organization_id, &issue_id)
+}
+
+#[tauri::command]
+pub async fn linear_set_codex_project_allowed(
+    app: AppHandle,
+    organization_id: String,
+    project_id: String,
+    allowed: bool,
+    workspace_repo: Option<String>,
+) -> Result<()> {
+    if organization_id.trim().is_empty()
+        || project_id.trim().is_empty()
+        || workspace_repo
+            .as_ref()
+            .is_some_and(|repo| repo.trim().is_empty())
+        || (allowed && workspace_repo.is_none())
+    {
+        return Err(std::io::Error::other("Linear workspace and project are required").into());
+    }
+    linear::set_codex_project_allowed(
+        &app,
+        &organization_id,
+        &project_id,
+        allowed,
+        workspace_repo.as_deref(),
+    )
+    .await
+}
+
+#[tauri::command]
+pub async fn linear_save_codex_link(
+    app: AppHandle,
+    organization_id: String,
+    issue_id: String,
+    workspace_repo: String,
+    workspace_name: String,
+    thread_id: String,
+) -> Result<()> {
+    if organization_id.trim().is_empty()
+        || issue_id.trim().is_empty()
+        || workspace_repo.trim().is_empty()
+        || workspace_name.trim().is_empty()
+        || thread_id.trim().is_empty()
+    {
+        return Err(std::io::Error::other("Linear and Codex link details are required").into());
+    }
+    linear::save_codex_link(
+        &app,
+        &organization_id,
+        &issue_id,
+        &workspace_repo,
+        &workspace_name,
+        &thread_id,
+    )
+    .await
+}
+
+#[tauri::command]
+pub async fn linear_update_issue(
+    app: AppHandle,
+    organization_id: String,
+    issue_id: String,
+    state_id: Option<String>,
+    assignee_id: Option<String>,
+    clear_assignee: Option<bool>,
+    cycle_id: Option<String>,
+    clear_cycle: Option<bool>,
+    priority: Option<u8>,
+    label_ids: Option<Vec<String>>,
+    title: Option<String>,
+    description: Option<String>,
+    project_id: Option<String>,
+    clear_project: Option<bool>,
+    project_milestone_id: Option<String>,
+    clear_project_milestone: Option<bool>,
+    due_date: Option<String>,
+    clear_due_date: Option<bool>,
+    estimate: Option<u32>,
+    clear_estimate: Option<bool>,
+) -> Result<Issue> {
+    if organization_id.trim().is_empty()
+        || issue_id.trim().is_empty()
+        || priority.is_some_and(|value| value > 4)
+        || title
+            .as_ref()
+            .is_some_and(|value| value.trim().is_empty() || value.chars().count() > 255)
+        || project_id
+            .as_ref()
+            .is_some_and(|value| value.trim().is_empty())
+        || (clear_project.unwrap_or(false) && project_id.is_some())
+        || project_milestone_id
+            .as_ref()
+            .is_some_and(|value| value.trim().is_empty())
+        || (clear_project_milestone.unwrap_or(false) && project_milestone_id.is_some())
+        || (clear_project.unwrap_or(false) && project_milestone_id.is_some())
+        || due_date.as_ref().is_some_and(|value| {
+            let bytes = value.as_bytes();
+            bytes.len() != 10
+                || bytes[4] != b'-'
+                || bytes[7] != b'-'
+                || bytes
+                    .iter()
+                    .enumerate()
+                    .any(|(index, byte)| index != 4 && index != 7 && !byte.is_ascii_digit())
+        })
+        || (clear_due_date.unwrap_or(false) && due_date.is_some())
+        || estimate.is_some_and(|value| value > 64)
+        || (clear_estimate.unwrap_or(false) && estimate.is_some())
+        || assignee_id
+            .as_ref()
+            .is_some_and(|value| value.trim().is_empty())
+        || cycle_id
+            .as_ref()
+            .is_some_and(|value| value.trim().is_empty())
+        || (clear_assignee.unwrap_or(false) && assignee_id.is_some())
+        || (clear_cycle.unwrap_or(false) && cycle_id.is_some())
+        || label_ids
+            .as_ref()
+            .is_some_and(|labels| labels.iter().any(|label| label.trim().is_empty()))
+    {
+        return Err(std::io::Error::other("Invalid Linear issue update").into());
+    }
+    linear::update_issue(
+        &app,
+        &organization_id,
+        &issue_id,
+        state_id.as_deref(),
+        assignee_id.as_deref(),
+        clear_assignee.unwrap_or(false),
+        cycle_id.as_deref(),
+        clear_cycle.unwrap_or(false),
+        priority,
+        label_ids.as_deref(),
+        title.as_deref(),
+        description.as_deref(),
+        project_id.as_deref(),
+        clear_project.unwrap_or(false),
+        project_milestone_id.as_deref(),
+        clear_project_milestone.unwrap_or(false),
+        due_date.as_deref(),
+        clear_due_date.unwrap_or(false),
+        estimate,
+        clear_estimate.unwrap_or(false),
+    )
+    .await
+}
+
+#[tauri::command]
+pub async fn linear_my_issues(
+    app: AppHandle,
+    organization_id: String,
+    search: Option<String>,
+    after: Option<String>,
+    include_archived: Option<bool>,
+    state_id: Option<String>,
+    priority: Option<u8>,
+    label_id: Option<String>,
+) -> Result<IssuePage> {
+    if search.as_deref().is_some_and(|query| query.len() > 255) {
+        return Err(std::io::Error::other("Issue search is too long").into());
+    }
+    if state_id
+        .as_deref()
+        .is_some_and(|value| value.trim().is_empty())
+        || label_id
+            .as_deref()
+            .is_some_and(|value| value.trim().is_empty())
+        || priority.is_some_and(|value| value > 4)
+    {
+        return Err(std::io::Error::other("Issue filters are invalid").into());
+    }
+    linear::my_issues(
+        &app,
+        &organization_id,
+        search
+            .as_deref()
+            .map(str::trim)
+            .filter(|search| !search.is_empty()),
+        after.as_deref(),
+        include_archived.unwrap_or(false),
+        state_id.as_deref(),
+        priority,
+        label_id.as_deref(),
+    )
+    .await
+}
+
+#[tauri::command]
+pub async fn linear_team_issues(
+    app: AppHandle,
+    organization_id: String,
+    team_id: String,
+    search: Option<String>,
+    after: Option<String>,
+    include_archived: Option<bool>,
+    state_id: Option<String>,
+    priority: Option<u8>,
+    assignee_id: Option<String>,
+    label_id: Option<String>,
+    cycle_id: Option<String>,
+) -> Result<IssuePage> {
+    if team_id.trim().is_empty() {
+        return Err(std::io::Error::other("A Linear team is required").into());
+    }
+    if search.as_deref().is_some_and(|query| query.len() > 255) {
+        return Err(std::io::Error::other("Issue search is too long").into());
+    }
+    if state_id
+        .as_deref()
+        .is_some_and(|value| value.trim().is_empty())
+        || assignee_id
+            .as_deref()
+            .is_some_and(|value| value.trim().is_empty())
+        || label_id
+            .as_deref()
+            .is_some_and(|value| value.trim().is_empty())
+        || cycle_id
+            .as_deref()
+            .is_some_and(|value| value.trim().is_empty())
+        || priority.is_some_and(|value| value > 4)
+    {
+        return Err(std::io::Error::other("Issue filters are invalid").into());
+    }
+    linear::team_issues(
+        &app,
+        &organization_id,
+        &team_id,
+        search
+            .as_deref()
+            .map(str::trim)
+            .filter(|search| !search.is_empty()),
+        after.as_deref(),
+        include_archived.unwrap_or(false),
+        state_id.as_deref(),
+        priority,
+        assignee_id.as_deref(),
+        label_id.as_deref(),
+        cycle_id.as_deref(),
+    )
+    .await
+}
+
+#[tauri::command]
+pub async fn linear_archive_issue(
+    app: AppHandle,
+    organization_id: String,
+    issue_id: String,
+) -> Result<()> {
+    if issue_id.trim().is_empty() {
+        return Err(std::io::Error::other("Issue is required").into());
+    }
+    linear::archive_issue(&app, &organization_id, &issue_id).await
+}
+
+#[tauri::command]
+pub async fn linear_unarchive_issue(
+    app: AppHandle,
+    organization_id: String,
+    issue_id: String,
+) -> Result<()> {
+    if issue_id.trim().is_empty() {
+        return Err(std::io::Error::other("Issue is required").into());
+    }
+    linear::unarchive_issue(&app, &organization_id, &issue_id).await
+}
+
+#[tauri::command]
+pub async fn linear_project_issues(
+    app: AppHandle,
+    organization_id: String,
+    project_id: String,
+    after: Option<String>,
+    include_archived: Option<bool>,
+    search: Option<String>,
+    state_id: Option<String>,
+    priority: Option<u8>,
+    assignee_id: Option<String>,
+    label_id: Option<String>,
+) -> Result<IssuePage> {
+    if project_id.trim().is_empty() {
+        return Err(std::io::Error::other("A Linear project is required").into());
+    }
+    if search.as_deref().is_some_and(|query| query.len() > 255) {
+        return Err(std::io::Error::other("Issue search is too long").into());
+    }
+    if state_id
+        .as_deref()
+        .is_some_and(|value| value.trim().is_empty())
+        || assignee_id
+            .as_deref()
+            .is_some_and(|value| value.trim().is_empty())
+        || label_id
+            .as_deref()
+            .is_some_and(|value| value.trim().is_empty())
+        || priority.is_some_and(|value| value > 4)
+    {
+        return Err(std::io::Error::other("Issue filters are invalid").into());
+    }
+    linear::project_issues(
+        &app,
+        &organization_id,
+        &project_id,
+        after.as_deref(),
+        include_archived.unwrap_or(false),
+        search
+            .as_deref()
+            .map(str::trim)
+            .filter(|search| !search.is_empty()),
+        state_id.as_deref(),
+        priority,
+        assignee_id.as_deref(),
+        label_id.as_deref(),
+    )
+    .await
 }
 
 #[tauri::command]
