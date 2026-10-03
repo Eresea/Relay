@@ -7,6 +7,7 @@ use tauri::{AppHandle, Manager};
 use tauri_plugin_store::StoreExt;
 
 use crate::error::{Error, Result};
+use crate::nexus_revoke::Outcome;
 
 pub use api::{
     Initiative, InitiativeProject, InitiativeUpdate, Issue, IssueDetail, IssuePage, IssueRelation,
@@ -121,14 +122,6 @@ fn ensure_not_paused(app: &AppHandle, organization_id: &str) -> Result<()> {
     Ok(())
 }
 
-fn update_pending_revoke(organizations: &mut Vec<String>, organization_id: &str, revoked: bool) {
-    if revoked {
-        organizations.retain(|id| id != organization_id);
-    } else if !organizations.iter().any(|id| id == organization_id) {
-        organizations.push(organization_id.to_owned());
-    }
-}
-
 fn save_pending_revokes(app: &AppHandle, organizations: &[String]) -> Result<()> {
     let store = app
         .store("settings.json")
@@ -145,7 +138,7 @@ fn save_pending_revokes(app: &AppHandle, organizations: &[String]) -> Result<()>
 pub(super) fn cancel_pending_revoke(app: &AppHandle, organization_id: &str) -> Result<()> {
     let mut pending = pending_revokes(app)?;
     let count = pending.len();
-    update_pending_revoke(&mut pending, organization_id, true);
+    crate::nexus_revoke::update_pending(&mut pending, organization_id, true);
     if pending.len() != count {
         save_pending_revokes(app, &pending)?;
     }
@@ -208,6 +201,7 @@ pub async fn handle_callback(app: AppHandle, url: url::Url) {
 
 pub async fn status(app: &AppHandle) -> Result<Vec<LinearConnection>> {
     if crate::nexus_auth::is_signed_in(app) {
+        retry_pending_revokes(app).await;
         let pending = pending_revokes(app)?;
         if let Ok(remote) = nexus_sync::discover(app).await {
             let pending_set = pending.iter().collect::<std::collections::HashSet<_>>();
@@ -286,9 +280,10 @@ pub fn pause_on_device(app: &AppHandle, organization_id: &str, paused: bool) -> 
     set_paused_on_device(app, organization_id, paused)
 }
 
-/// Apps cannot revoke a Nexus connection (that needs the account page), so
-/// disconnecting removes the workspace on this device and remembers it, which
-/// stops discovery from loading it again until it is reconnected here.
+/// Disconnects the workspace on this device and deletes its Nexus connection
+/// for every device. The workspace is remembered as pending until the delete
+/// succeeds (offline, signed out) so discovery does not load it again; the
+/// delete is retried on the next `status()`.
 pub async fn disconnect(app: &AppHandle, organization_id: &str) -> Result<Option<String>> {
     let entry = token_entry(organization_id)?;
     match entry.delete_credential() {
@@ -299,12 +294,9 @@ pub async fn disconnect(app: &AppHandle, organization_id: &str) -> Result<Option
         .store("settings.json")
         .map_err(|error| Error::LinearApi(error.to_string()))?;
     let mut connections = connections(app)?;
-    let synced = connections.iter().any(|connection| {
-        connection.organization_id == organization_id && connection.nexus_credential_id.is_some()
-    });
     connections.retain(|connection| connection.organization_id != organization_id);
     let mut pending = pending_revokes(app)?;
-    update_pending_revoke(&mut pending, organization_id, false);
+    crate::nexus_revoke::update_pending(&mut pending, organization_id, false);
     set_paused_on_device(app, organization_id, false)?;
     store.set(
         CONNECTIONS_KEY,
@@ -317,10 +309,34 @@ pub async fn disconnect(app: &AppHandle, organization_id: &str) -> Result<Option
     store
         .save()
         .map_err(|error| Error::LinearApi(error.to_string()))?;
-    Ok(synced.then(|| {
-        "Disconnected on this device. Remove the Linear connection in your Nexus account to disconnect other devices."
-            .to_owned()
-    }))
+    Ok(match revoke_pending(app, organization_id).await {
+        Outcome::Removed => None,
+        Outcome::OtherApp => Some(
+            "Disconnected on this device. Another app created the Linear connection, so remove it in your Nexus account to disconnect other devices."
+                .to_owned(),
+        ),
+        Outcome::Retry => Some(
+            "Disconnected on this device. Relay will remove the Linear connection from your Nexus account when it can reach Nexus."
+                .to_owned(),
+        ),
+    })
+}
+
+/// Deletes the Nexus connection of one pending workspace and updates the
+/// pending list: removed once deleted; kept (so discovery keeps skipping it)
+/// when another app owns the connection or the delete must be retried.
+async fn revoke_pending(app: &AppHandle, organization_id: &str) -> Outcome {
+    let outcome = nexus_sync::revoke(app, organization_id).await;
+    if outcome == Outcome::Removed {
+        let _ = cancel_pending_revoke(app, organization_id);
+    }
+    outcome
+}
+
+async fn retry_pending_revokes(app: &AppHandle) {
+    for organization_id in pending_revokes(app).unwrap_or_default() {
+        revoke_pending(app, &organization_id).await;
+    }
 }
 
 pub async fn sync_connection(app: &AppHandle, organization_id: &str) -> Result<LinearConnection> {
@@ -1435,10 +1451,7 @@ fn save_connections(app: &AppHandle, connections: Vec<LinearConnection>) -> Resu
 
 #[cfg(test)]
 mod tests {
-    use super::{
-        agent_project_allowed, update_paused_on_device, update_pending_revoke,
-        LinearCodexProjectPolicy,
-    };
+    use super::{agent_project_allowed, update_paused_on_device, LinearCodexProjectPolicy};
 
     #[test]
     fn device_pause_is_idempotent_and_only_changes_the_requested_workspace() {
@@ -1447,17 +1460,6 @@ mod tests {
         update_paused_on_device(&mut paused, "org-2", true);
         update_paused_on_device(&mut paused, "org-1", false);
         assert_eq!(paused, ["org-2"]);
-    }
-
-    #[test]
-    fn failed_revokes_queue_once_and_successful_retries_clear_them() {
-        let mut pending = Vec::new();
-        update_pending_revoke(&mut pending, "org-1", false);
-        update_pending_revoke(&mut pending, "org-1", false);
-        assert_eq!(pending, vec!["org-1".to_owned()]);
-
-        update_pending_revoke(&mut pending, "org-1", true);
-        assert!(pending.is_empty());
     }
 
     #[test]

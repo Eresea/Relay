@@ -10,6 +10,7 @@ use tauri::AppHandle;
 
 use crate::error::{Error, Result};
 use crate::nexus_auth;
+use crate::nexus_revoke::{self, Outcome};
 
 use super::{oauth::TokenBundle, LinearConnection};
 
@@ -93,6 +94,23 @@ pub async fn persist(
         .await
         .map_err(request_error)?;
     Ok(created.id)
+}
+
+/// Deletes the workspace's Nexus connection (see [`crate::nexus_revoke`]).
+pub async fn revoke(app: &AppHandle, organization_id: &str) -> Outcome {
+    let Ok(client) = nexus_auth::signed_in_client(app) else {
+        return Outcome::Retry;
+    };
+    let Ok(credentials) = client.connections().granted().await else {
+        return Outcome::Retry;
+    };
+    let found = credentials.iter().find(|credential| {
+        credential.revoked_at.is_none()
+            && credential.namespace == NAMESPACE
+            && credential.credential_type == CREDENTIAL_TYPE
+            && credential.metadata["organizationId"] == organization_id
+    });
+    nexus_revoke::remove(&client, found).await
 }
 
 pub(super) fn merge_bundle(existing: &TokenBundle, incoming: &TokenBundle) -> TokenBundle {
