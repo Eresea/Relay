@@ -20,7 +20,7 @@ use crate::github;
 pub const DEFAULT_ISSUER: &str = "https://nexus.eresea.net/api/v1";
 const ISSUER_ENV: &str = "RELAY_NEXUS_ISSUER";
 const ISSUER_SETTING: &str = "nexus.issuer";
-const CLIENT_ID: &str = "relay";
+pub(crate) const CLIENT_ID: &str = "relay";
 const REDIRECT_URI: &str = "relay://auth/callback";
 const SCOPES: [&str; 4] = ["openid", "profile", "email", "connections"];
 const KEYRING_SERVICE: &str = "relay-nexus-auth";

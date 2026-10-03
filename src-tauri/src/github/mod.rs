@@ -33,7 +33,6 @@ use nexus_store::{AvailableConnection, NexusGitHubTokenStore};
 use oauth::DeviceAuthorization;
 use poll::PullRequestSnapshot;
 use rules::GithubConnectorSettings;
-use token_store::TokenStore;
 
 const SETTINGS_KEY: &str = "github.settings";
 const POLL_CACHE_FILE: &str = "github-poll-cache.json";
@@ -199,12 +198,13 @@ pub fn connect_start(
     })
 }
 
-/// Removes registered hooks, Relay's pointer to the GitHub connection, the
-/// local token and the PR cache. The connection itself stays in the Nexus
-/// account (apps cannot delete it; the account page can).
+/// Removes registered hooks, the local token and the PR cache, and deletes the
+/// Nexus connection Relay created for every device (retried later when Nexus
+/// is unreachable; one created by another app stays until removed on the
+/// account page).
 pub async fn disconnect(app: &AppHandle) -> Result<()> {
     events::unregister_all(app).await?;
-    NexusGitHubTokenStore::new(app.clone()).clear().await?;
+    NexusGitHubTokenStore::new(app.clone()).disconnect().await?;
     let _ = std::fs::remove_file(poll_cache_path(app));
     Ok(())
 }

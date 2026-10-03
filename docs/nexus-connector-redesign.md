@@ -32,7 +32,7 @@ Relay before the SDK stored a session under the same keychain entry with the sam
 - Signed in, the token bundle is a `github` / `oauth-token-bundle` connection on the account, written through the SDK `connections()` API. The creating app is auto-granted read and replace. Replaces send `If-Match`; on `409 credential_revision_conflict` Relay re-reads the revision and retries.
 - Signed out, the bundle stays in the local keychain. A local token found while signed in is newer than anything in Nexus, so it is uploaded and the local copy removed. After sign-in on a new installation, the GitHub connection Relay created earlier is loaded automatically.
 - If the account holds a GitHub connection created by another app (`available`), Settings > GitHub offers "Use GitHub connection from <app>". It calls `request_grant` (replace access requested), opens the consent page, and the UI polls until Relay is granted, then loads it.
-- Disconnect removes Relay's repo hooks and event endpoints, the local token and Relay's pointer. The connection itself stays in the Nexus account; an app cannot delete it, the account page can.
+- Disconnect removes Relay's repo hooks and event endpoints, the local token and Relay's pointer, and deletes the `github` connection from the Nexus account (`connections().delete`, allowed for connections the app created) so every device is disconnected. The connection id is queued in `github.pending-nexus-deletes` and retried the next time GitHub status loads while signed in, so an offline or signed-out disconnect still completes later. A `404` (already gone, or created by another app, which only the account page can remove) counts as done.
 
 ## Events
 
@@ -48,7 +48,7 @@ Relay before the SDK stored a session under the same keychain entry with the sam
 - Signed in, each workspace's user and optional agent token bundle is a `linear` / `oauth-token-bundle` connection on the account (metadata: workspace and viewer), written through the SDK `connections()` API exactly like GitHub. Relay creates it, so it is auto-granted to Relay; no grant call, no `credentials:create` or `credentials:grant:self` scope.
 - Each installation discovers `connections().granted()` entries in namespace `linear`, refreshes locally, and writes back with `If-Match`. On `409 credential_revision_conflict` it re-reads, merges (newest token, newest agent token, per-device Codex links and project policies) and retries up to three times. Settings shows a retry when a sync failed (`nexusSyncPending`).
 - Connect, agent install and sync fail with a prompt to sign in when Nexus is signed out; Relay does not reintroduce an in-app login.
-- Disconnect removes the workspace on this device and remembers it so discovery does not load it again until it is reconnected here. Apps cannot revoke a connection or its grants (that needs `credentials:manage`); the connection stays in the Nexus account and is removed on the account page to disconnect other installations. Pause stays local to the device.
+- Disconnect removes the workspace on this device and remembers it so discovery does not load it again until it is reconnected here. It also deletes the workspace's `linear` connection from the Nexus account (`connections().delete`, allowed for connections Relay created) so every device is disconnected. If that fails (offline, signed out) the workspace stays in the pending list and the delete is retried on the next `status()`; once deleted it leaves the list. A connection created by another app cannot be deleted by Relay; it stays hidden on this device and the user is told to remove it on the Nexus account page. Pause stays local to the device.
 
 ## Verification boundary
 
@@ -73,4 +73,5 @@ Run against a staging Nexus (`RELAY_NEXUS_ISSUER=https://<staging>/api/v1`) and 
 - [ ] Enable a webhook for a repo: GitHub shows a delivery URL under the Nexus issuer and ping succeeds; removing it deletes the hook and revokes the endpoint.
 - [ ] Open, review-request and CI events produce one notification each; quit Relay, generate events, restart: they are delivered once.
 - [ ] Kill Relay between marker write and ack (or drop the network mid-drain): the event is redelivered and not notified twice.
-- [ ] Disconnect GitHub: hooks and endpoints are removed; the connection remains on the account page.
+- [ ] Disconnect GitHub: hooks and endpoints are removed and the connection is deleted from the account.
+- [ ] Disconnect on device A removes the connection on device B (Linear and GitHub): the connection disappears from the account page and device B no longer lists it after its next status refresh. Disconnect while offline: the delete completes on the next status refresh once online.

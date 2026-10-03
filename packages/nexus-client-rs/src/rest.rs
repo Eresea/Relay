@@ -184,6 +184,15 @@ impl Connections {
             .map(str::to_string))
     }
 
+    /// Deletes a connection this app created, for every device and app. Connections created by
+    /// other apps are refused with [`Error::Api`] `404`; the user removes those on the Nexus
+    /// account page.
+    pub async fn delete(&self, id: &str) -> Result<()> {
+        let path = format!("/credentials/{}", seg(id));
+        ensure_ok(self.client.authed(Method::DELETE, &path, |r| r).await?).await?;
+        Ok(())
+    }
+
     /// Asks the user for access to a connection another app created. `opener` receives the consent
     /// URL (open it in the system browser). Poll [`Connections::granted`] afterwards.
     pub async fn request_grant<F>(

@@ -164,3 +164,20 @@ async fn api_calls_require_sign_in() {
         Err(Error::NotSignedIn)
     ));
 }
+
+#[tokio::test]
+async fn delete_own_connection_and_refused_foreign_one() {
+    let s = start().await;
+    let conns = signed_in(&s).connections();
+    conns.delete("cred-1").await.unwrap();
+    assert!(s
+        .mock
+        .log
+        .lock()
+        .unwrap()
+        .contains(&"delete cred-1".to_string()));
+    match conns.delete("cred-other").await.unwrap_err() {
+        Error::Api { status, .. } => assert_eq!(status, 404),
+        other => panic!("unexpected {other:?}"),
+    }
+}

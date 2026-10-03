@@ -244,6 +244,20 @@ async fn secret_put(State(m): S, h: HeaderMap, Json(b): Json<Value>) -> axum::re
     (StatusCode::NO_CONTENT, [("etag", format!("\"{next}\""))]).into_response()
 }
 
+async fn cred_delete(
+    State(m): S,
+    h: HeaderMap,
+    Path(id): Path<String>,
+) -> axum::response::Response {
+    record(&m, &h, Default::default(), Value::Null).await;
+    m.log(format!("delete {id}"));
+    if id == "cred-1" {
+        StatusCode::NO_CONTENT.into_response()
+    } else {
+        (StatusCode::NOT_FOUND, Json(json!({"error":"not_found"}))).into_response()
+    }
+}
+
 async fn grant_request(
     State(m): S,
     h: HeaderMap,
@@ -300,6 +314,7 @@ pub async fn start() -> Server {
         .route("/credentials", post(cred_create))
         .route("/credentials/granted", get(cred_granted))
         .route("/credentials/available", get(cred_available))
+        .route("/credentials/:id", delete(cred_delete))
         .route("/credentials/:id/secret", get(secret_get).put(secret_put))
         .route("/credentials/:id/grant-requests", post(grant_request))
         .route("/events/endpoints", post(ep_create).get(ep_list))

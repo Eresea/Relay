@@ -18,10 +18,12 @@ use tauri_plugin_store::StoreExt;
 
 use crate::error::{Error, Result};
 use crate::nexus_auth;
+use crate::nexus_revoke::{self, update_pending};
 
 use super::token_store::{KeyringTokenStore, StoredToken, TokenStore};
 
 const POINTER_KEY: &str = "github.nexusCredential";
+const PENDING_DELETES_KEY: &str = "github.pending-nexus-deletes";
 const NAMESPACE: &str = "github";
 const CREDENTIAL_TYPE: &str = "oauth-token-bundle";
 const REPLACE_ATTEMPTS: usize = 3;
@@ -73,6 +75,7 @@ impl NexusGitHubTokenStore {
         let Some((client, user_id)) = self.session().await else {
             return Ok((local.map(|token| token.username), None));
         };
+        self.retry_pending_deletes().await;
         let pointer = self.pointer()?.filter(|pointer| pointer.user_id == user_id);
         if let Some(username) = local
             .map(|token| token.username)
@@ -102,8 +105,11 @@ impl NexusGitHubTokenStore {
             .granted()
             .await
             .map_err(nexus_auth::nexus_error)?;
+        let pending = self.pending_deletes()?;
         for credential in granted.into_iter().filter(|credential| {
-            credential.namespace == NAMESPACE && credential.revoked_at.is_none()
+            credential.namespace == NAMESPACE
+                && credential.revoked_at.is_none()
+                && !pending.contains(&credential.id)
         }) {
             let secret = connections
                 .read_secret(&credential.id)
@@ -174,6 +180,74 @@ impl NexusGitHubTokenStore {
         store
             .save()
             .map_err(|error| Error::NexusAuth(error.to_string()))
+    }
+
+    fn pending_deletes(&self) -> Result<Vec<String>> {
+        Ok(self
+            .app
+            .store("settings.json")
+            .map_err(|error| Error::NexusAuth(error.to_string()))?
+            .get(PENDING_DELETES_KEY)
+            .and_then(|value| serde_json::from_value(value).ok())
+            .unwrap_or_default())
+    }
+
+    fn save_pending_deletes(&self, pending: &[String]) -> Result<()> {
+        let store = self
+            .app
+            .store("settings.json")
+            .map_err(|error| Error::NexusAuth(error.to_string()))?;
+        store.set(PENDING_DELETES_KEY, json!(pending));
+        store
+            .save()
+            .map_err(|error| Error::NexusAuth(error.to_string()))
+    }
+
+    /// Queues the pointed-to connection for deletion, clears the pointer and
+    /// the local token, then tries the delete (see [`nexus_revoke`]).
+    pub async fn disconnect(&self) -> Result<()> {
+        if let Some(pointer) = self.pointer()? {
+            let mut pending = self.pending_deletes()?;
+            update_pending(&mut pending, &pointer.credential_id, false);
+            self.save_pending_deletes(&pending)?;
+        }
+        self.clear().await?;
+        self.retry_pending_deletes().await;
+        Ok(())
+    }
+
+    /// Deletes queued connections Relay created. A connection that is gone or
+    /// belongs to another app is dropped from the queue; anything else (offline,
+    /// signed out) stays queued for the next attempt.
+    pub async fn retry_pending_deletes(&self) {
+        let Ok(mut pending) = self.pending_deletes() else {
+            return;
+        };
+        if pending.is_empty() {
+            return;
+        }
+        let Some((client, _)) = self.session().await else {
+            return;
+        };
+        let Ok(granted) = client.connections().granted().await else {
+            return;
+        };
+        for id in pending.clone() {
+            let found = granted
+                .iter()
+                .find(|credential| credential.id == id && credential.revoked_at.is_none());
+            match nexus_revoke::remove(&client, found).await {
+                nexus_revoke::Outcome::Removed => update_pending(&mut pending, &id, true),
+                nexus_revoke::Outcome::OtherApp => {
+                    log::info!("GitHub connection {id} was created by another app; remove it on the Nexus account page");
+                    update_pending(&mut pending, &id, true);
+                }
+                nexus_revoke::Outcome::Retry => {}
+            }
+        }
+        if let Err(error) = self.save_pending_deletes(&pending) {
+            log::warn!("could not update pending GitHub connection deletes: {error}");
+        }
     }
 
     fn clear_pointer(&self) -> Result<()> {
