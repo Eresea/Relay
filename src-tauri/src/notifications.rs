@@ -186,11 +186,40 @@ pub fn ignore_webhook(app: &AppHandle, event_id: &str) -> Result<()> {
     Ok(())
 }
 
+/// Records that processing `event_id` failed and returns whether to give up on it.
+/// The Nexus inbox is a per-installation cursor, so a failing event holds back every
+/// event after it. Retries span 15 minutes from the first failure: a shorter GitHub or
+/// network outage still delivers, and an event that can never succeed stops blocking.
+pub fn webhook_failed(app: &AppHandle, event_id: &str) -> Result<bool> {
+    let connection = connection(app)?;
+    ensure_webhook_table(&connection)?;
+    webhook_failed_in(&connection, event_id, now_millis())
+}
+
+const WEBHOOK_GIVE_UP_MS: u64 = 15 * 60 * 1000;
+
+fn webhook_failed_in(connection: &rusqlite::Connection, event_id: &str, now: u64) -> Result<bool> {
+    connection.execute(
+        "INSERT OR IGNORE INTO webhook_failures (event_id, first_failed_at) VALUES (?1, ?2)",
+        params![event_id, now as i64],
+    )?;
+    let first_failed_at: i64 = connection.query_row(
+        "SELECT first_failed_at FROM webhook_failures WHERE event_id = ?1",
+        [event_id],
+        |row| row.get(0),
+    )?;
+    Ok(now.saturating_sub(first_failed_at as u64) >= WEBHOOK_GIVE_UP_MS)
+}
+
 fn ensure_webhook_table(connection: &rusqlite::Connection) -> Result<()> {
     connection.execute_batch(
         "CREATE TABLE IF NOT EXISTS processed_webhook_events (
             event_id TEXT PRIMARY KEY,
             processed_at INTEGER NOT NULL
+        );
+        CREATE TABLE IF NOT EXISTS webhook_failures (
+            event_id TEXT PRIMARY KEY,
+            first_failed_at INTEGER NOT NULL
         );",
     )?;
     Ok(())
@@ -199,6 +228,10 @@ fn ensure_webhook_table(connection: &rusqlite::Connection) -> Result<()> {
 fn prune_webhook_events(connection: &rusqlite::Connection) -> Result<()> {
     connection.execute(
         "DELETE FROM processed_webhook_events WHERE processed_at < ?1",
+        [now_millis().saturating_sub(30 * 24 * 60 * 60 * 1000) as i64],
+    )?;
+    connection.execute(
+        "DELETE FROM webhook_failures WHERE first_failed_at < ?1",
         [now_millis().saturating_sub(30 * 24 * 60 * 60 * 1000) as i64],
     )?;
     Ok(())
@@ -289,4 +322,19 @@ fn mark_done(app: &AppHandle, job_id: &str, ok: bool) -> Result<()> {
 pub fn clear(app: &AppHandle) -> Result<()> {
     connection(app)?.execute("DELETE FROM notifications", [])?;
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn webhook_failure_gives_up_after_the_retry_window() {
+        let connection = Connection::open_in_memory().unwrap();
+        ensure_webhook_table(&connection).unwrap();
+        assert!(!webhook_failed_in(&connection, "evt", 1_000).unwrap());
+        assert!(!webhook_failed_in(&connection, "evt", 1_000 + WEBHOOK_GIVE_UP_MS - 1).unwrap());
+        assert!(webhook_failed_in(&connection, "evt", 1_000 + WEBHOOK_GIVE_UP_MS).unwrap());
+        assert!(!webhook_failed_in(&connection, "other", 1_000 + WEBHOOK_GIVE_UP_MS).unwrap());
+    }
 }
