@@ -42,31 +42,18 @@ pub struct GithubStatus {
     pub connected: bool,
     pub username: Option<String>,
     pub nexus_credential_ready: bool,
-    pub nexus_credential_pending: bool,
 }
 
-/// Whether an account is connected. Cheap and synchronous — it only reads
-/// the keychain, never calls GitHub.
+/// Whether an account is connected, and whether its token is shared through Nexus.
 pub async fn status(app: &AppHandle) -> Result<GithubStatus> {
-    log::info!("github: status() called");
-    let (username, nexus_credential_ready, nexus_credential_pending) =
-        NexusGitHubTokenStore::new(app.clone())
-            .connection_state()
-            .await?;
-    match username {
-        Some(username) => Ok(GithubStatus {
-            connected: true,
-            username: Some(username),
-            nexus_credential_ready,
-            nexus_credential_pending,
-        }),
-        None => Ok(GithubStatus {
-            connected: false,
-            username: None,
-            nexus_credential_ready: false,
-            nexus_credential_pending: false,
-        }),
-    }
+    let (username, nexus_credential_ready) = NexusGitHubTokenStore::new(app.clone())
+        .connection_state()
+        .await?;
+    Ok(GithubStatus {
+        connected: username.is_some(),
+        username,
+        nexus_credential_ready,
+    })
 }
 
 /// Returns the signed-in user's recent repositories. An unconnected account

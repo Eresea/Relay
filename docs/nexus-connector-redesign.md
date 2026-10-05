@@ -15,7 +15,7 @@ Nexus login enables these connected features. Relay's local features still start
 
 ## What exists
 
-- Relay's GitHub Device Flow, token refresh, API client, PR diff/rules, notification pipeline, and keychain token are in `src-tauri/src/github`. Relay has Nexus account sign-in and a generic vault handoff; Relay deposits the GitHub token bundle with create-only permission and uses Nexus after the explicit read grant is approved.
+- Relay's GitHub Device Flow, token refresh, API client, PR diff/rules, notification pipeline, and keychain token are in `src-tauri/src/github`. Relay has Nexus account sign-in and a generic vault handoff; GitHub and Linear token bundles go through one module (`src-tauri/src/nexus_credentials.rs`): Relay creates the credential, grants itself read and replace access with `credentials:grant:self`, and reconciles concurrent device refreshes under the secret's ETag. Disconnect revokes Relay's grant, which disconnects every device.
 - Nexus has browser authorization code + PKCE for the `relay` client (`relay://auth/callback`). Relay requests `openid profile email credentials:create credentials:grant:self`. It can create credentials and grant or revoke access only for credentials it created, while `credentials:manage` remains restricted to user-facing administration. Granted clients can read a credential and can replace its secret only with an explicit replace grant.
 - Nexus event endpoints are bound to `(user_id, client_id)`. Ingress supports both the existing `X-Nexus-*` HMAC and generic raw-body HMAC; accepted JSON is stored in the shared client inbox and erased on ack. A new delivery publishes a payload-free `events.available` wakeup to the authenticated OAuth client's user WebSocket.
 

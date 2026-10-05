@@ -11,6 +11,7 @@ mod linear;
 #[allow(dead_code)]
 mod mobile_updates;
 mod nexus_auth;
+mod nexus_credentials;
 pub mod nexus_sync;
 mod notifications;
 mod opencloud;

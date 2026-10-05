@@ -1,7 +1,11 @@
+//! The GitHub token, shared across devices through the Nexus vault.
+//!
+//! The keychain copy keeps the connector working while Nexus is signed out or
+//! unreachable; whenever Nexus answers, the newer of the two bundles wins and
+//! both sides are brought up to it.
+
 use async_trait::async_trait;
-use reqwest::header::{HeaderValue, ETAG, IF_MATCH};
-use reqwest::StatusCode;
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 use serde_json::json;
 use std::time::{SystemTime, UNIX_EPOCH};
 use tauri::AppHandle;
@@ -9,78 +13,28 @@ use tauri::Manager;
 use tauri_plugin_store::StoreExt;
 
 use crate::error::{Error, Result};
-use crate::nexus_auth;
+use crate::{nexus_auth, nexus_credentials};
 
 use super::token_store::{KeyringTokenStore, StoredToken, TokenStore};
 
-const NEXUS: &str = "https://nexus.eresea.net/api/v1";
-const POINTER_KEY: &str = "github.nexusCredential";
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct CredentialPointer {
-    user_id: String,
-    credential_id: String,
-    username: String,
-    #[serde(default)]
-    pending_upload: bool,
-}
-
-#[derive(Deserialize)]
-struct CredentialCreated {
-    id: String,
-}
-
-#[derive(Deserialize)]
-struct SecretResponse {
-    secret: String,
-}
-
-#[derive(Serialize)]
-#[serde(rename_all = "camelCase")]
-struct CredentialCreate {
-    namespace: &'static str,
-    #[serde(rename = "type")]
-    credential_type: &'static str,
-    label: String,
-    metadata: serde_json::Value,
-    secret: String,
-}
-
-#[derive(Serialize)]
-#[serde(rename_all = "camelCase")]
-struct SecretReplace<'a> {
-    secret: &'a str,
-}
+const NAMESPACE: &str = "github";
+/// Where earlier versions kept the id of a credential they created without
+/// granting it to Relay. Read once to grant it, then removed.
+const LEGACY_POINTER_KEY: &str = "github.nexusCredential";
 
 pub struct NexusGitHubTokenStore {
     app: AppHandle,
-    http: reqwest::Client,
 }
 
 impl NexusGitHubTokenStore {
     pub fn new(app: AppHandle) -> Self {
-        Self {
-            app,
-            http: reqwest::Client::builder()
-                .redirect(reqwest::redirect::Policy::none())
-                .timeout(std::time::Duration::from_secs(30))
-                .build()
-                .expect("Nexus HTTP client configuration is valid"),
-        }
+        Self { app }
     }
 
-    pub async fn connection_state(&self) -> Result<(Option<String>, bool, bool)> {
-        let local = KeyringTokenStore.get().await?;
-        let Some(pointer) = self.pointer()? else {
-            return Ok((local.map(|token| token.username), false, false));
-        };
-        let same_user = self.current_user_id().await?.as_deref() == Some(pointer.user_id.as_str());
-        if !same_user {
-            return Ok((local.map(|token| token.username), false, false));
-        }
-        let username = local.map(|token| token.username).or(Some(pointer.username));
-        Ok((username, !pointer.pending_upload, pointer.pending_upload))
+    /// The connected username, and whether the token is stored in Nexus.
+    pub async fn connection_state(&self) -> Result<(Option<String>, bool)> {
+        let (token, in_nexus) = self.load().await?;
+        Ok((token.map(|token| token.username), in_nexus))
     }
 
     pub async fn get_valid(&self) -> Result<Option<StoredToken>> {
@@ -107,234 +61,146 @@ impl NexusGitHubTokenStore {
         Ok(Some(refreshed))
     }
 
-    fn pointer(&self) -> Result<Option<CredentialPointer>> {
-        self.app
-            .store("settings.json")
-            .map_err(|error| Error::NexusAuth(error.to_string()))?
-            .get(POINTER_KEY)
-            .map(serde_json::from_value)
-            .transpose()
-            .map_err(|error| Error::NexusAuth(error.to_string()))
-    }
-
-    fn save_pointer(&self, pointer: &CredentialPointer) -> Result<()> {
-        let store = self
-            .app
-            .store("settings.json")
-            .map_err(|error| Error::NexusAuth(error.to_string()))?;
-        store.set(POINTER_KEY, json!(pointer));
-        store
-            .save()
-            .map_err(|error| Error::NexusAuth(error.to_string()))
-    }
-
-    fn clear_pointer(&self) -> Result<()> {
-        let store = self
-            .app
-            .store("settings.json")
-            .map_err(|error| Error::NexusAuth(error.to_string()))?;
-        store.delete(POINTER_KEY);
-        store
-            .save()
-            .map_err(|error| Error::NexusAuth(error.to_string()))
-    }
-
-    async fn current_user_id(&self) -> Result<Option<String>> {
-        Ok(nexus_auth::status()?.user_id)
-    }
-
-    async fn credential_secret(
-        &self,
-        token: &str,
-        pointer: &CredentialPointer,
-    ) -> Result<(StoredToken, Option<String>)> {
-        let response = self
-            .http
-            .get(format!(
-                "{NEXUS}/credentials/{}/secret",
-                pointer.credential_id
-            ))
-            .bearer_auth(token)
-            .send()
-            .await
-            .map_err(nexus_request_error)?;
-        if response.status() == StatusCode::FORBIDDEN || response.status() == StatusCode::NOT_FOUND
-        {
-            return Err(Error::NexusAuth(
-                "GitHub credential has not been granted to Relay".into(),
-            ));
+    async fn load(&self) -> Result<(Option<StoredToken>, bool)> {
+        let local = KeyringTokenStore.get().await?;
+        if !nexus_auth::status()?.connected {
+            return Ok((local, false));
         }
-        let response = response.error_for_status().map_err(nexus_request_error)?;
-        let etag = response
-            .headers()
-            .get(ETAG)
-            .and_then(|value| value.to_str().ok())
-            .map(str::to_owned);
-        let body: SecretResponse = response.json().await.map_err(nexus_request_error)?;
-        let token_bundle = serde_json::from_str(&body.secret)
-            .map_err(|_| Error::NexusAuth("stored GitHub credential is invalid".into()))?;
-        Ok((token_bundle, etag))
+        self.grant_legacy_credential().await;
+        let remote = match nexus_credentials::list::<StoredToken>(&self.app, NAMESPACE).await {
+            Ok(credentials) => credentials
+                .into_iter()
+                .next()
+                .map(|credential| credential.secret),
+            Err(error) => {
+                log::warn!("github: could not read the Nexus credential: {error}");
+                return Ok((local, false));
+            }
+        };
+        let token = match (local, remote) {
+            // Reads never upload: another device's disconnect revokes the shared copy, and
+            // re-sharing this one would undo it. Connecting or a refresh shares it again.
+            (local, None) => return Ok((local, false)),
+            (None, Some(remote)) => remote,
+            (Some(local), Some(remote)) => newer(&local, &remote),
+        };
+        KeyringTokenStore.set(&token).await?;
+        Ok((Some(token), true))
     }
 
-    async fn create_credential(
-        &self,
-        token: &str,
-        stored: &StoredToken,
-        user_id: String,
-    ) -> Result<CredentialPointer> {
-        let secret =
-            serde_json::to_string(stored).map_err(|error| Error::NexusAuth(error.to_string()))?;
-        let request = CredentialCreate {
-            namespace: "github",
-            credential_type: "oauth-token-bundle",
-            label: format!("GitHub — {}", stored.username),
-            metadata: json!({ "username": stored.username }),
-            secret,
-        };
-        let response = self
-            .http
-            .post(format!("{NEXUS}/credentials"))
-            .bearer_auth(token)
-            .json(&request)
-            .send()
-            .await
-            .map_err(nexus_request_error)?
-            .error_for_status()
-            .map_err(nexus_request_error)?;
-        let created: CredentialCreated = response.json().await.map_err(nexus_request_error)?;
-        let pointer = CredentialPointer {
-            user_id,
-            credential_id: created.id,
-            username: stored.username.clone(),
-            pending_upload: true,
-        };
-        self.save_pointer(&pointer)?;
-        Ok(pointer)
+    async fn save_remote(&self, token: &StoredToken) -> Result<String> {
+        let result = nexus_credentials::save(
+            &self.app,
+            NAMESPACE,
+            format!("GitHub — {}", token.username),
+            json!({ "username": token.username }),
+            |_| true,
+            token,
+            newer,
+        )
+        .await;
+        if let Err(error) = &result {
+            log::warn!("github: could not store the token in Nexus: {error}");
+        }
+        result
     }
 
-    async fn try_upload(
-        &self,
-        token: &str,
-        pointer: &mut CredentialPointer,
-        stored: &StoredToken,
-    ) -> Result<bool> {
-        let etag = match self.credential_secret(token, pointer).await {
-            Ok((_, Some(etag))) => etag,
-            _ => return Ok(false),
+    async fn grant_legacy_credential(&self) {
+        #[derive(Deserialize)]
+        #[serde(rename_all = "camelCase")]
+        struct LegacyPointer {
+            credential_id: String,
+        }
+        let Ok(store) = self.app.store("settings.json") else {
+            return;
         };
-        let revision = HeaderValue::from_str(&etag).map_err(|_| {
-            Error::NexusAuth("Nexus returned an invalid credential revision".into())
-        })?;
-        let secret =
-            serde_json::to_string(stored).map_err(|error| Error::NexusAuth(error.to_string()))?;
-        let response = self
-            .http
-            .put(format!(
-                "{NEXUS}/credentials/{}/secret",
-                pointer.credential_id
-            ))
-            .bearer_auth(token)
-            .header(IF_MATCH, revision)
-            .json(&SecretReplace { secret: &secret })
-            .send()
-            .await
-            .map_err(nexus_request_error)?;
-        if response.status() == StatusCode::FORBIDDEN || response.status() == StatusCode::CONFLICT {
-            return Ok(false);
+        let Some(pointer) = store
+            .get(LEGACY_POINTER_KEY)
+            .and_then(|value| serde_json::from_value::<LegacyPointer>(value).ok())
+        else {
+            return;
+        };
+        match nexus_credentials::grant(&self.app, &pointer.credential_id).await {
+            Ok(()) => {
+                store.delete(LEGACY_POINTER_KEY);
+                let _ = store.save();
+            }
+            Err(error) => {
+                log::warn!("github: could not grant the earlier Nexus credential: {error}")
+            }
         }
-        response.error_for_status().map_err(nexus_request_error)?;
-        let (readback, _) = self.credential_secret(token, pointer).await?;
-        if readback != *stored {
-            return Ok(false);
-        }
-        pointer.pending_upload = false;
-        self.save_pointer(pointer)?;
-        KeyringTokenStore.clear().await?;
-        Ok(true)
+    }
+}
+
+/// The bundle that stays valid longer; a non-expiring token outlasts any
+/// expiring one. Ties go to `incoming`, the side most recently written.
+fn newer(existing: &StoredToken, incoming: &StoredToken) -> StoredToken {
+    let lifetime = |token: &StoredToken| token.expires_at.unwrap_or(u64::MAX);
+    if lifetime(incoming) >= lifetime(existing) {
+        incoming.clone()
+    } else {
+        existing.clone()
     }
 }
 
 #[async_trait]
 impl TokenStore for NexusGitHubTokenStore {
     async fn get(&self) -> Result<Option<StoredToken>> {
-        let Some(user_id) = self.current_user_id().await? else {
-            return KeyringTokenStore.get().await;
-        };
-        let Some(mut pointer) = self.pointer()? else {
-            let Some(local) = KeyringTokenStore.get().await? else {
-                return Ok(None);
-            };
-            if let Ok(access_token) = nexus_auth::access_token(&self.app).await {
-                if let Ok(mut pointer) =
-                    self.create_credential(&access_token, &local, user_id).await
-                {
-                    let _ = self.try_upload(&access_token, &mut pointer, &local).await;
-                }
-            }
-            return Ok(Some(local));
-        };
-        if pointer.user_id != user_id {
-            return KeyringTokenStore.get().await;
-        }
-        let Some(local) = KeyringTokenStore.get().await? else {
-            return match self
-                .credential_secret(&nexus_auth::access_token(&self.app).await?, &pointer)
-                .await
-            {
-                Ok((remote, _)) => Ok(Some(remote)),
-                Err(error) => Err(error),
-            };
-        };
-        if pointer.pending_upload {
-            if let Ok(access_token) = nexus_auth::access_token(&self.app).await {
-                let _ = self.try_upload(&access_token, &mut pointer, &local).await;
-            }
-            return Ok(Some(local));
-        }
-        let access_token = nexus_auth::access_token(&self.app).await?;
-        match self.credential_secret(&access_token, &pointer).await {
-            Ok((remote, _)) => {
-                KeyringTokenStore.clear().await?;
-                Ok(Some(remote))
-            }
-            Err(_) => Ok(Some(local)),
-        }
+        Ok(self.load().await?.0)
     }
 
     async fn set(&self, stored: &StoredToken) -> Result<()> {
         KeyringTokenStore.set(stored).await?;
-        let Some(user_id) = self.current_user_id().await? else {
-            return Ok(());
-        };
-        let Ok(access_token) = nexus_auth::access_token(&self.app).await else {
-            return Ok(());
-        };
-        let Some(mut pointer) = self.pointer()? else {
-            if let Ok(mut pointer) = self.create_credential(&access_token, stored, user_id).await {
-                let _ = self.try_upload(&access_token, &mut pointer, stored).await;
-            }
-            return Ok(());
-        };
-        if pointer.user_id != user_id {
-            return Ok(());
+        if nexus_auth::status()?.connected {
+            let _ = self.save_remote(stored).await;
         }
-        pointer.pending_upload = true;
-        self.save_pointer(&pointer)?;
-        let _ = self.try_upload(&access_token, &mut pointer, stored).await;
         Ok(())
     }
 
+    /// Disconnects every device: a credential left granted in Nexus would be
+    /// picked up again by the next read.
     async fn clear(&self) -> Result<()> {
-        KeyringTokenStore.clear().await?;
-        self.clear_pointer()
+        if nexus_auth::status()?.connected {
+            nexus_credentials::revoke(&self.app, NAMESPACE, |_| true).await?;
+        }
+        KeyringTokenStore.clear().await
     }
 }
 
-fn nexus_request_error(error: reqwest::Error) -> Error {
-    Error::NexusAuth(format!(
-        "credential request failed with {}",
-        error
-            .status()
-            .map_or("network error".into(), |status| status.to_string())
-    ))
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn token(name: &str, expires_at: Option<u64>) -> StoredToken {
+        StoredToken {
+            access_token: name.into(),
+            refresh_token: None,
+            expires_at,
+            username: "octocat".into(),
+        }
+    }
+
+    #[test]
+    fn newer_keeps_the_longest_lived_token() {
+        assert_eq!(
+            newer(&token("a", Some(5)), &token("b", Some(9))).access_token,
+            "b"
+        );
+        assert_eq!(
+            newer(&token("a", Some(9)), &token("b", Some(5))).access_token,
+            "a"
+        );
+        assert_eq!(
+            newer(&token("a", Some(9)), &token("b", None)).access_token,
+            "b"
+        );
+        assert_eq!(
+            newer(&token("a", None), &token("b", Some(9))).access_token,
+            "a"
+        );
+        assert_eq!(
+            newer(&token("a", None), &token("b", None)).access_token,
+            "b"
+        );
+    }
 }

@@ -512,7 +512,6 @@ export class TauriBridge {
         connected: false,
         username: null,
         nexusCredentialReady: false,
-        nexusCredentialPending: false,
       }
     );
   }
@@ -1677,7 +1676,6 @@ export interface GithubStatus {
   readonly connected: boolean;
   readonly username: string | null;
   readonly nexusCredentialReady: boolean;
-  readonly nexusCredentialPending: boolean;
 }
 
 export interface NexusAuthStatus {

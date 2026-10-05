@@ -12,14 +12,13 @@ use tokio_tungstenite::tungstenite::Message;
 
 use crate::error::{Error, Result};
 use crate::events::{AppEvent, NotificationAction, NotificationStatus, INFO_AUTO_DISMISS_MS};
-use crate::nexus_auth;
+use crate::nexus_auth::{self, NEXUS};
 use crate::notifications::{self, NotificationRecord};
 use tauri_plugin_store::StoreExt;
 
 use super::nexus_store::NexusGitHubTokenStore;
 use super::rules::{should_notify, PrEventKind};
 
-const NEXUS: &str = "https://nexus.eresea.net/api/v1";
 const NEXUS_WS: &str = "wss://nexus.eresea.net/ws/v1/user";
 const WEBHOOKS_KEY: &str = "github.webhooks";
 const WEBHOOK_EVENTS: [&str; 2] = ["pull_request", "check_run"];
@@ -262,7 +261,7 @@ pub async fn register(app: &AppHandle, repositories: Vec<String>) -> Result<Vec<
         }
         let endpoint: CreatedEndpoint = http_json(
             event_http_client()
-                .post(format!("{NEXUS}/events/endpoints"))
+                .post(format!("{NEXUS}/api/v1/events/endpoints"))
                 .bearer_auth(&nexus_token)
                 .json(&serde_json::json!({
                     "signatureMode": "hmac-sha256-raw-body",
@@ -273,10 +272,7 @@ pub async fn register(app: &AppHandle, repositories: Vec<String>) -> Result<Vec<
         )
         .await
         .map_err(nexus_http_error)?;
-        let callback = format!(
-            "https://nexus.eresea.net/api/v1/events/ingress/{}",
-            endpoint.endpoint_id
-        );
+        let callback = format!("{NEXUS}/api/v1/events/ingress/{}", endpoint.endpoint_id);
         let hooks_url = format!("https://api.github.com/repos/{owner}/{name}/hooks");
         #[derive(Deserialize)]
         struct CreatedHook {
@@ -304,7 +300,10 @@ pub async fn register(app: &AppHandle, repositories: Vec<String>) -> Result<Vec<
             Ok(created) => created,
             Err(error) => {
                 let _ = event_http_client()
-                    .delete(format!("{NEXUS}/events/endpoints/{}", endpoint.endpoint_id))
+                    .delete(format!(
+                        "{NEXUS}/api/v1/events/endpoints/{}",
+                        endpoint.endpoint_id
+                    ))
                     .bearer_auth(&nexus_token)
                     .send()
                     .await;
@@ -427,7 +426,10 @@ pub async fn unregister(app: &AppHandle, repo: &str) -> Result<()> {
         response.error_for_status().map_err(github_http_error)?;
     }
     let response = client
-        .delete(format!("{NEXUS}/events/endpoints/{}", webhook.endpoint_id))
+        .delete(format!(
+            "{NEXUS}/api/v1/events/endpoints/{}",
+            webhook.endpoint_id
+        ))
         .bearer_auth(&nexus_token)
         .send()
         .await
@@ -496,7 +498,7 @@ async fn drain_inbox(app: &AppHandle, http: &reqwest::Client) -> Result<()> {
     };
     loop {
         let response = http
-            .post(format!("{NEXUS}/events/inbox/claim"))
+            .post(format!("{NEXUS}/api/v1/events/inbox/claim"))
             .bearer_auth(&token)
             .json(&serde_json::json!({ "limit": INBOX_BATCH_SIZE }))
             .send()
@@ -726,7 +728,7 @@ fn event_title(kind: PrEventKind) -> &'static str {
 }
 
 async fn acknowledge(http: &reqwest::Client, token: &str, event: &InboxEvent) -> Result<()> {
-    http.post(format!("{NEXUS}/events/inbox/{}/ack", event.id))
+    http.post(format!("{NEXUS}/api/v1/events/inbox/{}/ack", event.id))
         .bearer_auth(token)
         .json(&serde_json::json!({ "claimToken": event.claim_token }))
         .send()

@@ -12,7 +12,7 @@ use url::Url;
 
 use crate::error::{Error, Result};
 
-const NEXUS: &str = "https://nexus.eresea.net";
+pub(crate) const NEXUS: &str = "https://nexus.eresea.net";
 const CLIENT_ID: &str = "relay";
 const REDIRECT_URI: &str = "relay://auth/callback";
 const SCOPE: &str = "openid profile email credentials:create credentials:grant:self";
@@ -494,9 +494,10 @@ pub async fn access_token(app: &AppHandle) -> Result<String> {
     Ok(refreshed.access_token)
 }
 
-fn http_client() -> Result<reqwest::Client> {
+pub(crate) fn http_client() -> Result<reqwest::Client> {
     reqwest::Client::builder()
         .redirect(reqwest::redirect::Policy::none())
+        .timeout(std::time::Duration::from_secs(30))
         .build()
         .map_err(|error| Error::NexusAuth(error.to_string()))
 }
