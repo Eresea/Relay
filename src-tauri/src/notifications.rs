@@ -187,15 +187,16 @@ pub fn ignore_webhook(app: &AppHandle, event_id: &str) -> Result<()> {
 }
 
 /// Records that processing `event_id` failed and returns whether to give up on it.
-/// Retries span an hour from the first failure, so a GitHub or network outage shorter
-/// than that still delivers, while an event that can never succeed is eventually dropped.
+/// The Nexus inbox is a per-installation cursor, so a failing event holds back every
+/// event after it. Retries span 15 minutes from the first failure: a shorter GitHub or
+/// network outage still delivers, and an event that can never succeed stops blocking.
 pub fn webhook_failed(app: &AppHandle, event_id: &str) -> Result<bool> {
     let connection = connection(app)?;
     ensure_webhook_table(&connection)?;
     webhook_failed_in(&connection, event_id, now_millis())
 }
 
-const WEBHOOK_GIVE_UP_MS: u64 = 60 * 60 * 1000;
+const WEBHOOK_GIVE_UP_MS: u64 = 15 * 60 * 1000;
 
 fn webhook_failed_in(connection: &rusqlite::Connection, event_id: &str, now: u64) -> Result<bool> {
     connection.execute(
@@ -328,7 +329,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn webhook_failure_gives_up_an_hour_after_the_first_failure() {
+    fn webhook_failure_gives_up_after_the_retry_window() {
         let connection = Connection::open_in_memory().unwrap();
         ensure_webhook_table(&connection).unwrap();
         assert!(!webhook_failed_in(&connection, "evt", 1_000).unwrap());

@@ -102,8 +102,27 @@ pub fn start(app: &AppHandle, client: &NexusClient) -> EventsHandle {
     let handler_app = app.clone();
     client.events(move |event| {
         let app = handler_app.clone();
-        async move { process_event(&app, &event).await }
+        async move { process_or_give_up(&app, &event).await }
     })
+}
+
+/// The SDK stops draining at a failed event and retries from it, so an event
+/// that can never succeed (a deleted repository, revoked access) would block
+/// every later one. Once it has failed for the whole retry window it is
+/// recorded as ignored and reported as handled, letting the cursor move on.
+async fn process_or_give_up(app: &AppHandle, event: &InboxEvent) -> Result<()> {
+    let Err(error) = process_event(app, event).await else {
+        return Ok(());
+    };
+    log::warn!("could not process Nexus event {}: {error}", event.id);
+    if !notifications::webhook_failed(app, &event.id)? {
+        return Err(error);
+    }
+    log::warn!(
+        "giving up on Nexus event {} after repeated failures",
+        event.id
+    );
+    notifications::ignore_webhook(app, &event.id)
 }
 
 pub async fn register(app: &AppHandle, repositories: Vec<String>) -> Result<Vec<String>> {
