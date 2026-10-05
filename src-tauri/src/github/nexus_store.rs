@@ -2,9 +2,11 @@
 //!
 //! Signed in to Nexus, the bundle is a `github` connection on the account
 //! (SDK `connections()`), created by Relay and therefore auto-granted to it.
-//! Signed out, it stays in the local keychain. A local token found while
-//! signed in is always newer than what Nexus holds (the store clears it after
-//! every successful upload), so it is moved to Nexus and then removed.
+//! The local keychain always caches the latest bundle, so GitHub keeps working
+//! signed out and a read does not cost a Nexus round trip. Nexus is consulted
+//! when the status is checked, on sign-in, and before a refresh (another
+//! installation may have rotated the refresh token). A connection that is gone
+//! from Nexus was disconnected on another installation, and is forgotten here.
 
 use async_trait::async_trait;
 use nexus_client::{
@@ -27,6 +29,27 @@ const PENDING_DELETES_KEY: &str = "github.pending-nexus-deletes";
 const NAMESPACE: &str = "github";
 const CREDENTIAL_TYPE: &str = "oauth-token-bundle";
 const REPLACE_ATTEMPTS: usize = 3;
+
+/// What Nexus holds for this installation's recorded connection.
+#[derive(Debug, PartialEq)]
+enum Shared {
+    /// Signed out, or no connection recorded for this account.
+    Unavailable,
+    /// Deleted, by a disconnect on another installation.
+    Gone,
+    Token(StoredToken),
+}
+
+/// Interprets one `read_secret` of the recorded connection.
+fn shared_from(read: std::result::Result<String, NexusError>) -> Result<Shared> {
+    match read {
+        Ok(secret) => serde_json::from_str(&secret)
+            .map(Shared::Token)
+            .map_err(|_| Error::NexusAuth("stored GitHub credential is invalid".into())),
+        Err(NexusError::Api { status: 404, .. }) => Ok(Shared::Gone),
+        Err(error) => Err(nexus_auth::nexus_error(error)),
+    }
+}
 
 /// Which Nexus connection holds the bundle, and whose account it belongs to.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -69,19 +92,25 @@ impl NexusGitHubTokenStore {
     }
 
     /// The connected username (if any) and, when not connected, a connection
-    /// that could be requested from another app.
+    /// that could be requested from another app. Checks Nexus, so a connection
+    /// disconnected on another installation shows as disconnected here.
     pub async fn connection_state(&self) -> Result<(Option<String>, Option<AvailableConnection>)> {
         let local = KeyringTokenStore.get().await?;
-        let Some((client, user_id)) = self.session().await else {
+        let Some((client, _)) = self.session().await else {
             return Ok((local.map(|token| token.username), None));
         };
         self.retry_pending_deletes().await;
-        let pointer = self.pointer()?.filter(|pointer| pointer.user_id == user_id);
-        if let Some(username) = local
-            .map(|token| token.username)
-            .or(pointer.map(|pointer| pointer.username))
-        {
-            return Ok((Some(username), None));
+        let token = match self.read_shared().await {
+            Ok(Shared::Token(token)) => Some(token),
+            Ok(Shared::Gone) => None,
+            Ok(Shared::Unavailable) => local,
+            Err(error) => {
+                log::debug!("could not read the GitHub connection from Nexus: {error}");
+                local
+            }
+        };
+        if let Some(token) = token {
+            return Ok((Some(token.username), None));
         }
         let available = match client.connections().available(NAMESPACE).await {
             Ok(list) => list.into_iter().next().map(Into::into),
@@ -123,19 +152,29 @@ impl NexusGitHubTokenStore {
                 credential_id: credential.id,
                 username: stored.username.clone(),
             })?;
+            KeyringTokenStore.set(&stored).await?;
             return Ok(Some(stored));
         }
         Ok(None)
     }
 
     pub async fn get_valid(&self) -> Result<Option<StoredToken>> {
-        let Some(stored) = TokenStore::get(self).await? else {
+        let Some(mut stored) = TokenStore::get(self).await? else {
             return Ok(None);
         };
         let now = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .unwrap_or_default()
             .as_millis() as u64;
+        if !super::poll::needs_refresh(stored.expires_at, now) {
+            return Ok(Some(stored));
+        }
+        // Another installation may already have refreshed, rotating the refresh token.
+        match self.read_shared().await? {
+            Shared::Gone => return Ok(None),
+            Shared::Token(shared) => stored = shared,
+            Shared::Unavailable => {}
+        }
         if !super::poll::needs_refresh(stored.expires_at, now) {
             return Ok(Some(stored));
         }
@@ -261,18 +300,30 @@ impl NexusGitHubTokenStore {
             .map_err(|error| Error::NexusAuth(error.to_string()))
     }
 
-    async fn read_remote(
-        &self,
-        client: &NexusClient,
-        pointer: &CredentialPointer,
-    ) -> Result<StoredToken> {
-        let secret = client
+    /// Reads the recorded connection and caches it locally; a connection gone
+    /// from Nexus is forgotten (pointer and cache).
+    async fn read_shared(&self) -> Result<Shared> {
+        let Some((client, user_id)) = self.session().await else {
+            return Ok(Shared::Unavailable);
+        };
+        let Some(pointer) = self.pointer()?.filter(|pointer| pointer.user_id == user_id) else {
+            return Ok(Shared::Unavailable);
+        };
+        let read = client
             .connections()
             .read_secret(&pointer.credential_id)
             .await
-            .map_err(nexus_auth::nexus_error)?;
-        serde_json::from_str(&secret.secret)
-            .map_err(|_| Error::NexusAuth("stored GitHub credential is invalid".into()))
+            .map(|secret| secret.secret);
+        let shared = shared_from(read)?;
+        match &shared {
+            Shared::Token(token) => KeyringTokenStore.set(token).await?,
+            Shared::Gone => {
+                log::info!("GitHub connection was removed from Nexus; disconnecting here");
+                self.clear().await?;
+            }
+            Shared::Unavailable => {}
+        }
+        Ok(shared)
     }
 
     /// Writes `stored` to Nexus: replaces the pointed-to connection, or
@@ -340,36 +391,71 @@ impl NexusGitHubTokenStore {
 
 #[async_trait]
 impl TokenStore for NexusGitHubTokenStore {
+    /// The cached token, shared to Nexus first if it was connected while
+    /// signed out; without a cache, whatever Nexus holds.
     async fn get(&self) -> Result<Option<StoredToken>> {
-        let local = KeyringTokenStore.get().await?;
-        let Some((client, user_id)) = self.session().await else {
-            return Ok(local);
+        let Some(local) = KeyringTokenStore.get().await? else {
+            return match self.read_shared().await? {
+                Shared::Token(token) => Ok(Some(token)),
+                Shared::Gone | Shared::Unavailable => Ok(None),
+            };
         };
-        if let Some(local) = local {
-            match self.upload(&client, &user_id, &local).await {
-                Ok(()) => KeyringTokenStore.clear().await?,
-                Err(error) => log::warn!("could not move the GitHub token to Nexus: {error}"),
+        if let Some((client, user_id)) = self.session().await {
+            // Share only a token connected while signed out (no pointer). A pointer for
+            // another account means this cache came from that account's connection, which
+            // must not be copied into the one now signed in.
+            if self.pointer()?.is_none() {
+                if let Err(error) = self.upload(&client, &user_id, &local).await {
+                    log::warn!("could not move the GitHub token to Nexus: {error}");
+                }
             }
-            return Ok(Some(local));
         }
-        let Some(pointer) = self.pointer()?.filter(|pointer| pointer.user_id == user_id) else {
-            return Ok(None);
-        };
-        self.read_remote(&client, &pointer).await.map(Some)
+        Ok(Some(local))
     }
 
     async fn set(&self, stored: &StoredToken) -> Result<()> {
+        KeyringTokenStore.set(stored).await?;
         if let Some((client, user_id)) = self.session().await {
-            match self.upload(&client, &user_id, stored).await {
-                Ok(()) => return KeyringTokenStore.clear().await,
-                Err(error) => log::warn!("could not save the GitHub token to Nexus: {error}"),
+            // Same rule as `get`: never copy another account's connection into this one.
+            if self
+                .pointer()?
+                .is_some_and(|pointer| pointer.user_id != user_id)
+            {
+                return Ok(());
+            }
+            if let Err(error) = self.upload(&client, &user_id, stored).await {
+                log::warn!("could not save the GitHub token to Nexus: {error}");
             }
         }
-        KeyringTokenStore.set(stored).await
+        Ok(())
     }
 
     async fn clear(&self) -> Result<()> {
         KeyringTokenStore.clear().await?;
         self.clear_pointer()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_connection_deleted_elsewhere_reads_as_gone() {
+        let token = StoredToken {
+            access_token: "a".into(),
+            refresh_token: None,
+            expires_at: None,
+            username: "octocat".into(),
+        };
+        let secret = serde_json::to_string(&token).unwrap();
+        assert_eq!(shared_from(Ok(secret)).unwrap(), Shared::Token(token));
+        let not_found = NexusError::Api {
+            status: 404,
+            code: "not_found".into(),
+            description: None,
+        };
+        assert_eq!(shared_from(Err(not_found)).unwrap(), Shared::Gone);
+        assert!(shared_from(Ok("not json".into())).is_err());
     }
 }
