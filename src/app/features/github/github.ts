@@ -1,4 +1,12 @@
-import { ChangeDetectionStrategy, Component, DestroyRef, inject, signal } from '@angular/core';
+import {
+  ChangeDetectionStrategy,
+  Component,
+  DestroyRef,
+  effect,
+  inject,
+  signal,
+  untracked,
+} from '@angular/core';
 import { FormsModule } from '@angular/forms';
 
 import { NexusAccount } from '@core/nexus-account';
@@ -20,6 +28,10 @@ import { UmbraButtonComponent } from '@umbra/components/umbra-button/umbra-butto
 import { UmbraInputComponent } from '@umbra/components/umbra-input/umbra-input.component';
 import { UmbraCheckboxComponent } from '@umbra/components/umbra-checkbox/umbra-checkbox.component';
 import { UmbraSwitchComponent } from '@umbra/components/umbra-switch/umbra-switch.component';
+
+const GRANT_POLL_INTERVAL_MS = 3000;
+/** Nexus grant requests expire after ten minutes. */
+const GRANT_POLL_TIMEOUT_MS = 10 * 60 * 1000;
 
 const KIND_LABELS: Readonly<Record<PrEventKind, string>> = {
   opened: 'Opened',
@@ -129,6 +141,28 @@ function connectorErrorMessage(error: unknown): string {
               applies the notification rules below.
             </p>
 
+            @if (githubConnection()?.available; as available) {
+              <div class="client-id-setup">
+                <p class="hint">
+                  Your Nexus account already has a GitHub connection ({{ available.label }}) from
+                  {{ available.app }}.
+                </p>
+                @if (grantPending()) {
+                  <p class="hint">
+                    Approve access in your browser; Relay picks it up automatically.
+                  </p>
+                } @else {
+                  <umbra-button
+                    variant="default"
+                    [disabled]="busy()"
+                    (click)="useNexusConnection(available.id)"
+                  >
+                    Use GitHub connection from {{ available.app }}
+                  </umbra-button>
+                }
+              </div>
+            }
+
             <div class="client-id-setup">
               <p class="hint">
                 Needs a GitHub OAuth App with Device Flow enabled. Create one, then paste its client
@@ -195,13 +229,8 @@ function connectorErrorMessage(error: unknown): string {
                 </p>
               </div>
             </div>
-            @if (githubConnection()?.nexusCredentialReady) {
-              <p class="hint">GitHub credentials are stored in Nexus.</p>
-            } @else if (githubConnection()?.nexusCredentialPending) {
-              <p class="hint">
-                Grant Relay read and replace access to this GitHub credential in Nexus. Relay keeps
-                the local copy until it can read the saved credential back.
-              </p>
+            @if (nexusAuth().connected) {
+              <p class="hint">Your GitHub connection is saved in your Nexus account.</p>
             }
           </section>
 
@@ -215,7 +244,8 @@ function connectorErrorMessage(error: unknown): string {
             </p>
             @if (!nexusAuth().connected) {
               <p class="hint">
-                Connect through the account button below Settings to enable webhook delivery.
+                Sign in with Nexus from the account button below Settings to enable webhook
+                delivery.
               </p>
             } @else if (webhookRepositories().length === 0) {
               <p class="hint">No repositories are available from GitHub.</p>
@@ -579,6 +609,9 @@ export class Github {
   protected readonly webhookSuccess = signal('');
   protected readonly nexusAuth = inject(NexusAccount).status;
   protected readonly deviceAuth = signal<DeviceAuthorization | null>(null);
+  /** The consent page for an existing Nexus GitHub connection is open. */
+  protected readonly grantPending = signal(false);
+  private grantPoll: ReturnType<typeof setInterval> | null = null;
   /** The most recent "blocked" detail reported for the in-flight connect job, if any — the real
    * reason a connection attempt failed, shown in place of a generic message when it is available. */
   private blockedMessage = '';
@@ -604,7 +637,11 @@ export class Github {
   private copyCodeTimeout: ReturnType<typeof setTimeout> | null = null;
 
   constructor() {
-    void this.refreshStatus();
+    // Re-read on sign-in/out too: signing in loads the account's GitHub connection.
+    effect(() => {
+      void this.nexusAuth().connected;
+      untracked(() => void this.refreshStatus());
+    });
 
     console.log('[github] component constructed, subscribing to relay://event');
     void this.tauri
@@ -636,9 +673,51 @@ export class Github {
       });
 
     this.destroyRef.onDestroy(() => {
+      this.stopGrantPoll();
       this.stopConnectFallbackPoll();
       if (this.copyCodeTimeout) clearTimeout(this.copyCodeTimeout);
     });
+  }
+
+  /**
+   * Asks Nexus for access to a GitHub connection another app created and opens the consent page.
+   * The grant arrives out of band, so poll Nexus until Relay can read the connection (or the
+   * request expires).
+   */
+  protected async useNexusConnection(credentialId: string): Promise<void> {
+    this.error.set('');
+    this.busy.set(true);
+    try {
+      await this.tauri.githubUseNexusConnection(credentialId);
+    } catch (error) {
+      this.error.set(connectorErrorMessage(error));
+      return;
+    } finally {
+      this.busy.set(false);
+    }
+    this.grantPending.set(true);
+    this.stopGrantPoll();
+    const expiresAt = Date.now() + GRANT_POLL_TIMEOUT_MS;
+    this.grantPoll = setInterval(() => void this.pollGrant(expiresAt), GRANT_POLL_INTERVAL_MS);
+  }
+
+  private async pollGrant(expiresAt: number): Promise<void> {
+    try {
+      if ((await this.tauri.githubAdoptConnection())?.connected) {
+        this.stopGrantPoll();
+        await this.refreshStatus();
+        return;
+      }
+    } catch {
+      // Transient (offline, signed out): keep waiting until the request expires.
+    }
+    if (Date.now() >= expiresAt) this.stopGrantPoll();
+  }
+
+  private stopGrantPoll(): void {
+    if (this.grantPoll !== null) clearInterval(this.grantPoll);
+    this.grantPoll = null;
+    this.grantPending.set(false);
   }
 
   private startConnectFallbackPoll(jobId: string): void {

@@ -1,7 +1,7 @@
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use base64::Engine;
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
+use base64::Engine;
 use rand::RngCore;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
@@ -12,7 +12,7 @@ use url::Url;
 use crate::error::{Error, Result};
 use crate::nexus_auth;
 
-use super::{LinearConnection, LinearState, api, save_connected};
+use super::{api, save_connected, LinearConnection, LinearState};
 
 const AUTHORIZE_URL: &str = "https://linear.app/oauth/authorize";
 const TOKEN_URL: &str = "https://api.linear.app/oauth/token";
@@ -125,7 +125,7 @@ pub async fn start_agent(app: AppHandle, organization_id: String) -> Result<()> 
 }
 
 async fn start_with_actor(app: AppHandle, agent_organization_id: Option<String>) -> Result<()> {
-    if !nexus_auth::status()?.connected {
+    if !nexus_auth::is_signed_in(&app) {
         return Err(Error::LinearApi(
             "sign in to Nexus before connecting Linear".into(),
         ));
@@ -505,10 +505,8 @@ mod tests {
             .1;
         assert_eq!(user_actor, "user");
         assert_eq!(agent_actor, "app");
-        assert!(
-            agent
-                .query_pairs()
-                .any(|(key, value)| { key == "code_challenge_method" && value == "S256" })
-        );
+        assert!(agent
+            .query_pairs()
+            .any(|(key, value)| { key == "code_challenge_method" && value == "S256" }));
     }
 }

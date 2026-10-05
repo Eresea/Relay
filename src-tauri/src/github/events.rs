@@ -1,14 +1,11 @@
 use std::collections::HashMap;
-use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
-use futures_util::{SinkExt, StreamExt};
+use nexus_client::{
+    Error as NexusError, EventEndpointInput, EventsHandle, InboxEvent, NexusClient,
+};
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
-use tauri::{AppHandle, Listener, Manager};
-use tokio_tungstenite::tungstenite::client::IntoClientRequest;
-use tokio_tungstenite::tungstenite::http::header::AUTHORIZATION;
-use tokio_tungstenite::tungstenite::http::HeaderValue;
-use tokio_tungstenite::tungstenite::Message;
+use tauri::{AppHandle, Manager};
 
 use crate::error::{Error, Result};
 use crate::events::{AppEvent, NotificationAction, NotificationStatus, INFO_AUTO_DISMISS_MS};
@@ -19,21 +16,15 @@ use tauri_plugin_store::StoreExt;
 use super::nexus_store::NexusGitHubTokenStore;
 use super::rules::{should_notify, PrEventKind};
 
-const NEXUS: &str = "https://nexus.eresea.net/api/v1";
-const NEXUS_WS: &str = "wss://nexus.eresea.net/ws/v1/user";
 const WEBHOOKS_KEY: &str = "github.webhooks";
 const WEBHOOK_EVENTS: [&str; 2] = ["pull_request", "check_run"];
-const INBOX_BATCH_SIZE: usize = 1;
-/// Nexus hides a claimed, unacknowledged event for 2 minutes. Draining a little after that
-/// retries failed events even when no new delivery arrives to wake the socket.
-const RETRY_DRAIN_INTERVAL: Duration = Duration::from_secs(150);
 
 fn event_http_client() -> reqwest::Client {
     reqwest::Client::builder()
         .redirect(reqwest::redirect::Policy::none())
         .timeout(Duration::from_secs(30))
         .build()
-        .expect("Nexus and GitHub event HTTP client configuration is valid")
+        .expect("GitHub event HTTP client configuration is valid")
 }
 
 #[derive(Clone, Deserialize, Serialize)]
@@ -41,27 +32,6 @@ fn event_http_client() -> reqwest::Client {
 struct RegisteredWebhook {
     endpoint_id: String,
     hook_id: u64,
-}
-
-#[derive(Deserialize)]
-struct CreatedEndpoint {
-    endpoint_id: String,
-    signing_secret: String,
-}
-
-#[derive(Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct InboxResponse {
-    events: Vec<InboxEvent>,
-}
-
-#[derive(Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct InboxEvent {
-    id: String,
-    claim_token: String,
-    event_type: String,
-    payload: Value,
 }
 
 #[derive(Deserialize)]
@@ -121,111 +91,19 @@ enum InterpretedEvent {
     },
 }
 
-pub fn start(app: AppHandle) {
-    tauri::async_runtime::spawn(async move {
-        websocket_loop(app).await;
-    });
-}
-
-async fn websocket_loop(app: AppHandle) {
-    let (auth_sender, mut auth_changes) = tokio::sync::mpsc::unbounded_channel();
-    let _auth_listener = app.listen("nexus://auth", move |_| {
-        let _ = auth_sender.send(());
-    });
-    let mut retry = Duration::from_secs(1);
-    loop {
-        let connected = connect_and_drain(&app, &mut auth_changes).await;
-        if let Err(error) = connected {
-            log::debug!("Nexus realtime connection ended: {error}");
-            let auth_changed = tokio::select! {
-                _ = tokio::time::sleep(retry) => false,
-                changed = auth_changes.recv() => {
-                    changed.is_some()
-                }
-            };
-            retry = if auth_changed {
-                Duration::from_secs(1)
-            } else {
-                (retry * 2).min(Duration::from_secs(60))
-            };
-        } else {
-            tokio::time::sleep(Duration::from_secs(1)).await;
-            retry = Duration::from_secs(1);
-        }
-    }
-}
-
-async fn connect_and_drain(
-    app: &AppHandle,
-    auth_changes: &mut tokio::sync::mpsc::UnboundedReceiver<()>,
-) -> Result<()> {
-    let token = nexus_auth::access_token(app).await?;
-    let mut request = NEXUS_WS
-        .into_client_request()
-        .map_err(|error| Error::NexusAuth(error.to_string()))?;
-    request.headers_mut().insert(
-        AUTHORIZATION,
-        HeaderValue::from_str(&format!("Bearer {token}"))
-            .map_err(|error| Error::NexusAuth(error.to_string()))?,
-    );
-    let (mut socket, _) = tokio::time::timeout(
-        Duration::from_secs(15),
-        tokio_tungstenite::connect_async(request),
-    )
-    .await
-    .map_err(|_| Error::NexusAuth("Nexus realtime connection timed out".into()))?
-    .map_err(|error| Error::NexusAuth(error.to_string()))?;
-    sync_registered_hooks(app).await;
-    let http = event_http_client();
-    drain_inbox(app, &http).await?;
-    let mut auth_check = tokio::time::interval(Duration::from_secs(10));
-    auth_check.tick().await;
-    let mut heartbeat = tokio::time::interval(Duration::from_secs(25));
-    heartbeat.tick().await;
-    let mut last_pong = Instant::now();
-    let mut retry_drain = tokio::time::interval(RETRY_DRAIN_INTERVAL);
-    retry_drain.tick().await;
-    loop {
-        tokio::select! {
-            message = socket.next() => {
-                let Some(message) = message else { return Ok(()); };
-                match message.map_err(|error| Error::NexusAuth(error.to_string()))? {
-                    Message::Text(text) => {
-                        let available = serde_json::from_str::<serde_json::Value>(&text)
-                            .ok()
-                            .and_then(|event| event.get("type").and_then(Value::as_str).map(str::to_owned))
-                            .is_some_and(|kind| kind == "events.available");
-                        if available {
-                            drain_inbox(app, &http).await?;
-                        }
-                    }
-                    Message::Ping(payload) => {
-                        socket.send(Message::Pong(payload)).await
-                            .map_err(|error| Error::NexusAuth(error.to_string()))?;
-                    }
-                    Message::Pong(_) => last_pong = Instant::now(),
-                    Message::Close(_) => return Ok(()),
-                    _ => {}
-                }
-            }
-            _ = heartbeat.tick() => {
-                if last_pong.elapsed() > Duration::from_secs(55) {
-                    return Err(Error::NexusAuth("Nexus realtime heartbeat timed out".into()));
-                }
-                socket.send(Message::Ping(Vec::new().into())).await
-                    .map_err(|error| Error::NexusAuth(error.to_string()))?;
-            }
-            _ = retry_drain.tick() => drain_inbox(app, &http).await?,
-            _ = auth_check.tick() => {
-                if !matches!(nexus_auth::access_token(app).await, Ok(active) if active == token) {
-                    return Ok(());
-                }
-            }
-            changed = auth_changes.recv() => {
-                if changed.is_some() { return Ok(()); }
-            }
-        }
-    }
+/// Streams this installation's Nexus inbox into [`process_event`]. The SDK
+/// drains after every (re)connect and on each wakeup, and acknowledges an
+/// event only after `process_event` succeeded, so a delivery is never lost
+/// and a failed one is retried. Dropping the handle stops the stream; a
+/// `session.revoked` ends the session (the auth watcher then signs the UI out).
+pub fn start(app: &AppHandle, client: &NexusClient) -> EventsHandle {
+    let sync_app = app.clone();
+    tauri::async_runtime::spawn(async move { sync_registered_hooks(&sync_app).await });
+    let handler_app = app.clone();
+    client.events(move |event| {
+        let app = handler_app.clone();
+        async move { process_event(&app, &event).await }
+    })
 }
 
 pub async fn register(app: &AppHandle, repositories: Vec<String>) -> Result<Vec<String>> {
@@ -233,7 +111,8 @@ pub async fn register(app: &AppHandle, repositories: Vec<String>) -> Result<Vec<
         .get_valid()
         .await?
         .ok_or_else(|| Error::NexusAuth("connect GitHub before registering webhooks".into()))?;
-    let nexus_token = nexus_auth::access_token(app).await?;
+    let nexus = nexus_auth::signed_in_client(app)?;
+    let endpoints = nexus.event_endpoints();
     let store = app
         .store("settings.json")
         .map_err(|error| Error::NexusAuth(error.to_string()))?;
@@ -260,21 +139,18 @@ pub async fn register(app: &AppHandle, repositories: Vec<String>) -> Result<Vec<
             .await?;
             continue;
         }
-        let endpoint: CreatedEndpoint = http_json(
-            event_http_client()
-                .post(format!("{NEXUS}/events/endpoints"))
-                .bearer_auth(&nexus_token)
-                .json(&serde_json::json!({
-                    "signatureMode": "hmac-sha256-raw-body",
-                    "signatureHeader": "X-Hub-Signature-256",
-                    "deliveryIdHeader": "X-GitHub-Delivery",
-                    "eventTypeHeader": "X-GitHub-Event"
-                })),
-        )
-        .await
-        .map_err(nexus_http_error)?;
+        let endpoint = endpoints
+            .create(&EventEndpointInput {
+                signature_mode: Some("hmac-sha256-raw-body".into()),
+                signature_header: Some("X-Hub-Signature-256".into()),
+                delivery_id_header: Some("X-GitHub-Delivery".into()),
+                event_type_header: Some("X-GitHub-Event".into()),
+            })
+            .await
+            .map_err(nexus_auth::nexus_error)?;
         let callback = format!(
-            "https://nexus.eresea.net/api/v1/events/ingress/{}",
+            "{}/events/ingress/{}",
+            nexus.config().issuer.trim_end_matches('/'),
             endpoint.endpoint_id
         );
         let hooks_url = format!("https://api.github.com/repos/{owner}/{name}/hooks");
@@ -303,11 +179,7 @@ pub async fn register(app: &AppHandle, repositories: Vec<String>) -> Result<Vec<
         {
             Ok(created) => created,
             Err(error) => {
-                let _ = event_http_client()
-                    .delete(format!("{NEXUS}/events/endpoints/{}", endpoint.endpoint_id))
-                    .bearer_auth(&nexus_token)
-                    .send()
-                    .await;
+                let _ = endpoints.revoke(&endpoint.endpoint_id).await;
                 return Err(github_http_error(error));
             }
         };
@@ -410,7 +282,7 @@ pub async fn unregister(app: &AppHandle, repo: &str) -> Result<()> {
         .get_valid()
         .await?
         .ok_or_else(|| Error::NexusAuth("connect GitHub to remove its webhook".into()))?;
-    let nexus_token = nexus_auth::access_token(app).await?;
+    let nexus = nexus_auth::signed_in_client(app)?;
     let client = event_http_client();
     let response = client
         .delete(format!(
@@ -426,14 +298,9 @@ pub async fn unregister(app: &AppHandle, repo: &str) -> Result<()> {
     if response.status() != reqwest::StatusCode::NOT_FOUND {
         response.error_for_status().map_err(github_http_error)?;
     }
-    let response = client
-        .delete(format!("{NEXUS}/events/endpoints/{}", webhook.endpoint_id))
-        .bearer_auth(&nexus_token)
-        .send()
-        .await
-        .map_err(|error| Error::NexusAuth(error.to_string()))?;
-    if response.status() != reqwest::StatusCode::NOT_FOUND {
-        response.error_for_status().map_err(nexus_http_error)?;
+    match nexus.event_endpoints().revoke(&webhook.endpoint_id).await {
+        Ok(()) | Err(NexusError::Api { status: 404, .. }) => {}
+        Err(error) => return Err(nexus_auth::nexus_error(error)),
     }
     registered.remove(repo);
     store.set(
@@ -471,15 +338,6 @@ async fn http_json<T: for<'de> Deserialize<'de>>(
     request.send().await?.error_for_status()?.json().await
 }
 
-fn nexus_http_error(error: reqwest::Error) -> Error {
-    Error::NexusAuth(format!(
-        "Nexus webhook endpoint request failed ({})",
-        error
-            .status()
-            .map_or("network error".into(), |status| status.to_string())
-    ))
-}
-
 fn github_http_error(error: reqwest::Error) -> Error {
     Error::GithubRequestFailed(format!(
         "GitHub webhook request failed ({})",
@@ -489,63 +347,15 @@ fn github_http_error(error: reqwest::Error) -> Error {
     ))
 }
 
-async fn drain_inbox(app: &AppHandle, http: &reqwest::Client) -> Result<()> {
-    let token = match nexus_auth::access_token(app).await {
-        Ok(token) => token,
-        Err(_) => return Ok(()),
-    };
-    loop {
-        let response = http
-            .post(format!("{NEXUS}/events/inbox/claim"))
-            .bearer_auth(&token)
-            .json(&serde_json::json!({ "limit": INBOX_BATCH_SIZE }))
-            .send()
-            .await
-            .map_err(|error| Error::NexusAuth(error.to_string()))?
-            .error_for_status()
-            .map_err(|error| Error::NexusAuth(error.to_string()))?;
-        let inbox: InboxResponse = response
-            .json()
-            .await
-            .map_err(|error| Error::NexusAuth(error.to_string()))?;
-        let count = inbox.events.len();
-        for event in inbox.events {
-            if !valid_event_id(&event.id) || event.claim_token.is_empty() {
-                log::warn!("Nexus returned an invalid event claim");
-                continue;
-            }
-            // A failed event stays claimed for Nexus's lease, so keep draining the rest and
-            // let the retry tick pick it up again rather than dropping the connection.
-            if let Err(error) = process_event(app, http, &token, &event).await {
-                log::warn!("could not process Nexus event {}: {error}", event.id);
-                if notifications::webhook_failed(app, &event.id)? {
-                    log::warn!(
-                        "giving up on Nexus event {} after repeated failures",
-                        event.id
-                    );
-                    notifications::ignore_webhook(app, &event.id)?;
-                    acknowledge(http, &token, &event).await?;
-                }
-            }
-        }
-        if count < INBOX_BATCH_SIZE {
-            return Ok(());
-        }
-    }
-}
-
-async fn process_event(
-    app: &AppHandle,
-    http: &reqwest::Client,
-    token: &str,
-    event: &InboxEvent,
-) -> Result<()> {
+/// One delivery. The durable marker (processed or ignored) and any
+/// notification are written before returning `Ok`, which is what lets the SDK
+/// acknowledge the event; a redelivery of a marked event is a no-op.
+async fn process_event(app: &AppHandle, event: &InboxEvent) -> Result<()> {
     if notifications::webhook_processed(app, &event.id)? {
-        return acknowledge(http, token, event).await;
+        return Ok(());
     }
     let Some(interpreted) = interpret(event) else {
-        notifications::ignore_webhook(app, &event.id)?;
-        return acknowledge(http, token, event).await;
+        return notifications::ignore_webhook(app, &event.id);
     };
     let credential = NexusGitHubTokenStore::new(app.clone())
         .get_valid()
@@ -629,7 +439,7 @@ async fn process_event(
             emit_notification(app, record);
         }
     }
-    acknowledge(http, token, event).await
+    Ok(())
 }
 
 fn notification_record(
@@ -677,13 +487,6 @@ fn emit_notification(app: &AppHandle, record: NotificationRecord) {
     );
 }
 
-fn valid_event_id(id: &str) -> bool {
-    !id.is_empty()
-        && id
-            .bytes()
-            .all(|byte| byte.is_ascii_alphanumeric() || b"_-".contains(&byte))
-}
-
 fn interpret(event: &InboxEvent) -> Option<InterpretedEvent> {
     if event.event_type == "pull_request" {
         let payload: PullRequestPayload = serde_json::from_value(event.payload.clone()).ok()?;
@@ -723,18 +526,6 @@ fn event_title(kind: PrEventKind) -> &'static str {
         PrEventKind::CiFailed => "CI failed",
         PrEventKind::CiPassed => "CI passed",
     }
-}
-
-async fn acknowledge(http: &reqwest::Client, token: &str, event: &InboxEvent) -> Result<()> {
-    http.post(format!("{NEXUS}/events/inbox/{}/ack", event.id))
-        .bearer_auth(token)
-        .json(&serde_json::json!({ "claimToken": event.claim_token }))
-        .send()
-        .await
-        .map_err(|error| Error::NexusAuth(error.to_string()))?
-        .error_for_status()
-        .map_err(|error| Error::NexusAuth(error.to_string()))?;
-    Ok(())
 }
 
 fn now_millis() -> u64 {

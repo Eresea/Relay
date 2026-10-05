@@ -1,86 +1,131 @@
+//! Where the GitHub token bundle lives.
+//!
+//! Signed in to Nexus, the bundle is a `github` connection on the account
+//! (SDK `connections()`), created by Relay and therefore auto-granted to it.
+//! Signed out, it stays in the local keychain. A local token found while
+//! signed in is always newer than what Nexus holds (the store clears it after
+//! every successful upload), so it is moved to Nexus and then removed.
+
 use async_trait::async_trait;
-use reqwest::header::{HeaderValue, ETAG, IF_MATCH};
-use reqwest::StatusCode;
+use nexus_client::{
+    AuthState, AvailableCredential, CredentialInput, Error as NexusError, NexusClient,
+};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use std::time::{SystemTime, UNIX_EPOCH};
-use tauri::AppHandle;
-use tauri::Manager;
+use tauri::{AppHandle, Manager};
 use tauri_plugin_store::StoreExt;
 
 use crate::error::{Error, Result};
 use crate::nexus_auth;
+use crate::nexus_revoke::{self, update_pending};
 
 use super::token_store::{KeyringTokenStore, StoredToken, TokenStore};
 
-const NEXUS: &str = "https://nexus.eresea.net/api/v1";
 const POINTER_KEY: &str = "github.nexusCredential";
+const PENDING_DELETES_KEY: &str = "github.pending-nexus-deletes";
+const NAMESPACE: &str = "github";
+const CREDENTIAL_TYPE: &str = "oauth-token-bundle";
+const REPLACE_ATTEMPTS: usize = 3;
 
+/// Which Nexus connection holds the bundle, and whose account it belongs to.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct CredentialPointer {
     user_id: String,
     credential_id: String,
     username: String,
-    #[serde(default)]
-    pending_upload: bool,
 }
 
-#[derive(Deserialize)]
-struct CredentialCreated {
-    id: String,
-}
-
-#[derive(Deserialize)]
-struct SecretResponse {
-    secret: String,
-}
-
-#[derive(Serialize)]
+/// A GitHub connection in the account that another app created and Relay has
+/// not been granted yet.
+#[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
-struct CredentialCreate {
-    namespace: &'static str,
-    #[serde(rename = "type")]
-    credential_type: &'static str,
-    label: String,
-    metadata: serde_json::Value,
-    secret: String,
+pub struct AvailableConnection {
+    pub id: String,
+    pub label: String,
+    pub app: String,
 }
 
-#[derive(Serialize)]
-#[serde(rename_all = "camelCase")]
-struct SecretReplace<'a> {
-    secret: &'a str,
+impl From<AvailableCredential> for AvailableConnection {
+    fn from(credential: AvailableCredential) -> Self {
+        Self {
+            id: credential.id,
+            label: credential.label,
+            app: credential
+                .created_by
+                .map_or_else(|| "another app".into(), |creator| creator.name),
+        }
+    }
 }
 
 pub struct NexusGitHubTokenStore {
     app: AppHandle,
-    http: reqwest::Client,
 }
 
 impl NexusGitHubTokenStore {
     pub fn new(app: AppHandle) -> Self {
-        Self {
-            app,
-            http: reqwest::Client::builder()
-                .redirect(reqwest::redirect::Policy::none())
-                .timeout(std::time::Duration::from_secs(30))
-                .build()
-                .expect("Nexus HTTP client configuration is valid"),
-        }
+        Self { app }
     }
 
-    pub async fn connection_state(&self) -> Result<(Option<String>, bool, bool)> {
+    /// The connected username (if any) and, when not connected, a connection
+    /// that could be requested from another app.
+    pub async fn connection_state(&self) -> Result<(Option<String>, Option<AvailableConnection>)> {
         let local = KeyringTokenStore.get().await?;
-        let Some(pointer) = self.pointer()? else {
-            return Ok((local.map(|token| token.username), false, false));
+        let Some((client, user_id)) = self.session().await else {
+            return Ok((local.map(|token| token.username), None));
         };
-        let same_user = self.current_user_id().await?.as_deref() == Some(pointer.user_id.as_str());
-        if !same_user {
-            return Ok((local.map(|token| token.username), false, false));
+        self.retry_pending_deletes().await;
+        let pointer = self.pointer()?.filter(|pointer| pointer.user_id == user_id);
+        if let Some(username) = local
+            .map(|token| token.username)
+            .or(pointer.map(|pointer| pointer.username))
+        {
+            return Ok((Some(username), None));
         }
-        let username = local.map(|token| token.username).or(Some(pointer.username));
-        Ok((username, !pointer.pending_upload, pointer.pending_upload))
+        let available = match client.connections().available(NAMESPACE).await {
+            Ok(list) => list.into_iter().next().map(Into::into),
+            Err(error) => {
+                log::debug!("could not list available GitHub connections: {error}");
+                None
+            }
+        };
+        Ok((None, available))
+    }
+
+    /// Loads a GitHub connection the account has already granted to Relay
+    /// (created by Relay on another installation, or approved through the
+    /// consent page) and remembers it. `None` when there is none.
+    pub async fn adopt_granted(&self) -> Result<Option<StoredToken>> {
+        let Some((client, user_id)) = self.session().await else {
+            return Ok(None);
+        };
+        let connections = client.connections();
+        let granted = connections
+            .granted()
+            .await
+            .map_err(nexus_auth::nexus_error)?;
+        let pending = self.pending_deletes()?;
+        for credential in granted.into_iter().filter(|credential| {
+            credential.namespace == NAMESPACE
+                && credential.revoked_at.is_none()
+                && !pending.contains(&credential.id)
+        }) {
+            let secret = connections
+                .read_secret(&credential.id)
+                .await
+                .map_err(nexus_auth::nexus_error)?;
+            let Ok(stored) = serde_json::from_str::<StoredToken>(&secret.secret) else {
+                continue;
+            };
+            self.save_pointer(&CredentialPointer {
+                user_id,
+                credential_id: credential.id,
+                username: stored.username.clone(),
+            })?;
+            return Ok(Some(stored));
+        }
+        Ok(None)
     }
 
     pub async fn get_valid(&self) -> Result<Option<StoredToken>> {
@@ -107,14 +152,23 @@ impl NexusGitHubTokenStore {
         Ok(Some(refreshed))
     }
 
+    /// The signed-in client and the account id, or `None` when signed out.
+    async fn session(&self) -> Option<(NexusClient, String)> {
+        let client = nexus_auth::client(&self.app).ok()?;
+        let AuthState::SignedIn { .. } = client.auth_state() else {
+            return None;
+        };
+        let user = client.user().await.ok().flatten()?;
+        Some((client, user.sub))
+    }
+
     fn pointer(&self) -> Result<Option<CredentialPointer>> {
-        self.app
+        Ok(self
+            .app
             .store("settings.json")
             .map_err(|error| Error::NexusAuth(error.to_string()))?
             .get(POINTER_KEY)
-            .map(serde_json::from_value)
-            .transpose()
-            .map_err(|error| Error::NexusAuth(error.to_string()))
+            .and_then(|value| serde_json::from_value(value).ok()))
     }
 
     fn save_pointer(&self, pointer: &CredentialPointer) -> Result<()> {
@@ -128,6 +182,74 @@ impl NexusGitHubTokenStore {
             .map_err(|error| Error::NexusAuth(error.to_string()))
     }
 
+    fn pending_deletes(&self) -> Result<Vec<String>> {
+        Ok(self
+            .app
+            .store("settings.json")
+            .map_err(|error| Error::NexusAuth(error.to_string()))?
+            .get(PENDING_DELETES_KEY)
+            .and_then(|value| serde_json::from_value(value).ok())
+            .unwrap_or_default())
+    }
+
+    fn save_pending_deletes(&self, pending: &[String]) -> Result<()> {
+        let store = self
+            .app
+            .store("settings.json")
+            .map_err(|error| Error::NexusAuth(error.to_string()))?;
+        store.set(PENDING_DELETES_KEY, json!(pending));
+        store
+            .save()
+            .map_err(|error| Error::NexusAuth(error.to_string()))
+    }
+
+    /// Queues the pointed-to connection for deletion, clears the pointer and
+    /// the local token, then tries the delete (see [`nexus_revoke`]).
+    pub async fn disconnect(&self) -> Result<()> {
+        if let Some(pointer) = self.pointer()? {
+            let mut pending = self.pending_deletes()?;
+            update_pending(&mut pending, &pointer.credential_id, false);
+            self.save_pending_deletes(&pending)?;
+        }
+        self.clear().await?;
+        self.retry_pending_deletes().await;
+        Ok(())
+    }
+
+    /// Deletes queued connections Relay created. A connection that is gone or
+    /// belongs to another app is dropped from the queue; anything else (offline,
+    /// signed out) stays queued for the next attempt.
+    pub async fn retry_pending_deletes(&self) {
+        let Ok(mut pending) = self.pending_deletes() else {
+            return;
+        };
+        if pending.is_empty() {
+            return;
+        }
+        let Some((client, _)) = self.session().await else {
+            return;
+        };
+        let Ok(granted) = client.connections().granted().await else {
+            return;
+        };
+        for id in pending.clone() {
+            let found = granted
+                .iter()
+                .find(|credential| credential.id == id && credential.revoked_at.is_none());
+            match nexus_revoke::remove(&client, found).await {
+                nexus_revoke::Outcome::Removed => update_pending(&mut pending, &id, true),
+                nexus_revoke::Outcome::OtherApp => {
+                    log::info!("GitHub connection {id} was created by another app; remove it on the Nexus account page");
+                    update_pending(&mut pending, &id, true);
+                }
+                nexus_revoke::Outcome::Retry => {}
+            }
+        }
+        if let Err(error) = self.save_pending_deletes(&pending) {
+            log::warn!("could not update pending GitHub connection deletes: {error}");
+        }
+    }
+
     fn clear_pointer(&self) -> Result<()> {
         let store = self
             .app
@@ -139,202 +261,115 @@ impl NexusGitHubTokenStore {
             .map_err(|error| Error::NexusAuth(error.to_string()))
     }
 
-    async fn current_user_id(&self) -> Result<Option<String>> {
-        Ok(nexus_auth::status()?.user_id)
-    }
-
-    async fn credential_secret(
+    async fn read_remote(
         &self,
-        token: &str,
+        client: &NexusClient,
         pointer: &CredentialPointer,
-    ) -> Result<(StoredToken, Option<String>)> {
-        let response = self
-            .http
-            .get(format!(
-                "{NEXUS}/credentials/{}/secret",
-                pointer.credential_id
-            ))
-            .bearer_auth(token)
-            .send()
+    ) -> Result<StoredToken> {
+        let secret = client
+            .connections()
+            .read_secret(&pointer.credential_id)
             .await
-            .map_err(nexus_request_error)?;
-        if response.status() == StatusCode::FORBIDDEN || response.status() == StatusCode::NOT_FOUND
-        {
-            return Err(Error::NexusAuth(
-                "GitHub credential has not been granted to Relay".into(),
-            ));
-        }
-        let response = response.error_for_status().map_err(nexus_request_error)?;
-        let etag = response
-            .headers()
-            .get(ETAG)
-            .and_then(|value| value.to_str().ok())
-            .map(str::to_owned);
-        let body: SecretResponse = response.json().await.map_err(nexus_request_error)?;
-        let token_bundle = serde_json::from_str(&body.secret)
-            .map_err(|_| Error::NexusAuth("stored GitHub credential is invalid".into()))?;
-        Ok((token_bundle, etag))
+            .map_err(nexus_auth::nexus_error)?;
+        serde_json::from_str(&secret.secret)
+            .map_err(|_| Error::NexusAuth("stored GitHub credential is invalid".into()))
     }
 
-    async fn create_credential(
+    /// Writes `stored` to Nexus: replaces the pointed-to connection, or
+    /// creates one. A replace is conditional on the revision just read; when
+    /// another installation wrote in between (`credential_revision_conflict`)
+    /// the revision is re-read and the write retried.
+    async fn upload(
         &self,
-        token: &str,
+        client: &NexusClient,
+        user_id: &str,
         stored: &StoredToken,
-        user_id: String,
-    ) -> Result<CredentialPointer> {
+    ) -> Result<()> {
         let secret =
             serde_json::to_string(stored).map_err(|error| Error::NexusAuth(error.to_string()))?;
-        let request = CredentialCreate {
-            namespace: "github",
-            credential_type: "oauth-token-bundle",
-            label: format!("GitHub — {}", stored.username),
-            metadata: json!({ "username": stored.username }),
-            secret,
-        };
-        let response = self
-            .http
-            .post(format!("{NEXUS}/credentials"))
-            .bearer_auth(token)
-            .json(&request)
-            .send()
+        let connections = client.connections();
+        if let Some(pointer) = self.pointer()?.filter(|pointer| pointer.user_id == user_id) {
+            let mut missing = false;
+            for _ in 0..REPLACE_ATTEMPTS {
+                let revision = match connections.read_secret(&pointer.credential_id).await {
+                    Ok(current) => current.revision,
+                    Err(NexusError::Api { status: 404, .. }) => {
+                        missing = true;
+                        break;
+                    }
+                    Err(error) => return Err(nexus_auth::nexus_error(error)),
+                };
+                match connections
+                    .replace_secret(&pointer.credential_id, &secret, None, revision.as_deref())
+                    .await
+                {
+                    Ok(_) => {
+                        return self.save_pointer(&CredentialPointer {
+                            username: stored.username.clone(),
+                            ..pointer
+                        })
+                    }
+                    Err(error) if error.is_revision_conflict() => {}
+                    Err(error) => return Err(nexus_auth::nexus_error(error)),
+                }
+            }
+            if !missing {
+                return Err(Error::NexusAuth(
+                    "GitHub credential changed while saving; try again".into(),
+                ));
+            }
+        }
+        let created = connections
+            .create(&CredentialInput {
+                namespace: NAMESPACE.into(),
+                credential_type: CREDENTIAL_TYPE.into(),
+                label: format!("GitHub — {}", stored.username),
+                metadata: json!({ "username": stored.username }),
+                secret,
+                expires_at: None,
+            })
             .await
-            .map_err(nexus_request_error)?
-            .error_for_status()
-            .map_err(nexus_request_error)?;
-        let created: CredentialCreated = response.json().await.map_err(nexus_request_error)?;
-        let pointer = CredentialPointer {
-            user_id,
+            .map_err(nexus_auth::nexus_error)?;
+        self.save_pointer(&CredentialPointer {
+            user_id: user_id.to_owned(),
             credential_id: created.id,
             username: stored.username.clone(),
-            pending_upload: true,
-        };
-        self.save_pointer(&pointer)?;
-        Ok(pointer)
-    }
-
-    async fn try_upload(
-        &self,
-        token: &str,
-        pointer: &mut CredentialPointer,
-        stored: &StoredToken,
-    ) -> Result<bool> {
-        let etag = match self.credential_secret(token, pointer).await {
-            Ok((_, Some(etag))) => etag,
-            _ => return Ok(false),
-        };
-        let revision = HeaderValue::from_str(&etag).map_err(|_| {
-            Error::NexusAuth("Nexus returned an invalid credential revision".into())
-        })?;
-        let secret =
-            serde_json::to_string(stored).map_err(|error| Error::NexusAuth(error.to_string()))?;
-        let response = self
-            .http
-            .put(format!(
-                "{NEXUS}/credentials/{}/secret",
-                pointer.credential_id
-            ))
-            .bearer_auth(token)
-            .header(IF_MATCH, revision)
-            .json(&SecretReplace { secret: &secret })
-            .send()
-            .await
-            .map_err(nexus_request_error)?;
-        if response.status() == StatusCode::FORBIDDEN || response.status() == StatusCode::CONFLICT {
-            return Ok(false);
-        }
-        response.error_for_status().map_err(nexus_request_error)?;
-        let (readback, _) = self.credential_secret(token, pointer).await?;
-        if readback != *stored {
-            return Ok(false);
-        }
-        pointer.pending_upload = false;
-        self.save_pointer(pointer)?;
-        KeyringTokenStore.clear().await?;
-        Ok(true)
+        })
     }
 }
 
 #[async_trait]
 impl TokenStore for NexusGitHubTokenStore {
     async fn get(&self) -> Result<Option<StoredToken>> {
-        let Some(user_id) = self.current_user_id().await? else {
-            return KeyringTokenStore.get().await;
+        let local = KeyringTokenStore.get().await?;
+        let Some((client, user_id)) = self.session().await else {
+            return Ok(local);
         };
-        let Some(mut pointer) = self.pointer()? else {
-            let Some(local) = KeyringTokenStore.get().await? else {
-                return Ok(None);
-            };
-            if let Ok(access_token) = nexus_auth::access_token(&self.app).await {
-                if let Ok(mut pointer) =
-                    self.create_credential(&access_token, &local, user_id).await
-                {
-                    let _ = self.try_upload(&access_token, &mut pointer, &local).await;
-                }
-            }
-            return Ok(Some(local));
-        };
-        if pointer.user_id != user_id {
-            return KeyringTokenStore.get().await;
-        }
-        let Some(local) = KeyringTokenStore.get().await? else {
-            return match self
-                .credential_secret(&nexus_auth::access_token(&self.app).await?, &pointer)
-                .await
-            {
-                Ok((remote, _)) => Ok(Some(remote)),
-                Err(error) => Err(error),
-            };
-        };
-        if pointer.pending_upload {
-            if let Ok(access_token) = nexus_auth::access_token(&self.app).await {
-                let _ = self.try_upload(&access_token, &mut pointer, &local).await;
+        if let Some(local) = local {
+            match self.upload(&client, &user_id, &local).await {
+                Ok(()) => KeyringTokenStore.clear().await?,
+                Err(error) => log::warn!("could not move the GitHub token to Nexus: {error}"),
             }
             return Ok(Some(local));
         }
-        let access_token = nexus_auth::access_token(&self.app).await?;
-        match self.credential_secret(&access_token, &pointer).await {
-            Ok((remote, _)) => {
-                KeyringTokenStore.clear().await?;
-                Ok(Some(remote))
-            }
-            Err(_) => Ok(Some(local)),
-        }
+        let Some(pointer) = self.pointer()?.filter(|pointer| pointer.user_id == user_id) else {
+            return Ok(None);
+        };
+        self.read_remote(&client, &pointer).await.map(Some)
     }
 
     async fn set(&self, stored: &StoredToken) -> Result<()> {
-        KeyringTokenStore.set(stored).await?;
-        let Some(user_id) = self.current_user_id().await? else {
-            return Ok(());
-        };
-        let Ok(access_token) = nexus_auth::access_token(&self.app).await else {
-            return Ok(());
-        };
-        let Some(mut pointer) = self.pointer()? else {
-            if let Ok(mut pointer) = self.create_credential(&access_token, stored, user_id).await {
-                let _ = self.try_upload(&access_token, &mut pointer, stored).await;
+        if let Some((client, user_id)) = self.session().await {
+            match self.upload(&client, &user_id, stored).await {
+                Ok(()) => return KeyringTokenStore.clear().await,
+                Err(error) => log::warn!("could not save the GitHub token to Nexus: {error}"),
             }
-            return Ok(());
-        };
-        if pointer.user_id != user_id {
-            return Ok(());
         }
-        pointer.pending_upload = true;
-        self.save_pointer(&pointer)?;
-        let _ = self.try_upload(&access_token, &mut pointer, stored).await;
-        Ok(())
+        KeyringTokenStore.set(stored).await
     }
 
     async fn clear(&self) -> Result<()> {
         KeyringTokenStore.clear().await?;
         self.clear_pointer()
     }
-}
-
-fn nexus_request_error(error: reqwest::Error) -> Error {
-    Error::NexusAuth(format!(
-        "credential request failed with {}",
-        error
-            .status()
-            .map_or("network error".into(), |status| status.to_string())
-    ))
 }

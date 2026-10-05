@@ -55,9 +55,9 @@ Linear sign-in uses PKCE, requests `read,write`, and returns to
 that redirect URI, then set its public client ID as `RELAY_LINEAR_CLIENT_ID`
 before building Relay. For local development, set the variable in the shell
 that runs `npm run dev`; release builds read the same value from the GitHub
-Actions repository variable. Relay's Nexus OAuth client also needs
-`credentials:create` and `credentials:grant:self` for cross-device workspace
-sync. Sign in to Nexus before connecting a Linear workspace.
+Actions repository variable. Workspace tokens sync across devices as `linear`
+connections in the Nexus account (the `connections` scope Relay already
+requests). Sign in to Nexus before connecting a Linear workspace.
 
 ## Commands
 

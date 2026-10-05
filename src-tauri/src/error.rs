@@ -133,6 +133,9 @@ pub enum Error {
     #[error("Nexus authentication failed: {0}")]
     NexusAuth(String),
 
+    #[error("sign in to Nexus first")]
+    NexusSignedOut,
+
     #[error("OpenCloud request failed: {0}")]
     OpenCloud(String),
 

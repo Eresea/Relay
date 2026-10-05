@@ -20,18 +20,19 @@ pub mod token_store;
 use serde::Serialize;
 use std::path::PathBuf;
 use tauri::{AppHandle, Manager};
+use tauri_plugin_opener::OpenerExt;
 use tauri_plugin_store::StoreExt;
 
 use crate::error::{Error, Result};
 use crate::events::{NotificationAction, NotificationStatus};
 use crate::jobs::{self, JobRegistry, NotificationOptions};
+use crate::nexus_auth;
 
 use client::{GitHubClient, HttpGitHubClient, RepositorySummary};
-use nexus_store::NexusGitHubTokenStore;
+use nexus_store::{AvailableConnection, NexusGitHubTokenStore};
 use oauth::DeviceAuthorization;
 use poll::PullRequestSnapshot;
 use rules::GithubConnectorSettings;
-use token_store::TokenStore;
 
 const SETTINGS_KEY: &str = "github.settings";
 const POLL_CACHE_FILE: &str = "github-poll-cache.json";
@@ -41,32 +42,50 @@ const POLL_CACHE_FILE: &str = "github-poll-cache.json";
 pub struct GithubStatus {
     pub connected: bool,
     pub username: Option<String>,
-    pub nexus_credential_ready: bool,
-    pub nexus_credential_pending: bool,
+    /// A GitHub connection in the Nexus account that another app created and
+    /// Relay may request access to.
+    pub available: Option<AvailableConnection>,
 }
 
-/// Whether an account is connected. Cheap and synchronous — it only reads
-/// the keychain, never calls GitHub.
+/// Whether an account is connected, and whether the Nexus account holds a
+/// GitHub connection Relay could use instead.
 pub async fn status(app: &AppHandle) -> Result<GithubStatus> {
-    log::info!("github: status() called");
-    let (username, nexus_credential_ready, nexus_credential_pending) =
-        NexusGitHubTokenStore::new(app.clone())
-            .connection_state()
-            .await?;
-    match username {
-        Some(username) => Ok(GithubStatus {
-            connected: true,
-            username: Some(username),
-            nexus_credential_ready,
-            nexus_credential_pending,
-        }),
-        None => Ok(GithubStatus {
-            connected: false,
-            username: None,
-            nexus_credential_ready: false,
-            nexus_credential_pending: false,
-        }),
-    }
+    let (username, available) = NexusGitHubTokenStore::new(app.clone())
+        .connection_state()
+        .await?;
+    Ok(GithubStatus {
+        connected: username.is_some(),
+        username,
+        available,
+    })
+}
+
+/// Loads a GitHub connection Nexus has granted to Relay, if any, then reports
+/// the resulting status. Polled by the UI while a grant request is pending
+/// (the SDK does not surface the `credentials.granted` push).
+pub async fn adopt_connection(app: &AppHandle) -> Result<GithubStatus> {
+    NexusGitHubTokenStore::new(app.clone())
+        .adopt_granted()
+        .await?;
+    status(app).await
+}
+
+/// Asks Nexus for access to a GitHub connection another app created and opens
+/// its consent page in the browser.
+pub async fn use_connection(app: &AppHandle, credential_id: String) -> Result<()> {
+    let client = nexus_auth::signed_in_client(app)?;
+    let opener = app.clone();
+    client
+        .connections()
+        .request_grant(&credential_id, true, move |url| {
+            opener
+                .opener()
+                .open_url(url, None::<&str>)
+                .map_err(Into::into)
+        })
+        .await
+        .map(|_| ())
+        .map_err(nexus_auth::nexus_error)
 }
 
 /// Returns the signed-in user's recent repositories. An unconnected account
@@ -179,10 +198,13 @@ pub fn connect_start(
     })
 }
 
-/// Removes registered hooks, the GitHub credential, and the local PR cache.
+/// Removes registered hooks, the local token and the PR cache, and deletes the
+/// Nexus connection Relay created for every device (retried later when Nexus
+/// is unreachable; one created by another app stays until removed on the
+/// account page).
 pub async fn disconnect(app: &AppHandle) -> Result<()> {
     events::unregister_all(app).await?;
-    NexusGitHubTokenStore::new(app.clone()).clear().await?;
+    NexusGitHubTokenStore::new(app.clone()).disconnect().await?;
     let _ = std::fs::remove_file(poll_cache_path(app));
     Ok(())
 }
