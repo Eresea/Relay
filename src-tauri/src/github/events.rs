@@ -24,6 +24,9 @@ const NEXUS_WS: &str = "wss://nexus.eresea.net/ws/v1/user";
 const WEBHOOKS_KEY: &str = "github.webhooks";
 const WEBHOOK_EVENTS: [&str; 2] = ["pull_request", "check_run"];
 const INBOX_BATCH_SIZE: usize = 1;
+/// Nexus hides a claimed, unacknowledged event for 2 minutes. Draining a little after that
+/// retries failed events even when no new delivery arrives to wake the socket.
+const RETRY_DRAIN_INTERVAL: Duration = Duration::from_secs(150);
 
 fn event_http_client() -> reqwest::Client {
     reqwest::Client::builder()
@@ -180,6 +183,8 @@ async fn connect_and_drain(
     let mut heartbeat = tokio::time::interval(Duration::from_secs(25));
     heartbeat.tick().await;
     let mut last_pong = Instant::now();
+    let mut retry_drain = tokio::time::interval(RETRY_DRAIN_INTERVAL);
+    retry_drain.tick().await;
     loop {
         tokio::select! {
             message = socket.next() => {
@@ -210,6 +215,7 @@ async fn connect_and_drain(
                 socket.send(Message::Ping(Vec::new().into())).await
                     .map_err(|error| Error::NexusAuth(error.to_string()))?;
             }
+            _ = retry_drain.tick() => drain_inbox(app, &http).await?,
             _ = auth_check.tick() => {
                 if !matches!(nexus_auth::access_token(app).await, Ok(active) if active == token) {
                     return Ok(());
@@ -503,15 +509,24 @@ async fn drain_inbox(app: &AppHandle, http: &reqwest::Client) -> Result<()> {
             .await
             .map_err(|error| Error::NexusAuth(error.to_string()))?;
         let count = inbox.events.len();
-        let mut first_error = None;
         for event in inbox.events {
+            if !valid_event_id(&event.id) || event.claim_token.is_empty() {
+                log::warn!("Nexus returned an invalid event claim");
+                continue;
+            }
+            // A failed event stays claimed for Nexus's lease, so keep draining the rest and
+            // let the retry tick pick it up again rather than dropping the connection.
             if let Err(error) = process_event(app, http, &token, &event).await {
                 log::warn!("could not process Nexus event {}: {error}", event.id);
-                first_error.get_or_insert(error);
+                if notifications::webhook_failed(app, &event.id)? {
+                    log::warn!(
+                        "giving up on Nexus event {} after repeated failures",
+                        event.id
+                    );
+                    notifications::ignore_webhook(app, &event.id)?;
+                    acknowledge(http, &token, &event).await?;
+                }
             }
-        }
-        if let Some(error) = first_error {
-            return Err(error);
         }
         if count < INBOX_BATCH_SIZE {
             return Ok(());
@@ -525,11 +540,6 @@ async fn process_event(
     token: &str,
     event: &InboxEvent,
 ) -> Result<()> {
-    if !valid_event_id(&event.id) || event.claim_token.is_empty() {
-        return Err(Error::NexusAuth(
-            "Nexus returned an invalid event claim".into(),
-        ));
-    }
     if notifications::webhook_processed(app, &event.id)? {
         return acknowledge(http, token, event).await;
     }
