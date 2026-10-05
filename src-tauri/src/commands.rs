@@ -1683,11 +1683,6 @@ pub async fn nexus_auth_verify_mfa(
 }
 
 #[tauri::command]
-pub fn nexus_auth_google_start(app: AppHandle) -> Result<()> {
-    nexus_auth::google_start(&app)
-}
-
-#[tauri::command]
 pub fn nexus_auth_logout(app: AppHandle) -> Result<()> {
     nexus_auth::logout(&app)
 }

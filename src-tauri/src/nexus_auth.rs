@@ -22,7 +22,7 @@ const KEYRING_ACCOUNT: &str = "oauth-session";
 #[derive(Default)]
 pub struct NexusAuthState {
     pending: Mutex<Option<PendingAuth>>,
-    pending_mfa: Mutex<Option<PendingMfa>>,
+    pending_mfa: Mutex<Option<String>>,
     refresh: tokio::sync::Mutex<()>,
 }
 
@@ -30,11 +30,6 @@ struct PendingAuth {
     state: String,
     verifier: String,
     expires_at: u64,
-}
-
-enum PendingMfa {
-    Ticket(String),
-    GoogleTransaction(String),
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -112,8 +107,7 @@ pub async fn login(app: &AppHandle, email: String, password: String) -> Result<L
                 "Nexus returned an invalid MFA challenge".into(),
             ));
         }
-        *app.state::<NexusAuthState>().pending_mfa.lock().unwrap() =
-            Some(PendingMfa::Ticket(response.mfa_ticket));
+        *app.state::<NexusAuthState>().pending_mfa.lock().unwrap() = Some(response.mfa_ticket);
         return Ok(LoginResult { mfa_required: true });
     }
     let session = save_api_session(&http, response, "Nexus sign-in").await?;
@@ -152,7 +146,7 @@ pub async fn verify_email(token: String) -> Result<()> {
 }
 
 pub async fn verify_mfa(app: &AppHandle, code: String, recovery_code: String) -> Result<()> {
-    let challenge = app
+    let ticket = app
         .state::<NexusAuthState>()
         .pending_mfa
         .lock()
@@ -160,35 +154,14 @@ pub async fn verify_mfa(app: &AppHandle, code: String, recovery_code: String) ->
         .take()
         .ok_or_else(|| Error::NexusAuth("sign-in challenge expired; try again".into()))?;
     let http = http_client()?;
-    let (endpoint, payload) = match challenge {
-        PendingMfa::Ticket(ticket) => (
-            Url::parse(&format!("{NEXUS}/api/v1/auth/mfa/verify"))
-                .map_err(|_| Error::NexusAuth("invalid MFA verification URL".into()))?,
-            serde_json::json!({
-                "ticket": ticket,
-                "code": code,
-                "recoveryCode": recovery_code,
-                "clientId": CLIENT_ID
-            }),
-        ),
-        PendingMfa::GoogleTransaction(transaction_id) => {
-            let mut endpoint = Url::parse(&format!("{NEXUS}/api/v1/auth/transactions/"))
-                .map_err(|_| Error::NexusAuth("invalid MFA verification URL".into()))?;
-            endpoint
-                .path_segments_mut()
-                .map_err(|_| Error::NexusAuth("invalid MFA verification URL".into()))?
-                .push(&transaction_id)
-                .push("mfa")
-                .push("verify");
-            (
-                endpoint,
-                serde_json::json!({ "code": code, "recoveryCode": recovery_code }),
-            )
-        }
-    };
     let response: ApiAuthResponse = http
-        .post(endpoint)
-        .json(&payload)
+        .post(format!("{NEXUS}/api/v1/auth/mfa/verify"))
+        .json(&serde_json::json!({
+            "ticket": ticket,
+            "code": code,
+            "recoveryCode": recovery_code,
+            "clientId": CLIENT_ID
+        }))
         .send()
         .await
         .map_err(auth_request_error)?
@@ -200,20 +173,6 @@ pub async fn verify_mfa(app: &AppHandle, code: String, recovery_code: String) ->
     let session = save_api_session(&http, response, "Nexus MFA sign-in").await?;
     emit_connected(app, &session);
     Ok(())
-}
-
-pub fn google_start(app: &AppHandle) -> Result<()> {
-    let mut authorize = Url::parse(&format!("{NEXUS}/api/v1/auth/oauth/google/start"))
-        .map_err(|_| Error::NexusAuth("invalid Google authorization URL".into()))?;
-    authorize
-        .query_pairs_mut()
-        .append_pair("client_id", CLIENT_ID)
-        .append_pair("redirect_uri", REDIRECT_URI)
-        .append_pair("platform", "desktop")
-        .append_pair("handoff", "auto");
-    app.opener()
-        .open_url(authorize.as_str(), None::<&str>)
-        .map_err(|error| Error::NexusAuth(error.to_string()))
 }
 
 async fn save_api_session(
@@ -274,14 +233,29 @@ async fn save_api_session(
         .get("code")
         .filter(|code| !code.is_empty())
         .ok_or_else(|| Error::NexusAuth("Nexus returned no authorization code".into()))?;
+    let _ = http
+        .post(format!("{NEXUS}/api/v1/auth/logout"))
+        .bearer_auth(bootstrap_token)
+        .send()
+        .await;
+    exchange_code(http, code, &verifier, flow).await
+}
+
+/// Trades an authorization code for tokens, looks up the profile, and stores the session.
+async fn exchange_code(
+    http: &reqwest::Client,
+    code: &str,
+    verifier: &str,
+    flow: &str,
+) -> Result<Session> {
     let token: TokenResponse = http
         .post(format!("{NEXUS}/api/v1/oauth/token"))
         .form(&[
             ("grant_type", "authorization_code"),
             ("client_id", CLIENT_ID),
             ("redirect_uri", REDIRECT_URI),
-            ("code", code.as_str()),
-            ("code_verifier", verifier.as_str()),
+            ("code", code),
+            ("code_verifier", verifier),
         ])
         .send()
         .await
@@ -291,11 +265,6 @@ async fn save_api_session(
         .json()
         .await
         .map_err(auth_request_error)?;
-    let _ = http
-        .post(format!("{NEXUS}/api/v1/auth/logout"))
-        .bearer_auth(bootstrap_token)
-        .send()
-        .await;
     let user: UserInfo = http
         .get(format!("{NEXUS}/api/v1/oauth/userinfo"))
         .bearer_auth(&token.access_token)
@@ -383,25 +352,14 @@ pub fn status() -> Result<NexusAuthStatus> {
 }
 
 pub fn start(app: &AppHandle) -> Result<()> {
-    let mut random = [0u8; 48];
-    rand::thread_rng().fill_bytes(&mut random);
-    let verifier = URL_SAFE_NO_PAD.encode(random);
-    let challenge = URL_SAFE_NO_PAD.encode(Sha256::digest(verifier.as_bytes()));
-    let mut random_state = [0u8; 32];
-    rand::thread_rng().fill_bytes(&mut random_state);
-    let state = URL_SAFE_NO_PAD.encode(random_state);
-    {
-        let auth_state = app.state::<NexusAuthState>();
-        let mut pending = auth_state.pending.lock().unwrap();
-        if pending.is_some() {
-            return Err(Error::NexusAuth("sign-in is already in progress".into()));
-        }
-        *pending = Some(PendingAuth {
-            state: state.clone(),
-            verifier,
-            expires_at: now_seconds() + 600,
-        });
-    }
+    let (verifier, challenge) = generate_pkce();
+    let state = random_url_token(32);
+    // A new attempt replaces an abandoned one; the old tab's callback then fails the state check.
+    *app.state::<NexusAuthState>().pending.lock().unwrap() = Some(PendingAuth {
+        state: state.clone(),
+        verifier,
+        expires_at: now_seconds() + 600,
+    });
 
     let mut authorize = Url::parse(&format!("{NEXUS}/api/v1/oauth/authorize"))
         .map_err(|_| Error::NexusAuth("invalid authorization URL".into()))?;
@@ -422,12 +380,16 @@ pub fn start(app: &AppHandle) -> Result<()> {
 }
 
 pub fn logout(app: &AppHandle) -> Result<()> {
+    delete_session()?;
+    emit_disconnected(app, None);
+    Ok(())
+}
+
+fn delete_session() -> Result<()> {
     match entry()?.delete_credential() {
         Ok(()) | Err(keyring::Error::NoEntry) => Ok(()),
         Err(error) => Err(Error::TokenStore(error.to_string())),
-    }?;
-    emit_disconnected(app, None);
-    Ok(())
+    }
 }
 
 pub async fn handle_callback(app: AppHandle, callback: Url) {
@@ -441,43 +403,12 @@ pub async fn handle_callback(app: AppHandle, callback: Url) {
         .query_pairs()
         .into_owned()
         .collect::<std::collections::HashMap<_, _>>();
-    if let Some(transaction_id) = params.get("mfaTransactionId") {
-        *app.state::<NexusAuthState>().pending_mfa.lock().unwrap() =
-            Some(PendingMfa::GoogleTransaction(transaction_id.clone()));
-        let _ = app.emit(
-            "nexus://auth",
-            NexusAuthStatus {
-                connected: false,
-                mfa_required: true,
-                user_id: None,
-                email: None,
-                display_name: None,
-                error: None,
-            },
-        );
+    let Some(pending) = take_callback_pending(
+        &mut app.state::<NexusAuthState>().pending.lock().unwrap(),
+        params.get("state").map_or("", String::as_str),
+        now_seconds(),
+    ) else {
         return;
-    }
-    if let Some(transaction_id) = params.get("authTransactionId") {
-        match exchange_google_transaction(transaction_id).await {
-            Ok(session) => emit_connected(&app, &session),
-            Err(error) => {
-                log::warn!("Nexus Google sign-in failed: {error}");
-                emit_disconnected(&app, Some(error.to_string()));
-            }
-        }
-        return;
-    }
-    let state = params.get("state").cloned().unwrap_or_default();
-    let pending = {
-        let auth_state = app.state::<NexusAuthState>();
-        let mut slot = auth_state.pending.lock().unwrap();
-        if slot
-            .as_ref()
-            .is_none_or(|pending| pending.state != state || pending.expires_at <= now_seconds())
-        {
-            return;
-        }
-        slot.take().unwrap()
     };
     let result = async {
         if params.contains_key("error") {
@@ -487,99 +418,33 @@ pub async fn handle_callback(app: AppHandle, callback: Url) {
             .get("code")
             .filter(|code| !code.is_empty())
             .ok_or_else(|| Error::NexusAuth("missing authorization code".into()))?;
-        let http = http_client()?;
-        let token: TokenResponse = http
-            .post(format!("{NEXUS}/api/v1/oauth/token"))
-            .form(&[
-                ("grant_type", "authorization_code"),
-                ("client_id", CLIENT_ID),
-                ("redirect_uri", REDIRECT_URI),
-                ("code", code.as_str()),
-                ("code_verifier", pending.verifier.as_str()),
-            ])
-            .send()
-            .await
-            .map_err(auth_request_error)?
-            .error_for_status()
-            .map_err(auth_request_error)?
-            .json()
-            .await
-            .map_err(auth_request_error)?;
-        let user: UserInfo = http
-            .get(format!("{NEXUS}/api/v1/oauth/userinfo"))
-            .bearer_auth(&token.access_token)
-            .send()
-            .await
-            .map_err(auth_request_error)?
-            .error_for_status()
-            .map_err(auth_request_error)?
-            .json()
-            .await
-            .map_err(auth_request_error)?;
-        let session = Session {
-            access_token: token.access_token,
-            refresh_token: token.refresh_token,
-            expires_at: now_seconds().saturating_add(token.expires_in),
-            user_id: user.sub,
-            email: user.email,
-            display_name: user.name,
-        };
-        save_session(&session)?;
-        Ok::<_, Error>(session)
+        exchange_code(&http_client()?, code, &pending.verifier, "Nexus sign-in").await
     }
     .await;
-
     match result {
-        Ok(session) => {
-            let _ = app.emit(
-                "nexus://auth",
-                NexusAuthStatus {
-                    connected: true,
-                    mfa_required: false,
-                user_id: Some(session.user_id),
-                email: Some(session.email),
-                display_name: Some(session.display_name),
-                error: None,
-                },
-            );
-        }
+        Ok(session) => emit_connected(&app, &session),
         Err(error) => {
             log::warn!("Nexus sign-in failed: {error}");
-            let _ = app.emit(
-                "nexus://auth",
-                NexusAuthStatus {
-                    connected: false,
-                    mfa_required: false,
-                    user_id: None,
-                    email: None,
-                    display_name: None,
-                    error: None,
-                },
-            );
+            emit_disconnected(&app, Some(error.to_string()));
         }
     }
 }
 
-async fn exchange_google_transaction(transaction_id: &str) -> Result<Session> {
-    let http = http_client()?;
-    let response: ApiAuthResponse = http
-        .post(format!(
-            "{NEXUS}/api/v1/auth/transactions/{transaction_id}/exchange"
-        ))
-        .send()
-        .await
-        .map_err(|error| auth_request_error_at("Google transaction exchange", error))?
-        .error_for_status()
-        .map_err(|error| auth_request_error_at("Google transaction exchange", error))?
-        .json()
-        .await
-        .map_err(|error| auth_request_error_at("Google transaction response", error))?;
-    if response.access_token.is_empty() {
-        return Err(Error::NexusAuth(
-            "Google transaction exchange returned no access token".into(),
-        ));
+/// Only a callback carrying the state of the live, unexpired attempt may complete it.
+fn take_callback_pending(
+    pending: &mut Option<PendingAuth>,
+    state: &str,
+    now: u64,
+) -> Option<PendingAuth> {
+    let attempt = pending.as_ref()?;
+    if attempt.expires_at <= now {
+        pending.take();
+        return None;
     }
-    save_api_session(&http, response, "Google sign-in").await
+    if state.is_empty() || attempt.state != state {
+        return None;
+    }
+    pending.take()
 }
 
 pub async fn access_token(app: &AppHandle) -> Result<String> {
@@ -591,7 +456,7 @@ pub async fn access_token(app: &AppHandle) -> Result<String> {
         return Ok(session.access_token);
     }
     let http = http_client()?;
-    let token: TokenResponse = http
+    let response = http
         .post(format!("{NEXUS}/api/v1/oauth/token"))
         .form(&[
             ("grant_type", "refresh_token"),
@@ -600,7 +465,20 @@ pub async fn access_token(app: &AppHandle) -> Result<String> {
         ])
         .send()
         .await
-        .map_err(auth_request_error)?
+        .map_err(auth_request_error)?;
+    // Nexus answers a revoked or expired refresh token with 400 invalid_grant (401 for the
+    // client). Retrying cannot recover that, so drop the session instead of reporting
+    // "connected" forever; network and 5xx failures keep it for the next attempt.
+    if matches!(
+        response.status(),
+        reqwest::StatusCode::BAD_REQUEST | reqwest::StatusCode::UNAUTHORIZED
+    ) {
+        delete_session()?;
+        let error = Error::NexusAuth("Nexus session expired; sign in again".into());
+        emit_disconnected(app, Some(error.to_string()));
+        return Err(error);
+    }
+    let token: TokenResponse = response
         .error_for_status()
         .map_err(auth_request_error)?
         .json()
@@ -669,4 +547,46 @@ fn now_seconds() -> u64 {
         .duration_since(UNIX_EPOCH)
         .unwrap_or_default()
         .as_secs()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn pending(state: &str, expires_at: u64) -> Option<PendingAuth> {
+        Some(PendingAuth {
+            state: state.into(),
+            verifier: "verifier".into(),
+            expires_at,
+        })
+    }
+
+    #[test]
+    fn callback_completes_only_the_live_attempt() {
+        let mut slot = pending("abc", 100);
+        assert!(take_callback_pending(&mut slot, "other", 50).is_none());
+        assert!(take_callback_pending(&mut slot, "", 50).is_none());
+        assert!(
+            slot.is_some(),
+            "a forged callback must not cancel the real attempt"
+        );
+        assert_eq!(
+            take_callback_pending(&mut slot, "abc", 50)
+                .unwrap()
+                .verifier,
+            "verifier"
+        );
+        assert!(slot.is_none());
+        assert!(
+            take_callback_pending(&mut slot, "abc", 50).is_none(),
+            "codes are single-use"
+        );
+    }
+
+    #[test]
+    fn expired_attempt_is_dropped() {
+        let mut slot = pending("abc", 100);
+        assert!(take_callback_pending(&mut slot, "abc", 100).is_none());
+        assert!(slot.is_none());
+    }
 }

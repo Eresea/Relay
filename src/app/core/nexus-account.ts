@@ -127,7 +127,7 @@ export class NexusAccount {
       this.error.set('Google sign-in timed out. Try again.');
     }, 5 * 60 * 1000);
     try {
-      await this.tauri.nexusAuthGoogleStart();
+      await this.tauri.nexusAuthStart();
     } catch (error) {
       this.clearGooglePending();
       this.busy.set(false);

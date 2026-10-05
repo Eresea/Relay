@@ -1367,10 +1367,6 @@ export class TauriBridge {
     await this.invoke('nexus_auth_verify_mfa', { code, recoveryCode });
   }
 
-  async nexusAuthGoogleStart(): Promise<void> {
-    await this.invoke('nexus_auth_google_start');
-  }
-
   async nexusAuthLogout(): Promise<void> {
     await this.invoke('nexus_auth_logout');
   }
