@@ -16,7 +16,6 @@ const DASHBOARD_LIMIT: usize = 50;
 const PANEL_LIMIT: usize = 200;
 const PANEL_DEPTH_LIMIT: usize = 8;
 const LEAF_HEALTH_URL: &str = "https://leaf.eresea.net/api/version/health";
-const NEXUS_READINESS_URL: &str = "https://nexus.eresea.net/readyz";
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -434,7 +433,11 @@ pub async fn runtime_leaf_health() -> Result<LeafHealthObservation> {
 }
 
 #[tauri::command]
-pub async fn runtime_nexus_readiness() -> Result<NexusReadinessObservation> {
+pub async fn runtime_nexus_readiness(app: tauri::AppHandle) -> Result<NexusReadinessObservation> {
+    // `/readyz` sits at the root of the configured issuer's host.
+    let url = Url::parse(&crate::nexus_auth::client(&app)?.config().issuer)
+        .and_then(|issuer| issuer.join("/readyz"))
+        .map_err(|_| Error::NexusReadinessRequestFailed)?;
     let client = reqwest::Client::builder()
         .timeout(Duration::from_secs(5))
         .redirect(reqwest::redirect::Policy::none())
@@ -442,7 +445,7 @@ pub async fn runtime_nexus_readiness() -> Result<NexusReadinessObservation> {
         .map_err(|_| Error::NexusReadinessRequestFailed)?;
     let request_started = Instant::now();
     let response = client
-        .get(NEXUS_READINESS_URL)
+        .get(url)
         .send()
         .await
         .map_err(|_| Error::NexusReadinessRequestFailed)?;
