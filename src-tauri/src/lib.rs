@@ -1,3 +1,6 @@
+// Tauri commands take each frontend argument as a parameter.
+#![allow(clippy::too_many_arguments)]
+
 #[cfg(desktop)]
 mod codex;
 mod commands;

@@ -60,7 +60,7 @@ describe('UpdateCenter', () => {
     fixture.detectChanges();
     const host = fixture.nativeElement as HTMLElement;
 
-    (host.querySelector('.action') as HTMLButtonElement).click();
+    (host.querySelector('.indicator') as HTMLButtonElement).click();
     await fixture.whenStable();
 
     expect(bridge.updateInstall).toHaveBeenCalledOnce();
