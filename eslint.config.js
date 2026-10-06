@@ -5,7 +5,14 @@ import angular from 'angular-eslint';
 
 export default tseslint.config(
   {
-    ignores: ['dist/**', '.angular/**', 'src-tauri/target/**', 'src-tauri/gen/**'],
+    ignores: [
+      'dist/**',
+      '.angular/**',
+      'src-tauri/target/**',
+      'src-tauri/gen/**',
+      // Vendored subtree with its own conventions.
+      'packages/umbra/**',
+    ],
   },
   {
     files: ['**/*.ts'],

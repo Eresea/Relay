@@ -4,14 +4,15 @@ use std::fmt;
 
 use base64::engine::general_purpose::STANDARD as BASE64;
 use base64::Engine;
+use nexus_client::{Error as NexusError, NexusClient};
 use reqwest::header::{HeaderValue, IF_MATCH};
 use reqwest::{StatusCode, Url};
 use serde::{Deserialize, Serialize};
 use tauri::AppHandle;
 
-const NEXUS_URL: &str = "https://nexus.eresea.net/";
-const VAULT_PATH: &str = "api/v1/sync/vault";
-const LATEST_PATH: &str = "api/v1/sync/vault/latest";
+// Relative to the configured issuer (`…/api/v1/`).
+const VAULT_PATH: &str = "sync/vault";
+const LATEST_PATH: &str = "sync/vault/latest";
 const MAX_CIPHERTEXT_BYTES: usize = 512 * 1024;
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -35,6 +36,8 @@ struct ConflictBody {
 #[derive(Debug)]
 pub enum SyncError {
     Request(reqwest::Error),
+    /// No usable Nexus session (signed out, or the refresh failed).
+    Auth(NexusError),
     InvalidToken,
     InvalidBaseRevision,
     InvalidCiphertext,
@@ -48,6 +51,7 @@ impl fmt::Display for SyncError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Request(_) => write!(f, "Nexus sync request failed"),
+            Self::Auth(error) => write!(f, "{error}"),
             Self::InvalidToken => write!(f, "invalid Nexus access token"),
             Self::InvalidBaseRevision => write!(f, "invalid Nexus base revision"),
             Self::InvalidCiphertext => write!(f, "vault ciphertext is not valid base64"),
@@ -63,6 +67,7 @@ impl std::error::Error for SyncError {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {
             Self::Request(error) | Self::InvalidResponse(error) => Some(error),
+            Self::Auth(error) => Some(error),
             _ => None,
         }
     }
@@ -83,34 +88,43 @@ pub enum PutResult {
     },
 }
 
+/// Talks to the issuer `nexus` is configured with, authenticated by its session.
 pub struct NexusSyncClient {
     http: reqwest::Client,
     base_url: Url,
+    nexus: Option<NexusClient>,
 }
 
 impl NexusSyncClient {
-    pub fn new() -> Self {
-        Self {
-            http: reqwest::Client::builder()
-                .redirect(reqwest::redirect::Policy::none())
-                .build()
-                .expect("Nexus HTTP client configuration is valid"),
-            base_url: Url::parse(NEXUS_URL).expect("static Nexus URL is valid"),
-        }
+    pub fn new(nexus: &NexusClient) -> Self {
+        let issuer = format!("{}/", nexus.config().issuer.trim_end_matches('/'));
+        let mut client =
+            Self::with_base(Url::parse(&issuer).expect("the Nexus issuer is a valid URL"));
+        client.nexus = Some(nexus.clone());
+        client
     }
 
-    #[cfg(test)]
-    fn for_test(base_url: Url) -> Self {
+    fn with_base(base_url: Url) -> Self {
         Self {
             http: reqwest::Client::builder()
                 .redirect(reqwest::redirect::Policy::none())
                 .build()
                 .expect("Nexus HTTP client configuration is valid"),
             base_url,
+            nexus: None,
         }
     }
 
-    pub async fn latest(&self, access_token: &str) -> Result<Option<SyncRevision>, SyncError> {
+    async fn access_token(&self) -> Result<String, SyncError> {
+        let nexus = self
+            .nexus
+            .as_ref()
+            .ok_or(SyncError::Auth(NexusError::NotSignedIn))?;
+        nexus.access_token().await.map_err(SyncError::Auth)
+    }
+
+    pub async fn latest(&self) -> Result<Option<SyncRevision>, SyncError> {
+        let access_token = self.access_token().await?;
         let response = self
             .http
             .get(
@@ -118,7 +132,7 @@ impl NexusSyncClient {
                     .join(LATEST_PATH)
                     .expect("static path is valid"),
             )
-            .bearer_auth(valid_token(access_token)?)
+            .bearer_auth(valid_token(&access_token)?)
             .send()
             .await?;
         if response.status() == StatusCode::NOT_FOUND {
@@ -138,12 +152,12 @@ impl NexusSyncClient {
     pub async fn put_local_vault(
         &self,
         app: &AppHandle,
-        access_token: &str,
         base_revision_id: Option<&str>,
     ) -> Result<PutResult, SyncError> {
         let ciphertext =
             crate::vault::sync_ciphertext(app).map_err(|_| SyncError::VaultUnavailable)?;
-        self.put_vault(access_token, &ciphertext, base_revision_id)
+        let access_token = self.access_token().await?;
+        self.put_vault(&access_token, &ciphertext, base_revision_id)
             .await
     }
 
@@ -197,12 +211,6 @@ impl NexusSyncClient {
     }
 }
 
-impl Default for NexusSyncClient {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
 fn valid_token(token: &str) -> Result<&str, SyncError> {
     if token.is_empty() || HeaderValue::from_str(&format!("Bearer {token}")).is_err() {
         return Err(SyncError::InvalidToken);
@@ -245,7 +253,7 @@ mod tests {
             socket.write_all(response.as_bytes()).await.unwrap();
         });
 
-        let client = NexusSyncClient::for_test(Url::parse(&format!("http://{address}/")).unwrap());
+        let client = NexusSyncClient::with_base(Url::parse(&format!("http://{address}/")).unwrap());
         let result = client
             .put_vault("test-token", "eyJ2ZXJzaW9uIjoxfQ==", Some("rev-1"))
             .await
@@ -262,7 +270,7 @@ mod tests {
 
     #[tokio::test]
     async fn put_rejects_oversized_ciphertext_before_network_request() {
-        let client = NexusSyncClient::new();
+        let client = NexusSyncClient::with_base(Url::parse("http://127.0.0.1:9/").unwrap());
         let oversized = BASE64.encode(vec![0; MAX_CIPHERTEXT_BYTES + 1]);
         assert!(matches!(
             client.put_vault("test-token", &oversized, None).await,
