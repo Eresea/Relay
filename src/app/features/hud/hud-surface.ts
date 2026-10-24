@@ -24,10 +24,11 @@ import { Hud } from './hud';
         [icon]="n.icon ?? 'circle'"
         [hue]="hue(n.hueSource)"
         [status]="n.status"
+        [queueLength]="queueLength()"
         [progress]="n.progress ?? null"
         [actions]="n.actions ?? []"
-        [dismissLabel]="n.status === 'running' || n.status === 'waiting' ? 'Cancel' : 'Dismiss'"
-        (dismiss)="dismiss(n.notificationId, n.jobId, n.status)"
+        dismissLabel="Dismiss"
+        (dismiss)="dismiss(n.notificationId)"
         (action)="runAction($event, n.notificationId, n.jobId)"
       />
     }
@@ -44,11 +45,11 @@ export class HudSurface {
   private readonly tauri = inject(TauriBridge);
 
   protected readonly notification = this.center.current;
+  protected readonly queueLength = this.center.queueLength;
   protected readonly hue = hueFor;
 
-  protected dismiss(notificationId: string, jobId: string, status: string): void {
+  protected dismiss(notificationId: string): void {
     this.center.dismiss(notificationId);
-    if (status === 'running' || status === 'waiting') void this.tauri.cancelJob(jobId);
   }
 
   protected runAction(action: NotificationAction, notificationId: string, jobId: string): void {

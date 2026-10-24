@@ -30,6 +30,7 @@ describe('NotificationCenter', () => {
 
   it('starts with nothing to show', () => {
     expect(center.current()).toBeNull();
+    expect(center.queueLength()).toBe(0);
   });
 
   it('shows a notification as soon as one arrives', () => {
@@ -50,6 +51,7 @@ describe('NotificationCenter', () => {
     center.dismiss('job-1');
 
     expect(center.current()?.notificationId).toBe('job-2');
+    expect(center.queueLength()).toBe(1);
   });
 
   it('auto-dismisses completed notifications only when they reach the front', () => {
@@ -66,6 +68,35 @@ describe('NotificationCenter', () => {
     center.handle(notification('job-1'));
     center.handle(notification('job-2'));
     expect(center.current()?.jobId).toBe('job-1');
+    expect(center.queueLength()).toBe(2);
+  });
+
+  it('brings a failed job to the front so it is not hidden behind ongoing work', () => {
+    center.handle(notification('job-1'));
+    center.handle(notification('job-2'));
+
+    center.handle({ type: 'notificationDone', jobId: 'job-2', ok: false });
+
+    expect(center.current()).toEqual(
+      expect.objectContaining({ jobId: 'job-2', status: 'blocked' }),
+    );
+    expect(center.queueLength()).toBe(2);
+  });
+
+  it('starts the completion grace period when a queued completion becomes current', () => {
+    center.handle(notification('job-1', { status: 'done', autoDismissMs: 500 }));
+    center.handle(notification('job-2'));
+    vi.advanceTimersByTime(300);
+
+    center.handle({ type: 'notificationDone', jobId: 'job-2', ok: false });
+    vi.advanceTimersByTime(300);
+    center.dismiss('job-2');
+
+    expect(center.current()?.jobId).toBe('job-1');
+    vi.advanceTimersByTime(499);
+    expect(center.current()?.jobId).toBe('job-1');
+    vi.advanceTimersByTime(1);
+    expect(center.current()).toBeNull();
   });
 
   it('keeps separate notifications from one long-running job', () => {

@@ -29,7 +29,15 @@ export type HudStatus = 'running' | 'waiting' | 'blocked' | 'done' | 'idle';
       <p class="u-mono detail">{{ detail() }}</p>
     </div>
 
-    <span class="dot" [attr.data-status]="status()"></span>
+    <div class="state" [attr.data-status]="status()">
+      <span class="dot"></span>
+      <span>{{ statusLabel() }}</span>
+      @if (queueLength() > 1) {
+        <span class="queue-count" [attr.aria-label]="'Notification 1 of ' + queueLength()">
+          1 / {{ queueLength() }}
+        </span>
+      }
+    </div>
 
     <div class="controls">
       @for (item of actions(); track item.id) {
@@ -79,21 +87,11 @@ export type HudStatus = 'running' | 'waiting' | 'blocked' | 'done' | 'idle';
     }
 
     .controls {
-      position: absolute;
-      inset-block-start: var(--space-3);
-      inset-inline-end: var(--space-4);
       display: flex;
       align-items: center;
+      justify-content: flex-end;
+      grid-column: 1 / -1;
       gap: var(--space-2);
-      opacity: 0;
-      pointer-events: none;
-      transition: opacity var(--dur-hover) var(--ease-standard);
-    }
-
-    :host:hover .controls,
-    :host:focus-within .controls {
-      opacity: 1;
-      pointer-events: auto;
     }
 
     :host ::ng-deep .controls umbra-button {
@@ -112,12 +110,22 @@ export type HudStatus = 'running' | 'waiting' | 'blocked' | 'done' | 'idle';
 
     .detail {
       margin: var(--space-1) 0 0;
-      white-space: nowrap;
+      display: -webkit-box;
+      -webkit-box-orient: vertical;
+      -webkit-line-clamp: 2;
       overflow: hidden;
-      text-overflow: ellipsis;
     }
 
     /* Status is how it is going — never the entity hue. */
+    .state {
+      display: flex;
+      align-items: center;
+      gap: var(--space-2);
+      color: var(--text-muted);
+      font-size: var(--text-11);
+      white-space: nowrap;
+    }
+
     .dot {
       inline-size: 6px;
       block-size: 6px;
@@ -125,17 +133,23 @@ export type HudStatus = 'running' | 'waiting' | 'blocked' | 'done' | 'idle';
       background: var(--status-idle);
     }
 
-    .dot[data-status='running'] {
+    .state[data-status='running'] .dot {
       background: var(--status-running);
     }
-    .dot[data-status='waiting'] {
+    .state[data-status='waiting'] .dot {
       background: var(--status-waiting);
     }
-    .dot[data-status='blocked'] {
+    .state[data-status='blocked'] .dot {
       background: var(--status-blocked);
     }
-    .dot[data-status='done'] {
+    .state[data-status='done'] .dot {
       background: var(--status-done);
+    }
+
+    .queue-count {
+      margin-inline-start: var(--space-2);
+      color: var(--text-muted);
+      font-variant-numeric: tabular-nums;
     }
 
     .track {
@@ -149,6 +163,7 @@ export class Hud {
   readonly icon = input<string>('circle');
   readonly hue = input.required<EntityHue>();
   readonly status = input<HudStatus>('idle');
+  readonly queueLength = input(1);
   /** null hides the track entirely — never synthesise a percentage. */
   readonly progress = input<number | null>(null);
   readonly actions = input<readonly NotificationAction[]>([]);
@@ -157,4 +172,14 @@ export class Hud {
   readonly action = output<NotificationAction>();
 
   protected readonly tone = computed(() => hueVar(this.hue()));
+  protected readonly statusLabel = computed(
+    () =>
+      ({
+        running: 'Working',
+        waiting: 'Waiting',
+        blocked: 'Needs attention',
+        done: 'Done',
+        idle: 'Ready',
+      })[this.status()],
+  );
 }

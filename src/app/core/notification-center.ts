@@ -18,6 +18,7 @@ export class NotificationCenter {
   private readonly dismissTimers = new Map<string, ReturnType<typeof setTimeout>>();
 
   readonly current = computed(() => this.queue()[0] ?? null);
+  readonly queueLength = computed(() => this.queue().length);
   readonly history = computed(() => this.historyState());
 
   restore(records: readonly NotificationRecord[]): void {
@@ -67,12 +68,20 @@ export class NotificationCenter {
   }
 
   private markDone(jobId: string, ok: boolean): void {
-    this.queue.update((list) =>
-      list.map((n) => {
-        if (n.jobId !== jobId) return n;
-        return ok ? { ...n, status: 'done', progress: 100 } : { ...n, status: 'blocked' };
-      }),
-    );
+    this.queue.update((list) => {
+      if (ok) {
+        return list.map((notification) =>
+          notification.jobId === jobId
+            ? { ...notification, status: 'done' as const, progress: 100 }
+            : notification,
+        );
+      }
+      const changed = list
+        .filter((n) => n.jobId === jobId)
+        .map((n) => ({ ...n, status: 'blocked' as const }));
+      const unchanged = list.filter((n) => n.jobId !== jobId);
+      return [...changed, ...unchanged];
+    });
     this.historyState.update((list) =>
       list.map((n) => {
         if (n.jobId !== jobId) return n;
@@ -110,6 +119,9 @@ export class NotificationCenter {
 
   private scheduleCurrent(): void {
     const current = this.queue()[0];
+    for (const notificationId of this.dismissTimers.keys()) {
+      if (notificationId !== current?.notificationId) this.clearTimer(notificationId);
+    }
     if (!current) return;
 
     const delay = current.status === 'done' ? (current.autoDismissMs ?? DONE_GRACE_MS) : undefined;
