@@ -256,6 +256,35 @@ pub fn vault_export(app: AppHandle, vault: tauri::State<VaultState>) -> Result<S
     vault::export(&app, &vault)
 }
 
+#[tauri::command]
+pub async fn nexus_vault_latest(app: AppHandle) -> Result<Option<crate::nexus_sync::SyncRevision>> {
+    crate::nexus_sync::NexusSyncClient::new(&nexus_auth::client(&app)?)
+        .latest()
+        .await
+        .map_err(|error| std::io::Error::other(error.to_string()).into())
+}
+
+#[tauri::command]
+pub async fn nexus_vault_upload(
+    app: AppHandle,
+    base_revision_id: Option<String>,
+) -> Result<crate::nexus_sync::PutResult> {
+    crate::nexus_sync::NexusSyncClient::new(&nexus_auth::client(&app)?)
+        .put_local_vault(&app, base_revision_id.as_deref())
+        .await
+        .map_err(|error| std::io::Error::other(error.to_string()).into())
+}
+
+#[tauri::command]
+pub fn vault_apply_sync(
+    app: AppHandle,
+    vault: tauri::State<VaultState>,
+    ciphertext: String,
+    master_password: String,
+) -> Result<()> {
+    vault::apply_sync_ciphertext(&app, &vault, &ciphertext, &master_password)
+}
+
 /// Whether a GitHub account is connected. Only reads the keychain — never
 /// calls GitHub.
 #[tauri::command]

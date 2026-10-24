@@ -175,6 +175,9 @@ pub enum Error {
     #[error("Gmail API request failed: {0}")]
     GmailApi(String),
 
+    #[error("Gmail access expired or was revoked; reconnect the account in Settings")]
+    GmailReconnectRequired,
+
     #[error("Linear API request failed: {0}")]
     LinearApi(String),
 

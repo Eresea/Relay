@@ -67,6 +67,7 @@ const CLIENT_SECRET_VAR: &str = "RELAY_GMAIL_CLIENT_SECRET";
 pub struct GmailStatus {
     pub connected: bool,
     pub connecting: bool,
+    pub needs_reconnect: bool,
     pub account_email: Option<String>,
 }
 
@@ -241,16 +242,19 @@ pub fn status(state: &GmailState) -> GmailStatus {
         Session::Disconnected => GmailStatus {
             connected: false,
             connecting: false,
-            account_email: None,
+            needs_reconnect: runtime.config.account_email.is_some(),
+            account_email: runtime.config.account_email.clone(),
         },
         Session::Connecting { .. } => GmailStatus {
             connected: false,
             connecting: true,
+            needs_reconnect: false,
             account_email: None,
         },
         Session::Connected(_) => GmailStatus {
             connected: true,
             connecting: false,
+            needs_reconnect: false,
             account_email: runtime.config.account_email.clone(),
         },
     }
@@ -603,12 +607,13 @@ async fn poll_cycle<S: EventSink>(
     {
         Ok(result) => result,
         Err(error) => {
-            // Transient network trouble and a permanently revoked grant both
-            // land here; there is no reliable way to tell them apart from the
-            // error alone, so this always retries rather than risk silently
-            // disconnecting an account over a blip. A user who really did
-            // revoke access sees the next poll fail the same way and can
-            // disconnect from Settings.
+            if matches!(&error, Error::GmailReconnectRequired) {
+                gmail.0.lock().unwrap().session = Session::Disconnected;
+                log::warn!("gmail: saved sign-in expired; reconnect is required");
+                return PollCycleOutcome::Stopped;
+            }
+            // Transient network trouble remains retryable; only an explicit
+            // OAuth invalid_grant stops polling.
             log::warn!("gmail: could not refresh access token, will retry: {error}");
             return PollCycleOutcome::Continue {
                 wait_secs: snapshot.poll_interval_secs,

@@ -1,6 +1,7 @@
 //! Rust-side transport for opaque encrypted vault sync with Nexus.
 
 use std::fmt;
+use std::time::Duration;
 
 use base64::engine::general_purpose::STANDARD as BASE64;
 use base64::Engine;
@@ -79,9 +80,12 @@ impl From<reqwest::Error> for SyncError {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Serialize)]
+#[serde(tag = "kind", content = "value", rename_all = "camelCase")]
 pub enum PutResult {
+    #[serde(rename_all = "camelCase")]
     Saved(SyncRevision),
+    #[serde(rename_all = "camelCase")]
     Conflict {
         common_base: Option<SyncRevision>,
         current: Option<SyncRevision>,
@@ -105,9 +109,14 @@ impl NexusSyncClient {
     }
 
     fn with_base(base_url: Url) -> Self {
+        Self::with_base_and_timeout(base_url, Duration::from_secs(30))
+    }
+
+    fn with_base_and_timeout(base_url: Url, timeout: Duration) -> Self {
         Self {
             http: reqwest::Client::builder()
                 .redirect(reqwest::redirect::Policy::none())
+                .timeout(timeout)
                 .build()
                 .expect("Nexus HTTP client configuration is valid"),
             base_url,
@@ -276,5 +285,27 @@ mod tests {
             client.put_vault("test-token", &oversized, None).await,
             Err(SyncError::CiphertextTooLarge)
         ));
+    }
+
+    #[tokio::test]
+    async fn put_times_out_when_the_server_stalls() {
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let server = tokio::spawn(async move {
+            let (mut socket, _) = listener.accept().await.unwrap();
+            let mut request = vec![0; 8192];
+            let _ = socket.read(&mut request).await.unwrap();
+            tokio::time::sleep(Duration::from_millis(200)).await;
+        });
+
+        let client = NexusSyncClient::with_base_and_timeout(
+            Url::parse(&format!("http://{address}/")).unwrap(),
+            Duration::from_millis(20),
+        );
+        let result = client
+            .put_vault("test-token", "eyJ2ZXJzaW9uIjoxfQ==", None)
+            .await;
+        assert!(matches!(result, Err(SyncError::Request(error)) if error.is_timeout()));
+        server.await.unwrap();
     }
 }
