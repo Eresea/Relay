@@ -8,8 +8,11 @@ It is not a dashboard. There is no home screen to check. A global shortcut
 opens a command palette; ambient overlays surface progress and alerts when
 something needs to be known, and disappear when it does not.
 
-**Status: scaffold.** The shell runs — global shortcut, tray, palette, theming,
-the Umbra token layer — and the orchestration behind it is not built yet.
+**Status:** active development. The desktop app includes local projects,
+GitHub and Linear connectors, Gmail notifications, a password vault, local
+Codex workflows, runtime health probes, and desktop/mobile update flows. Some
+cross-device and live-provider workflows still need end-to-end verification;
+see [the current status report](docs/status-2026-10-22.md).
 
 ## Principles
 
