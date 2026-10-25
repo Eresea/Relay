@@ -1,0 +1,256 @@
+.hud-surface {
+  & {
+    --hud-shadow: 0 8px 24px -8px rgb(0 0 0 / 0.55);
+    display: block;
+  }
+
+  /* Sized by content, never by the window: the window is sized from this. */
+  .frame {
+    position: fixed;
+    inset-block-start: 0;
+    inset-inline-start: 0;
+    inline-size: max-content;
+    /* Room for the shadow, which the window would otherwise clip. */
+    padding: var(--space-6) var(--space-6) var(--space-7);
+  }
+
+  .pill {
+    display: flex;
+    align-items: center;
+    gap: var(--space-5);
+    block-size: 34px;
+    padding-inline: var(--space-5);
+    border-radius: var(--radius-pill);
+    box-shadow: var(--hud-shadow), var(--glass-rim);
+    font-size: var(--text-12);
+    color: var(--text-body);
+    transition: border-color var(--dur-fast) var(--ease-standard);
+  }
+
+  .pill:hover {
+    border-color: color-mix(in srgb, var(--text-body) 22%, transparent);
+  }
+
+  .pill:has(.badge) {
+    padding-inline-end: var(--space-3);
+  }
+
+  .seg {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+    white-space: nowrap;
+  }
+
+  .seg + .seg {
+    padding-inline-start: var(--space-5);
+    border-inline-start: 1px solid var(--glass-edge);
+  }
+
+  .seg-title {
+    max-inline-size: 220px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .num {
+    font-family: var(--font-mono);
+    font-size: var(--text-11);
+    font-variant-numeric: tabular-nums;
+    color: var(--text-subtle);
+  }
+
+  .quiet {
+    color: var(--text-subtle);
+  }
+
+  .ring {
+    inline-size: 14px;
+    block-size: 14px;
+    border-radius: var(--radius-pill);
+    background: conic-gradient(
+      var(--entity-hue) calc(var(--progress) * 1%),
+      color-mix(in srgb, var(--text-body) 14%, transparent) 0
+    );
+    mask: radial-gradient(circle, transparent 4px, #000 4.5px);
+  }
+
+  .dot {
+    inline-size: 7px;
+    block-size: 7px;
+    border-radius: var(--radius-pill);
+    background: var(--status-idle);
+  }
+  .dot[data-status='running'] {
+    background: var(--status-running);
+  }
+  .dot[data-status='waiting'] {
+    background: var(--status-waiting);
+  }
+  .dot[data-status='blocked'] {
+    background: var(--status-blocked);
+  }
+  .dot[data-status='done'] {
+    background: var(--status-done);
+  }
+
+  .badge {
+    display: grid;
+    place-items: center;
+    min-inline-size: 22px;
+    block-size: 22px;
+    padding-inline: var(--space-3);
+    border-radius: var(--radius-pill);
+    background: var(--status-waiting);
+    color: var(--zinc-950);
+    font-size: var(--text-11);
+    font-weight: var(--weight-semibold);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .stack {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-4);
+    inline-size: 400px;
+  }
+
+  .summary {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    padding: var(--space-3) var(--space-3) var(--space-3) var(--space-5);
+    border-radius: var(--radius-xl);
+    box-shadow: var(--hud-shadow), var(--glass-rim);
+    font-size: var(--text-12);
+    color: var(--text-muted);
+  }
+
+  .summary-text {
+    flex: 1;
+    min-inline-size: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .faces {
+    display: flex;
+    gap: var(--space-2);
+    margin-inline-end: var(--space-3);
+  }
+
+  .face {
+    inline-size: 20px;
+    block-size: 20px;
+    border-radius: var(--radius-sm);
+  }
+
+  .summary [data-slot='button'] {
+    width: auto;
+  }
+
+  .more {
+    margin: 0;
+    padding-inline: var(--space-5);
+    font-size: var(--text-11);
+    color: var(--text-subtle);
+  }
+}
+
+.hud-card {
+  & {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    gap: var(--space-2) var(--space-5);
+    align-items: center;
+    padding: var(--space-5) var(--space-6);
+    border-radius: var(--radius-xl);
+    box-shadow: var(--hud-shadow), var(--glass-rim);
+  }
+
+  /* Status colours the edge of a card that waits on you — never its hue. */
+  &[data-status='waiting'],
+  &[data-status='blocked'] {
+    box-shadow:
+      var(--hud-shadow),
+      var(--glass-rim),
+      0 0 0 1px color-mix(in srgb, var(--hud-edge) 40%, transparent);
+  }
+  &[data-status='waiting'] {
+    --hud-edge: var(--status-waiting);
+  }
+  &[data-status='blocked'] {
+    --hud-edge: var(--status-blocked);
+  }
+
+  .title {
+    margin: 0;
+    font-size: var(--text-13);
+    font-weight: var(--weight-medium);
+    color: var(--text-strong);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .detail {
+    margin: var(--space-1) 0 0;
+    font-size: var(--text-12);
+    color: var(--text-muted);
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    overflow: hidden;
+  }
+
+  .state {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+    align-self: start;
+    color: var(--text-subtle);
+    font-size: var(--text-11);
+    white-space: nowrap;
+  }
+
+  .state [data-slot='button'] {
+    margin-inline-end: calc(var(--space-3) * -1);
+  }
+
+  .dot {
+    inline-size: 7px;
+    block-size: 7px;
+    border-radius: var(--radius-pill);
+    background: var(--status-idle);
+  }
+  &[data-status='running'] .dot {
+    background: var(--status-running);
+  }
+  &[data-status='waiting'] .dot {
+    background: var(--status-waiting);
+  }
+  &[data-status='blocked'] .dot {
+    background: var(--status-blocked);
+  }
+  &[data-status='done'] .dot {
+    background: var(--status-done);
+  }
+
+  .controls {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-3);
+    grid-column: 2 / -1;
+    margin-block-start: var(--space-3);
+  }
+
+  .controls [data-slot='button'] {
+    width: auto;
+  }
+
+  .track {
+    grid-column: 1 / -1;
+    margin-block-start: var(--space-3);
+  }
+}

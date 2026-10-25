@@ -6,8 +6,10 @@
   "arrowParens": "always",
   "overrides": [
     {
-      "files": "*.html",
-      "options": { "parser": "angular" }
+      "files": "src/**/*.html",
+      "options": {
+        "parser": "angular"
+      }
     }
   ]
 }

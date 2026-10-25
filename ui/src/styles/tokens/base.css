@@ -1,0 +1,138 @@
+/* Global reset and the rules that apply to every screen. */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  block-size: 100%;
+}
+
+html {
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+body {
+  font-size: var(--text-14);
+  line-height: var(--leading-body);
+  letter-spacing: var(--tracking-body);
+  color: var(--text-body);
+  background: var(--bg-app);
+}
+
+/* Overlay windows are chromeless and float over the desktop: the document
+ * itself must not paint a background, or the glass tier has nothing to see
+ * through. Set by OverlayHost on the <html> element.
+ */
+html.overlay-window,
+html.overlay-window body {
+  background: transparent;
+}
+
+/* The cursor never changes. Affordance is carried by the hover tint and ink
+ * lift, not by the arrow turning into a hand. Only disabled overrides it.
+ */
+button,
+[role='button'],
+a,
+summary {
+  cursor: default;
+}
+
+:disabled,
+[aria-disabled='true'] {
+  cursor: not-allowed;
+}
+
+button {
+  font: inherit;
+  letter-spacing: inherit;
+  color: inherit;
+  background: none;
+  border: none;
+  padding: 0;
+}
+
+input,
+textarea,
+select {
+  font: inherit;
+  letter-spacing: inherit;
+  color: inherit;
+}
+
+/* Focus. A single 3px low-alpha haze on :focus-visible.
+ *
+ * Text-entry elements are explicitly excluded: their wrapper owns the whole
+ * indicator (border + haze), so a bare ring here would draw a second, tighter
+ * ring inside the field. This exclusion is load-bearing — see Umbra's
+ * tokens/base.css, where the same rule caused a visible double ring.
+ */
+:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+input:focus-visible,
+textarea:focus-visible,
+[contenteditable]:focus-visible {
+  box-shadow: none;
+}
+
+input,
+textarea {
+  caret-color: var(--primary);
+}
+
+::selection {
+  background: color-mix(in srgb, var(--accent) 32%, transparent);
+  color: var(--text-strong);
+}
+
+/* Desktop chrome: no text selection or native drag outside actual content. */
+.u-chrome {
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+/* Scrollbars stay out of the way. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-strong) transparent;
+}
+
+*::-webkit-scrollbar {
+  inline-size: 10px;
+  block-size: 10px;
+}
+
+*::-webkit-scrollbar-thumb {
+  background: var(--border-strong);
+  border: 3px solid transparent;
+  border-radius: var(--radius-pill);
+  background-clip: content-box;
+}
+
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* Visually hidden, still announced. */
+.u-sr-only {
+  position: absolute;
+  inline-size: 1px;
+  block-size: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}

@@ -2,6 +2,7 @@
 import eslint from '@eslint/js';
 import tseslint from 'typescript-eslint';
 import angular from 'angular-eslint';
+import reactHooks from 'eslint-plugin-react-hooks';
 
 export default tseslint.config(
   {
@@ -12,10 +13,13 @@ export default tseslint.config(
       'src-tauri/gen/**',
       // Vendored subtree with its own conventions.
       'packages/umbra/**',
+      // Throwaway design prototypes, rendered to PNG; not app code.
+      'docs/design/prototype/**',
+      'dist/ui/**',
     ],
   },
   {
-    files: ['**/*.ts'],
+    files: ['src/**/*.ts'],
     extends: [
       eslint.configs.recommended,
       ...tseslint.configs.recommendedTypeChecked,
@@ -43,8 +47,33 @@ export default tseslint.config(
     },
   },
   {
-    files: ['**/*.html'],
+    files: ['src/**/*.html'],
     extends: [...angular.configs.templateRecommended, ...angular.configs.templateAccessibility],
     rules: {},
+  },
+  {
+    files: ['ui/**/*.{ts,tsx}'],
+    extends: [
+      eslint.configs.recommended,
+      ...tseslint.configs.recommendedTypeChecked,
+      ...tseslint.configs.stylistic,
+    ],
+    plugins: { 'react-hooks': reactHooks },
+    languageOptions: {
+      parserOptions: {
+        projectService: true,
+        tsconfigRootDir: import.meta.dirname,
+      },
+    },
+    rules: {
+      '@typescript-eslint/consistent-type-imports': 'error',
+      '@typescript-eslint/no-unused-vars': ['error', { argsIgnorePattern: '^_' }],
+      // The classic hook rules only. The React Compiler rules assume state is
+      // immutable and owned by React; Relay's components read signal-holding
+      // objects (lib/signals.ts) that change in place, which those rules
+      // misreport, and the compiler itself is not used.
+      'react-hooks/rules-of-hooks': 'error',
+      'react-hooks/exhaustive-deps': 'error',
+    },
   },
 );

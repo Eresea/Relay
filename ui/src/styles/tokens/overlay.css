@@ -1,0 +1,65 @@
+/* The glass tier — surfaces that float over the operating system.
+ *
+ * Relay's whole premise is ambient overlays: the command palette, the HUD
+ * notification, the tray popover and the status strip all sit on the user's
+ * wallpaper, not on --bg-app. They take a separate recipe from app-window
+ * surfaces.
+ *
+ * The boundary is absolute: if a surface belongs to the app window it is flat
+ * and opaque; if it belongs to the desktop it is glass. Nothing in between.
+ * Never blur a card or a sidebar.
+ */
+:root {
+  --glass-blur: 22px;
+  --glass-saturate: 1.35;
+  --glass-opacity: 80%;
+
+  /* A cool ambient tint keeps glass from reading as flat grey. */
+  --ambient-tint: #6b8cb8;
+  --ambient-tint-amount: 5%;
+
+  --glass-fill: color-mix(
+    in srgb,
+    color-mix(in srgb, var(--ambient-tint) var(--ambient-tint-amount), var(--bg-overlay))
+      var(--glass-opacity),
+    transparent
+  );
+
+  /* Opaque fallback for webviews without backdrop-filter. Every glass surface
+   * must stay legible when the blur silently does nothing.
+   */
+  --glass-fill-solid: color-mix(
+    in srgb,
+    var(--ambient-tint) var(--ambient-tint-amount),
+    var(--bg-overlay)
+  );
+
+  --glass-edge: rgb(255 255 255 / 0.12);
+  --glass-rim: rgb(255 255 255 / 0.09);
+  --glass-shadow: 0 24px 64px -16px rgb(0 0 0 / 0.55), 0 8px 24px -8px rgb(0 0 0 / 0.4);
+}
+
+:root.light,
+:root[data-theme='light'] {
+  --glass-edge: rgb(9 9 11 / 0.1);
+  --glass-rim: rgb(255 255 255 / 0.6);
+  --glass-shadow: 0 24px 64px -16px rgb(9 9 11 / 0.22), 0 8px 24px -8px rgb(9 9 11 / 0.14);
+}
+
+/* The one place in the system where depth comes from light rather than value. */
+.u-glass {
+  background: var(--glass-fill-solid);
+  border: 1px solid var(--glass-edge);
+  border-radius: var(--radius-xl);
+  box-shadow:
+    var(--glass-shadow),
+    inset 0 1px 0 var(--glass-rim);
+}
+
+@supports (backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px)) {
+  .u-glass {
+    background: var(--glass-fill);
+    -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+    backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+  }
+}

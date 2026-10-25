@@ -42,6 +42,13 @@ jobs:
       - name: Build
         run: npm run build
 
+      # The React interface being ported in ui/ (replaces src/ when complete).
+      - name: Test React interface
+        run: npm run ui:test
+
+      - name: Build React interface
+        run: npm run ui:build
+
   core:
     name: Core (${{ matrix.os }})
     runs-on: ${{ matrix.os }}

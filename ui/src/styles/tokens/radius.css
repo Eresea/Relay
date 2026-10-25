@@ -1,0 +1,12 @@
+/* 3 / 5 / 7 / 10 / 14, plus a pill for switches, tracks, dots and avatars.
+ * Small controls get 5-7; cards and dialogs get 10-14. Nothing else is
+ * fully rounded.
+ */
+:root {
+  --radius-xs: 3px;
+  --radius-sm: 5px;
+  --radius-md: 7px;
+  --radius-lg: 10px;
+  --radius-xl: 14px;
+  --radius-pill: 9999px;
+}

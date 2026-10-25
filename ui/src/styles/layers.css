@@ -1,0 +1,7 @@
+/*
+ * Cascade order, declared before anything else loads. Umbra's tokens and base
+ * reset sit above Tailwind's preflight and below its utilities, so a utility
+ * on an element always beats the reset. Component stylesheets stay unlayered
+ * and so beat both.
+ */
+@layer theme, base, umbra, components, utilities;
