@@ -40,6 +40,15 @@ export class TauriBridge {
     await this.invoke('cancel_job', { jobId });
   }
 
+  /**
+   * Sizes the attention overlay to its content and anchors it: the pill
+   * top-centre, the stack bottom-right. Shows the window if it is hidden.
+   * Sizes are CSS pixels; the core converts for the monitor's scale.
+   */
+  async hudLayout(mode: HudMode, width: number, height: number): Promise<void> {
+    await this.invoke('hud_layout', { mode, width, height });
+  }
+
   /** A pull-based check alongside the push-based `notificationDone` event. */
   async isJobRunning(jobId: string): Promise<boolean> {
     return (await this.invoke<boolean>('is_job_running', { jobId })) ?? false;
@@ -360,6 +369,7 @@ export class TauriBridge {
       (await this.invoke<GmailStatus>('gmail_status')) ?? {
         connected: false,
         connecting: false,
+        needsReconnect: false,
         accountEmail: null,
       }
     );
@@ -460,6 +470,18 @@ export class TauriBridge {
   /** Writes an encrypted copy of the vault to disk and returns the path. */
   async vaultExport(): Promise<string> {
     return (await this.invoke<string>('vault_export')) ?? '';
+  }
+
+  async nexusVaultLatest(): Promise<VaultSyncRevision | null> {
+    return this.invoke<VaultSyncRevision | null>('nexus_vault_latest');
+  }
+
+  async nexusVaultUpload(baseRevisionId: string | null): Promise<VaultSyncPutResult | null> {
+    return this.invoke<VaultSyncPutResult>('nexus_vault_upload', { baseRevisionId });
+  }
+
+  async vaultApplySync(ciphertext: string, masterPassword: string): Promise<void> {
+    await this.invoke('vault_apply_sync', { ciphertext, masterPassword });
   }
 
   async openCloudStatus(): Promise<OpenCloudStatus> {
@@ -1400,6 +1422,9 @@ export class TauriBridge {
   }
 }
 
+/** Mirrors src-tauri/src/overlay.rs's `HudMode`. */
+export type HudMode = 'pill' | 'stack';
+
 /** Mirrors src-tauri/src/commands.rs's `CoreCommand`. */
 export type CoreCommand =
   | { readonly id: 'open_settings' }
@@ -1499,6 +1524,18 @@ export interface VaultStatus {
   readonly exists: boolean;
   readonly unlocked: boolean;
 }
+
+export interface VaultSyncRevision {
+  readonly revisionId: string;
+  readonly ciphertext: string;
+}
+
+export type VaultSyncPutResult =
+  | { readonly kind: 'saved'; readonly value: VaultSyncRevision }
+  | {
+      readonly kind: 'conflict';
+      readonly value: { readonly commonBase?: unknown; readonly current?: unknown };
+    };
 
 export interface MobileUpdate {
   readonly currentVersion: string;
@@ -2034,6 +2071,7 @@ function mergeGithubSettings(
 export interface GmailStatus {
   readonly connected: boolean;
   readonly connecting: boolean;
+  readonly needsReconnect: boolean;
   readonly accountEmail: string | null;
 }
 

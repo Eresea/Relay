@@ -6,6 +6,7 @@
 //! and the realtime event stream; this module wires it to Tauri.
 
 use std::sync::Mutex;
+use std::time::Duration;
 
 use nexus_client::{AuthState, Error as NexusError, EventsHandle, NexusClient, NexusConfig};
 use serde::Serialize;
@@ -143,7 +144,13 @@ fn retire_legacy_session(config: &NexusConfig) {
             ("client_id", config.client_id.clone()),
         ];
         tauri::async_runtime::spawn(async move {
-            let _ = reqwest::Client::new().post(url).form(&form).send().await;
+            let Ok(client) = reqwest::Client::builder()
+                .timeout(Duration::from_secs(10))
+                .build()
+            else {
+                return;
+            };
+            let _ = client.post(url).form(&form).send().await;
         });
     }
 }

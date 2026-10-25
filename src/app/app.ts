@@ -24,22 +24,41 @@ import { Mobile } from '@features/mobile/mobile';
   template: `
     @switch (surface) {
       @case ('palette') {
-        <rl-command-palette />
+        @defer (on immediate) {
+          <rl-command-palette />
+        } @placeholder {
+          <main class="home-loading" aria-busy="true"></main>
+        }
       }
       @case ('hud') {
-        <rl-hud-surface />
+        @defer (on immediate) {
+          <rl-hud-surface />
+        } @placeholder {
+          <main class="home-loading" aria-busy="true"></main>
+        }
       }
       @case ('mobile') {
-        <rl-mobile />
+        @defer (on immediate) {
+          <rl-mobile />
+        } @placeholder {
+          <main class="home-loading" aria-busy="true"></main>
+        }
       }
       @default {
-        <rl-home />
+        @defer (on immediate) {
+          <rl-home />
+        } @placeholder {
+          <main class="home-loading" aria-busy="true"></main>
+        }
       }
     }
   `,
   styles: `
     :host {
       display: block;
+      block-size: 100%;
+    }
+    .home-loading {
       block-size: 100%;
     }
   `,

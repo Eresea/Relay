@@ -5,20 +5,30 @@ import type { AppEvent, NotificationPayload, NotificationRecord } from './events
 export const DONE_GRACE_MS = 5000;
 
 /**
- * The HUD is one small fixed-size overlay, so notifications queue rather than
- * stack: only the frontmost one shows, and a new one waits behind whatever is
- * already there. A finished notification stays on screen at 100%/"done" for
- * a short grace period rather than vanishing the instant its job completes —
- * "it worked" needs a moment to be read.
+ * Live notifications for the attention overlay, plus the history behind them.
+ *
+ * Every live item is on screen at once — as a segment of the pill or a card in
+ * the stack — so each finished item gets its own grace period from the moment
+ * it finishes: "it worked" needs a moment to be read, and nothing ahead of it
+ * should hold it on screen longer. Failed and waiting items stay until
+ * dismissed, because they are the ones that need you.
  */
 @Injectable({ providedIn: 'root' })
 export class NotificationCenter {
   private readonly queue = signal<readonly NotificationPayload[]>([]);
   private readonly historyState = signal<readonly NotificationRecord[]>([]);
+  private readonly expandedState = signal(false);
   private readonly dismissTimers = new Map<string, ReturnType<typeof setTimeout>>();
 
-  readonly current = computed(() => this.queue()[0] ?? null);
-  readonly history = computed(() => this.historyState());
+  readonly items = this.queue.asReadonly();
+  readonly history = this.historyState.asReadonly();
+  /** The stack is open. Toggled by the attention shortcut or by clicking the pill. */
+  readonly expanded = this.expandedState.asReadonly();
+  /** Unread history that is no longer live: it happened, nothing waits on it. */
+  readonly quiet = computed(() => {
+    const live = new Set(this.queue().map((n) => n.notificationId));
+    return this.historyState().filter((r) => !r.read && !live.has(r.notificationId));
+  });
 
   restore(records: readonly NotificationRecord[]): void {
     this.historyState.update((current) => {
@@ -30,6 +40,15 @@ export class NotificationCenter {
     });
   }
 
+  /**
+   * Replaces history with the persisted copy. Each webview holds its own
+   * history, and read state changes in whichever window you read in, so the
+   * overlay re-reads the stored truth before it counts what is unread.
+   */
+  syncHistory(records: readonly NotificationRecord[]): void {
+    this.historyState.set([...records].sort((a, b) => b.createdAt - a.createdAt));
+  }
+
   handle(event: AppEvent): void {
     switch (event.type) {
       case 'notification':
@@ -38,9 +57,14 @@ export class NotificationCenter {
       case 'notificationDone':
         this.markDone(event.jobId, event.ok);
         break;
-      case 'commandsChanged':
+      case 'attentionToggleRequested':
+        this.toggleExpanded();
         break;
     }
+  }
+
+  toggleExpanded(): void {
+    this.expandedState.update((expanded) => !expanded);
   }
 
   private upsert(notification: NotificationPayload): void {
@@ -63,29 +87,24 @@ export class NotificationCenter {
       record,
       ...list.filter((n) => n.notificationId !== notification.notificationId),
     ]);
-    this.scheduleCurrent();
+    this.scheduleDone();
   }
 
   private markDone(jobId: string, ok: boolean): void {
-    this.queue.update((list) =>
-      list.map((n) => {
-        if (n.jobId !== jobId) return n;
-        return ok ? { ...n, status: 'done', progress: 100 } : { ...n, status: 'blocked' };
-      }),
-    );
-    this.historyState.update((list) =>
-      list.map((n) => {
-        if (n.jobId !== jobId) return n;
-        return ok ? { ...n, status: 'done', progress: 100 } : { ...n, status: 'blocked' };
-      }),
-    );
-    this.scheduleCurrent();
+    const settle = <T extends NotificationPayload>(n: T): T =>
+      n.jobId !== jobId
+        ? n
+        : ok
+          ? { ...n, status: 'done', progress: 100 }
+          : { ...n, status: 'blocked' };
+    this.queue.update((list) => list.map(settle));
+    this.historyState.update((list) => list.map(settle));
+    this.scheduleDone();
   }
 
   dismiss(notificationId: string): void {
     this.clearTimer(notificationId);
     this.queue.update((list) => list.filter((n) => n.notificationId !== notificationId));
-    this.scheduleCurrent();
   }
 
   markRead(notificationId: string): void {
@@ -108,21 +127,19 @@ export class NotificationCenter {
     this.historyState.set([]);
   }
 
-  private scheduleCurrent(): void {
-    const current = this.queue()[0];
-    if (!current) return;
-
-    const delay = current.status === 'done' ? (current.autoDismissMs ?? DONE_GRACE_MS) : undefined;
-    if (delay === undefined) {
-      this.clearTimer(current.notificationId);
-      return;
+  /** Starts a grace timer for every finished item that does not have one yet. */
+  private scheduleDone(): void {
+    for (const n of this.queue()) {
+      if (n.status !== 'done') {
+        this.clearTimer(n.notificationId);
+        continue;
+      }
+      if (this.dismissTimers.has(n.notificationId)) continue;
+      this.dismissTimers.set(
+        n.notificationId,
+        setTimeout(() => this.dismiss(n.notificationId), n.autoDismissMs ?? DONE_GRACE_MS),
+      );
     }
-    if (this.dismissTimers.has(current.notificationId)) return;
-
-    this.dismissTimers.set(
-      current.notificationId,
-      setTimeout(() => this.dismiss(current.notificationId), delay),
-    );
   }
 
   private clearTimer(notificationId: string): void {

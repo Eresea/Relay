@@ -12,7 +12,8 @@
 //! with the wrong key fails the tag verification, so `unlock` needs no
 //! separate password verifier stored on disk.
 
-use std::fs;
+use std::fs::{self, OpenOptions};
+use std::io::Write;
 use std::path::PathBuf;
 use std::sync::Mutex;
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -21,6 +22,7 @@ use aes_gcm::aead::Aead;
 use aes_gcm::{Aes256Gcm, KeyInit, Nonce};
 use argon2::Argon2;
 use base64::engine::general_purpose::STANDARD as BASE64;
+use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use base64::Engine;
 use rand::rngs::OsRng;
 use rand::seq::SliceRandom;
@@ -168,8 +170,61 @@ fn read_file(app: &AppHandle) -> Result<Option<VaultFile>> {
 fn write_file(app: &AppHandle, file: &VaultFile) -> Result<()> {
     let path = file_path(app)?;
     let raw = serde_json::to_string_pretty(file).map_err(|e| Error::VaultCorrupt(e.to_string()))?;
-    fs::write(path, raw)?;
+    write_atomically(&path, raw.as_bytes())?;
     Ok(())
+}
+
+fn write_atomically(path: &std::path::Path, raw: &[u8]) -> std::io::Result<()> {
+    let mut temp = path.to_path_buf();
+    let mut suffix = [0u8; 12];
+    OsRng.fill_bytes(&mut suffix);
+    temp.set_extension(format!("{}.tmp", URL_SAFE_NO_PAD.encode(suffix)));
+    let mut output = OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(&temp)?;
+    let result: std::io::Result<()> = (|| {
+        output.write_all(raw)?;
+        output.sync_all()?;
+        drop(output);
+        replace_file(&temp, path)?;
+        Ok(())
+    })();
+    if result.is_err() {
+        let _ = fs::remove_file(&temp);
+    }
+    result
+}
+
+#[cfg(not(windows))]
+fn replace_file(temp: &std::path::Path, path: &std::path::Path) -> std::io::Result<()> {
+    fs::rename(temp, path)
+}
+
+#[cfg(windows)]
+fn replace_file(temp: &std::path::Path, path: &std::path::Path) -> std::io::Result<()> {
+    use std::os::windows::ffi::OsStrExt;
+    #[link(name = "Kernel32")]
+    unsafe extern "system" {
+        fn MoveFileExW(existing: *const u16, new: *const u16, flags: u32) -> i32;
+    }
+
+    let temp = temp
+        .as_os_str()
+        .encode_wide()
+        .chain(Some(0))
+        .collect::<Vec<_>>();
+    let path = path
+        .as_os_str()
+        .encode_wide()
+        .chain(Some(0))
+        .collect::<Vec<_>>();
+    // MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH; the temp is in the same directory.
+    if unsafe { MoveFileExW(temp.as_ptr(), path.as_ptr(), 0x1 | 0x8) } == 0 {
+        Err(std::io::Error::last_os_error())
+    } else {
+        Ok(())
+    }
 }
 
 fn encode_sync_ciphertext(file: &VaultFile) -> Result<String> {
@@ -182,6 +237,45 @@ fn encode_sync_ciphertext(file: &VaultFile) -> Result<String> {
 pub fn sync_ciphertext(app: &AppHandle) -> Result<String> {
     let file = read_file(app)?.ok_or(Error::VaultNotFound)?;
     encode_sync_ciphertext(&file)
+}
+
+/// Applies a remote encrypted vault only after verifying its master password.
+pub fn apply_sync_ciphertext(
+    app: &AppHandle,
+    state: &VaultState,
+    encoded: &str,
+    master_password: &str,
+) -> Result<()> {
+    let raw = BASE64
+        .decode(encoded)
+        .map_err(|_| Error::VaultCorrupt("synced vault is not valid base64".into()))?;
+    if raw.len() > 512 * 1024 {
+        return Err(Error::VaultCorrupt(
+            "synced vault exceeds the 512 KiB limit".into(),
+        ));
+    }
+    let file: VaultFile =
+        serde_json::from_slice(&raw).map_err(|error| Error::VaultCorrupt(error.to_string()))?;
+    if file.version != 1 {
+        return Err(Error::VaultCorrupt(
+            "unsupported synced vault version".into(),
+        ));
+    }
+    let salt: [u8; SALT_LEN] = BASE64
+        .decode(&file.salt)
+        .map_err(|_| Error::VaultCorrupt("salt is not valid base64".into()))?
+        .try_into()
+        .map_err(|_| Error::VaultCorrupt("salt has the wrong length".into()))?;
+    let key = derive_key(master_password, &salt)?;
+    let entries = decrypt_entries(&key, &file.nonce, &file.ciphertext)?;
+    let mut guard = state.0.lock().unwrap();
+    let unlocked = guard.as_mut().ok_or(Error::VaultLocked)?;
+    write_file(app, &file)?;
+    unlocked.key.zeroize();
+    unlocked.key = key;
+    unlocked.salt = salt;
+    unlocked.entries = entries;
+    Ok(())
 }
 
 fn derive_key(master_password: &str, salt: &[u8; SALT_LEN]) -> Result<[u8; KEY_LEN]> {
@@ -223,12 +317,8 @@ fn decrypt_entries(
     serde_json::from_slice(&plaintext).map_err(|e| Error::VaultCorrupt(e.to_string()))
 }
 
-fn persist(app: &AppHandle, unlocked: &Unlocked) -> Result<()> {
-    // Re-encrypts the whole entry list under a fresh nonce and rewrites the
-    // file. Vaults are small (a person's own accounts, not a corpus), so a
-    // full rewrite per change is simpler than an append log and never reuses
-    // a nonce with the same key — reuse is what actually breaks GCM.
-    let (nonce, ciphertext) = encrypt_entries(&unlocked.key, &unlocked.entries)?;
+fn persist_entries(app: &AppHandle, unlocked: &Unlocked, entries: &[VaultEntry]) -> Result<()> {
+    let (nonce, ciphertext) = encrypt_entries(&unlocked.key, entries)?;
     write_file(
         app,
         &VaultFile {
@@ -364,8 +454,10 @@ pub fn add_entry(
         updated_at: now,
     };
     let summary = VaultEntrySummary::from(&entry);
-    unlocked.entries.push(entry);
-    persist(app, unlocked)?;
+    let mut entries = unlocked.entries.clone();
+    entries.push(entry);
+    persist_entries(app, unlocked, &entries)?;
+    unlocked.entries = entries;
     Ok(summary)
 }
 
@@ -394,12 +486,18 @@ pub fn delete_entry(app: &AppHandle, state: &VaultState, id: &str) -> Result<()>
     let mut guard = state.0.lock().unwrap();
     let unlocked = guard.as_mut().ok_or(Error::VaultLocked)?;
 
-    let before = unlocked.entries.len();
-    unlocked.entries.retain(|entry| entry.id != id);
-    if unlocked.entries.len() == before {
+    if !unlocked.entries.iter().any(|entry| entry.id == id) {
         return Err(Error::UnknownVaultEntry(id.to_string()));
     }
-    persist(app, unlocked)
+    let entries: Vec<_> = unlocked
+        .entries
+        .iter()
+        .filter(|entry| entry.id != id)
+        .cloned()
+        .collect();
+    persist_entries(app, unlocked, &entries)?;
+    unlocked.entries = entries;
+    Ok(())
 }
 
 /// Writes a standalone, still-encrypted copy of the vault to the user's
@@ -478,6 +576,24 @@ pub fn generate_password(options: &PasswordOptions) -> Result<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn atomic_write_replaces_existing_file_and_preserves_it_on_failure() {
+        let mut root = std::env::temp_dir();
+        let mut suffix = [0u8; 12];
+        OsRng.fill_bytes(&mut suffix);
+        root.push(format!("relay-vault-{}", BASE64.encode(suffix)));
+        fs::create_dir(&root).unwrap();
+        let file = root.join("vault.json");
+        fs::write(&file, b"old").unwrap();
+
+        assert!(write_atomically(&root.join("missing/vault.json"), b"bad").is_err());
+        assert_eq!(fs::read(&file).unwrap(), b"old");
+
+        write_atomically(&file, b"new").unwrap();
+        assert_eq!(fs::read(&file).unwrap(), b"new");
+        fs::remove_dir_all(root).unwrap();
+    }
 
     #[test]
     fn generated_password_has_the_requested_length_and_classes() {

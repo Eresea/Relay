@@ -294,23 +294,47 @@ const RAIL_EXPANDED_SETTING_KEY = 'rail.expanded';
             }
           </section>
         } @else if (view() === 'settings') {
-          <rl-settings [initialTab]="settingsTab()" />
+          @defer (on immediate) {
+            <rl-settings [initialTab]="settingsTab()" />
+          } @placeholder {
+            <div class="page-loading" aria-busy="true"></div>
+          }
         } @else if (view() === 'codex') {
-          <rl-codex
-            [openThreadId]="requestedAgentThreadId()"
-            (threadHandled)="requestedAgentThreadId.set(null)"
-          />
+          @defer (on immediate) {
+            <rl-codex
+              [openThreadId]="requestedAgentThreadId()"
+              (threadHandled)="requestedAgentThreadId.set(null)"
+            />
+          } @placeholder {
+            <div class="page-loading" aria-busy="true"></div>
+          }
         } @else if (view() === 'linear') {
-          <rl-linear
-            [projectRequest]="linearProjectRequest()"
-            (projectRequestHandled)="handleLinearProjectRequest($event)"
-          />
+          @defer (on immediate) {
+            <rl-linear
+              [projectRequest]="linearProjectRequest()"
+              (projectRequestHandled)="handleLinearProjectRequest($event)"
+            />
+          } @placeholder {
+            <div class="page-loading" aria-busy="true"></div>
+          }
         } @else if (view() === 'vault') {
-          <rl-vault />
+          @defer (on immediate) {
+            <rl-vault />
+          } @placeholder {
+            <div class="page-loading" aria-busy="true"></div>
+          }
         } @else if (view() === 'runtime') {
-          <rl-runtime />
+          @defer (on immediate) {
+            <rl-runtime />
+          } @placeholder {
+            <div class="page-loading" aria-busy="true"></div>
+          }
         } @else {
-          <rl-projects (linearProjectSelected)="openLinearProject($event)" />
+          @defer (on immediate) {
+            <rl-projects (linearProjectSelected)="openLinearProject($event)" />
+          } @placeholder {
+            <div class="page-loading" aria-busy="true"></div>
+          }
         }
       </main>
     </div>

@@ -143,6 +143,10 @@ pub enum AppEvent {
         ok: bool,
     },
 
+    /// The attention shortcut was pressed: open the stack, or close it back
+    /// to the pill. Only the HUD webview knows which it is showing.
+    AttentionToggleRequested,
+
     /// Persistent update state for the main window's status strip.
     UpdateChanged {
         #[serde(flatten)]
@@ -311,6 +315,12 @@ mod tests {
     fn open_github_requested_is_a_bare_tag() {
         let json = serde_json::to_string(&AppEvent::OpenGithubRequested).unwrap();
         assert_eq!(json, r#"{"type":"openGithubRequested"}"#);
+    }
+
+    #[test]
+    fn attention_toggle_requested_is_a_bare_tag() {
+        let json = serde_json::to_string(&AppEvent::AttentionToggleRequested).unwrap();
+        assert_eq!(json, r#"{"type":"attentionToggleRequested"}"#);
     }
 
     #[test]

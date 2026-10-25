@@ -7,10 +7,18 @@ import { UmbraButtonComponent } from '@umbra/components/umbra-button/umbra-butto
 
 export type HudStatus = 'running' | 'waiting' | 'blocked' | 'done' | 'idle';
 
+const STATUS_LABEL: Record<HudStatus, string> = {
+  running: 'Running',
+  waiting: 'Needs you',
+  blocked: 'Needs attention',
+  done: 'Done',
+  idle: 'Ready',
+};
+
 /**
- * An ambient notification that floats over the desktop: one long-lived object,
- * its identity hue, how far it has got and what it is doing. It never asks for
- * a decision — anything that needs one goes to the palette.
+ * One card in the attention stack: a long-lived object, its identity hue, how
+ * far it has got and what it is doing. A card that waits on you says so and
+ * puts its first action forward; every other card only reports.
  */
 @Component({
   selector: 'rl-hud',
@@ -18,25 +26,23 @@ export type HudStatus = 'running' | 'waiting' | 'blocked' | 'done' | 'idle';
   imports: [Icon, UmbraButtonComponent],
   host: {
     class: 'u-glass u-chrome',
+    '[attr.data-status]': 'status()',
   },
   template: `
-    <span class="u-entity-tile" [style.--entity-hue]="tone()">
+    <span class="u-entity-tile tile" [style.--entity-hue]="tone()">
       <rl-icon [name]="icon()" [size]="16" />
     </span>
 
     <div class="text">
       <p class="title">{{ title() }}</p>
-      <p class="u-mono detail">{{ detail() }}</p>
+      @if (detail()) {
+        <p class="detail">{{ detail() }}</p>
+      }
     </div>
 
-    <span class="dot" [attr.data-status]="status()"></span>
-
-    <div class="controls">
-      @for (item of actions(); track item.id) {
-        <umbra-button size="sm" variant="ghost" (click)="action.emit(item)">
-          {{ item.label }}
-        </umbra-button>
-      }
+    <div class="state">
+      <span class="dot"></span>
+      <span>{{ statusLabel() }}</span>
       <umbra-button
         size="icon"
         variant="ghost"
@@ -47,7 +53,19 @@ export type HudStatus = 'running' | 'waiting' | 'blocked' | 'done' | 'idle';
       </umbra-button>
     </div>
 
-    <span class="u-sr-only">{{ status() }}</span>
+    @if (actions().length > 0) {
+      <div class="controls">
+        @for (item of actions(); track item.id; let first = $first) {
+          <umbra-button
+            size="sm"
+            [variant]="first && needsYou() ? 'default' : 'secondary'"
+            (click)="action.emit(item)"
+          >
+            {{ item.label }}
+          </umbra-button>
+        }
+      </div>
+    }
 
     @if (progress() !== null) {
       <div
@@ -65,39 +83,28 @@ export type HudStatus = 'running' | 'waiting' | 'blocked' | 'done' | 'idle';
   `,
   styles: `
     :host {
-      position: relative;
       display: grid;
-      grid-template-columns: auto 1fr auto;
+      grid-template-columns: auto minmax(0, 1fr) auto;
       gap: var(--space-2) var(--space-5);
       align-items: center;
-      inline-size: 100%;
       padding: var(--space-5) var(--space-6);
+      border-radius: var(--radius-xl);
+      box-shadow: var(--hud-shadow), var(--glass-rim);
     }
 
-    .text {
-      min-inline-size: 0;
+    /* Status colours the edge of a card that waits on you — never its hue. */
+    :host([data-status='waiting']),
+    :host([data-status='blocked']) {
+      box-shadow:
+        var(--hud-shadow),
+        var(--glass-rim),
+        0 0 0 1px color-mix(in srgb, var(--hud-edge) 40%, transparent);
     }
-
-    .controls {
-      position: absolute;
-      inset-block-start: var(--space-3);
-      inset-inline-end: var(--space-4);
-      display: flex;
-      align-items: center;
-      gap: var(--space-2);
-      opacity: 0;
-      pointer-events: none;
-      transition: opacity var(--dur-hover) var(--ease-standard);
+    :host([data-status='waiting']) {
+      --hud-edge: var(--status-waiting);
     }
-
-    :host:hover .controls,
-    :host:focus-within .controls {
-      opacity: 1;
-      pointer-events: auto;
-    }
-
-    :host ::ng-deep .controls umbra-button {
-      width: auto;
+    :host([data-status='blocked']) {
+      --hud-edge: var(--status-blocked);
     }
 
     .title {
@@ -112,34 +119,62 @@ export type HudStatus = 'running' | 'waiting' | 'blocked' | 'done' | 'idle';
 
     .detail {
       margin: var(--space-1) 0 0;
-      white-space: nowrap;
+      font-size: var(--text-12);
+      color: var(--text-muted);
+      display: -webkit-box;
+      -webkit-box-orient: vertical;
+      -webkit-line-clamp: 2;
       overflow: hidden;
-      text-overflow: ellipsis;
     }
 
-    /* Status is how it is going — never the entity hue. */
+    .state {
+      display: flex;
+      align-items: center;
+      gap: var(--space-3);
+      align-self: start;
+      color: var(--text-subtle);
+      font-size: var(--text-11);
+      white-space: nowrap;
+    }
+
+    .state umbra-button {
+      margin-inline-end: calc(var(--space-3) * -1);
+    }
+
     .dot {
-      inline-size: 6px;
-      block-size: 6px;
+      inline-size: 7px;
+      block-size: 7px;
       border-radius: var(--radius-pill);
       background: var(--status-idle);
     }
-
-    .dot[data-status='running'] {
+    :host([data-status='running']) .dot {
       background: var(--status-running);
     }
-    .dot[data-status='waiting'] {
+    :host([data-status='waiting']) .dot {
       background: var(--status-waiting);
     }
-    .dot[data-status='blocked'] {
+    :host([data-status='blocked']) .dot {
       background: var(--status-blocked);
     }
-    .dot[data-status='done'] {
+    :host([data-status='done']) .dot {
       background: var(--status-done);
+    }
+
+    .controls {
+      display: flex;
+      flex-wrap: wrap;
+      gap: var(--space-3);
+      grid-column: 2 / -1;
+      margin-block-start: var(--space-3);
+    }
+
+    :host ::ng-deep .controls umbra-button {
+      width: auto;
     }
 
     .track {
       grid-column: 1 / -1;
+      margin-block-start: var(--space-3);
     }
   `,
 })
@@ -157,4 +192,8 @@ export class Hud {
   readonly action = output<NotificationAction>();
 
   protected readonly tone = computed(() => hueVar(this.hue()));
+  protected readonly statusLabel = computed(() => STATUS_LABEL[this.status()]);
+  protected readonly needsYou = computed(
+    () => this.status() === 'waiting' || this.status() === 'blocked',
+  );
 }

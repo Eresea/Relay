@@ -11,6 +11,7 @@
 
 use async_trait::async_trait;
 use serde::Deserialize;
+use std::time::Duration;
 
 use crate::error::{Error, Result};
 
@@ -89,14 +90,18 @@ pub trait GoogleApi: Send + Sync {
     async fn get_message_metadata(&self, access_token: &str, id: &str) -> Result<MessageMeta>;
 }
 
-#[derive(Default)]
 pub struct HttpGoogleApi {
     client: reqwest::Client,
 }
 
 impl HttpGoogleApi {
     pub fn new() -> Self {
-        Self::default()
+        Self {
+            client: reqwest::Client::builder()
+                .timeout(Duration::from_secs(30))
+                .build()
+                .expect("Gmail HTTP client configuration is valid"),
+        }
     }
 }
 
@@ -302,12 +307,30 @@ async fn parse_token_response(response: reqwest::Response) -> Result<TokenRespon
         refresh_token: Option<String>,
         expires_in: u64,
     }
-    let wire: Wire = ensure_success(response).await?.json().await?;
+    if !response.status().is_success() {
+        let status = response.status();
+        let body = response.text().await.unwrap_or_default();
+        return Err(token_error(status, &body));
+    }
+    let wire: Wire = response.json().await?;
     Ok(TokenResponse {
         access_token: wire.access_token,
         refresh_token: wire.refresh_token,
         expires_in_secs: wire.expires_in,
     })
+}
+
+fn token_error(status: reqwest::StatusCode, body: &str) -> Error {
+    if serde_json::from_str::<serde_json::Value>(body)
+        .ok()
+        .and_then(|body| body.get("error")?.as_str().map(str::to_owned))
+        .as_deref()
+        == Some("invalid_grant")
+    {
+        Error::GmailReconnectRequired
+    } else {
+        Error::GmailApi(format!("{status}: {body}"))
+    }
 }
 
 #[cfg(test)]
@@ -395,5 +418,25 @@ pub(crate) mod fakes {
                 .cloned()
                 .ok_or_else(|| Error::GmailApi(format!("no fake message `{id}`")))
         }
+    }
+}
+
+#[cfg(test)]
+mod token_error_tests {
+    use super::*;
+
+    #[test]
+    fn invalid_grant_requires_reconnection_but_other_oauth_errors_remain_retryable() {
+        assert!(matches!(
+            token_error(
+                reqwest::StatusCode::BAD_REQUEST,
+                r#"{"error":"invalid_grant"}"#
+            ),
+            Error::GmailReconnectRequired
+        ));
+        assert!(matches!(
+            token_error(reqwest::StatusCode::BAD_GATEWAY, "not json"),
+            Error::GmailApi(_)
+        ));
     }
 }

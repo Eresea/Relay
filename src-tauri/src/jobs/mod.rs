@@ -225,7 +225,9 @@ where
     let done_sink = sink.clone();
 
     tauri::async_runtime::spawn(async move {
-        let ok = work(context).await.is_ok();
+        let ok = tokio::spawn(work(context))
+            .await
+            .is_ok_and(|result| result.is_ok());
         done_registry.finish(&done_id);
         done_sink.emit(AppEvent::NotificationDone {
             job_id: done_id,
@@ -312,6 +314,23 @@ mod tests {
         assert!(matches!(
             &events[1],
             AppEvent::NotificationDone { ok: true, .. }
+        ));
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn a_panicked_job_is_removed_and_reported_as_failed() {
+        let sink = FakeSink::default();
+        let registry = JobRegistry::default();
+        let id = spawn(sink.clone(), registry.clone(), "demo", |_ctx| async move {
+            panic!("job failed");
+            #[allow(unreachable_code)]
+            Ok(())
+        });
+
+        wait_until_finished(&registry, &id).await;
+        assert!(matches!(
+            sink.events().last(),
+            Some(AppEvent::NotificationDone { ok: false, .. })
         ));
     }
 

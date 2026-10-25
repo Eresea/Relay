@@ -133,6 +133,18 @@ let nextRuleId = 0;
           </div>
           <umbra-button size="sm" variant="link" (click)="cancelConnect()">Cancel</umbra-button>
         </div>
+      } @else if (status().needsReconnect) {
+        <div class="row">
+          <div>
+            <p class="label">Reconnect Gmail</p>
+            <p class="hint">
+              The saved sign-in expired or was revoked. Sign in again to resume polling.
+            </p>
+          </div>
+          <umbra-button size="sm" variant="link" [disabled]="busy()" (click)="connect()">
+            Reconnect
+          </umbra-button>
+        </div>
       } @else {
         <div class="row">
           <div>
@@ -241,6 +253,7 @@ export class Gmail {
   protected readonly status = signal<GmailStatus>({
     connected: false,
     connecting: false,
+    needsReconnect: false,
     accountEmail: null,
   });
   protected readonly busy = signal(false);

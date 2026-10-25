@@ -17,6 +17,7 @@ import {
   type OpenCloudStatus,
   type PasswordOptions,
   type VaultEntrySummary,
+  type VaultSyncRevision,
 } from '@core/tauri';
 import { Icon } from '@shared/icon';
 
@@ -47,6 +48,51 @@ import { Icon } from '@shared/icon';
         </nav>
 
         @if (view() === 'credentials') {
+          <section class="group">
+            <h2 class="u-caption">Sync encrypted vault</h2>
+            <p class="hint">
+              Nexus stores only the encrypted vault. Check for a remote copy before uploading or
+              replacing this device's copy.
+            </p>
+            @if (syncMessage()) {
+              <p class="hint">{{ syncMessage() }}</p>
+            }
+            @if (remoteVault()) {
+              <p class="hint">
+                Restoring replaces every credential on this device. Keep a separate export if you
+                need both copies.
+              </p>
+              <input
+                class="field"
+                type="password"
+                placeholder="Master password to restore this copy"
+                [(ngModel)]="syncPassword"
+                name="syncPassword"
+              />
+              <button
+                type="button"
+                class="link"
+                [disabled]="busy() || !syncPassword()"
+                (click)="restoreRemoteVault()"
+              >
+                Replace this vault with the remote copy
+              </button>
+            }
+            <div class="header-actions">
+              <button type="button" class="link" [disabled]="busy()" (click)="checkRemoteVault()">
+                Check Nexus
+              </button>
+              <button
+                type="button"
+                class="link"
+                [disabled]="busy() || !remoteChecked()"
+                (click)="uploadVault()"
+              >
+                Upload this copy
+              </button>
+            </div>
+          </section>
+
           <section class="group">
             <h2 class="u-caption">Generate a password</h2>
             <div class="generated-row">
@@ -687,6 +733,10 @@ export class Vault {
   protected readonly revealedPassword = signal('');
   protected readonly pendingDeleteId = signal<string | null>(null);
   protected readonly exportPath = signal('');
+  protected readonly remoteVault = signal<VaultSyncRevision | null>(null);
+  protected readonly remoteChecked = signal(false);
+  protected readonly syncPassword = signal('');
+  protected readonly syncMessage = signal('');
 
   protected readonly generated = signal('');
   protected readonly copiedId = signal<string | null>(null);
@@ -762,6 +812,66 @@ export class Vault {
 
   private async loadEntries(): Promise<void> {
     this.entries.set(await this.tauri.vaultListEntries());
+  }
+
+  protected async checkRemoteVault(): Promise<void> {
+    this.busy.set(true);
+    this.syncMessage.set('');
+    try {
+      this.remoteVault.set(await this.tauri.nexusVaultLatest());
+      this.remoteChecked.set(true);
+      this.syncMessage.set(
+        this.remoteVault()
+          ? 'Remote copy found. Review before choosing a direction.'
+          : 'No remote copy exists yet.',
+      );
+    } catch (error) {
+      this.syncMessage.set(
+        this.errorMessage(error, 'Could not check Nexus. Sign in to Nexus and try again.'),
+      );
+    } finally {
+      this.busy.set(false);
+    }
+  }
+
+  protected async uploadVault(): Promise<void> {
+    this.busy.set(true);
+    try {
+      const result = await this.tauri.nexusVaultUpload(this.remoteVault()?.revisionId ?? null);
+      if (result?.kind === 'conflict') {
+        this.syncMessage.set(
+          'The remote copy changed. Check Nexus again and review before retrying.',
+        );
+      } else if (result?.kind === 'saved') {
+        this.remoteVault.set(result.value);
+        this.remoteChecked.set(true);
+        this.syncMessage.set('Encrypted vault uploaded.');
+      }
+    } catch (error) {
+      this.syncMessage.set(this.errorMessage(error, 'Could not upload the vault.'));
+    } finally {
+      this.busy.set(false);
+    }
+  }
+
+  protected async restoreRemoteVault(): Promise<void> {
+    const remote = this.remoteVault();
+    if (!remote || !this.syncPassword()) return;
+    if (!window.confirm('Replace this device’s entire password vault with the remote copy?'))
+      return;
+    this.busy.set(true);
+    try {
+      await this.tauri.vaultApplySync(remote.ciphertext, this.syncPassword());
+      this.syncPassword.set('');
+      await this.loadEntries();
+      this.syncMessage.set('Remote copy restored on this device.');
+    } catch (error) {
+      this.syncMessage.set(
+        this.errorMessage(error, 'Could not restore the remote copy. Check the master password.'),
+      );
+    } finally {
+      this.busy.set(false);
+    }
   }
 
   protected async create(): Promise<void> {
