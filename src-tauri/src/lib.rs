@@ -17,6 +17,8 @@ mod nexus_auth;
 mod nexus_revoke;
 pub mod nexus_sync;
 mod notifications;
+#[cfg(desktop)]
+mod omnibar;
 mod opencloud;
 mod overlay;
 #[cfg(desktop)]
@@ -229,6 +231,8 @@ pub fn run() {
                 runtime::runtime_leaf_health,
                 runtime::runtime_nexus_readiness,
                 commands::codex_send,
+                commands::codex_ask,
+                commands::project_script_start,
                 commands::codex_list_threads,
                 commands::codex_read_thread,
                 commands::codex_older_turns,

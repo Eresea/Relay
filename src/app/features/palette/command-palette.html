@@ -1,113 +1,199 @@
-<div class="field">
-  <rl-icon name="search" [size]="16" />
-  <input
-    #field
-    type="text"
-    autocomplete="off"
-    spellcheck="false"
-    placeholder="Type a command"
-    aria-label="Search commands"
-    role="combobox"
-    aria-autocomplete="list"
-    aria-expanded="true"
-    aria-controls="palette-results"
-    [attr.aria-activedescendant]="active() ? 'cmd-' + active()!.id : null"
-    [readOnly]="running()"
-    (input)="onQuery($any($event.target).value)"
-  />
-</div>
-
-<div
-  class="results"
-  id="palette-results"
-  role="listbox"
-  aria-label="Commands"
-  [attr.aria-busy]="running() || loadingThreads()"
->
-  @for (match of flat(); track match.command.id; let index = $index) {
-    @let command = match.command;
-    <button
-      #row
-      type="button"
-      class="row"
-      role="option"
-      tabindex="-1"
-      [id]="'cmd-' + command.id"
-      [attr.aria-label]="command.title"
-      [class.is-active]="index === activeIndex()"
-      [attr.aria-selected]="index === activeIndex()"
-      [disabled]="running()"
-      (click)="run(command)"
-      (mousemove)="activeIndex.set(index)"
-    >
-      @if (hue(command); as tone) {
-        <span class="u-entity-tile tile" [style.--entity-hue]="tone">
-          <rl-icon [name]="command.icon ?? 'circle'" [size]="14" />
-        </span>
-      } @else if (command.icon) {
-        <rl-icon class="glyph" [name]="command.icon" [size]="16" />
-      }
-
-      <span class="label">
-        @for (part of titleParts(match); track $index) {
-          @if (part.matched) {
-            <mark>{{ part.text }}</mark>
-          } @else {
-            {{ part.text }}
-          }
-        }
-      </span>
-
-      @if (command.shortcut) {
-        <rl-kbd [keys]="command.shortcut" />
-      }
-    </button>
+<div class="context" aria-label="Context">
+  @if (context(); as project) {
+    <span class="chip" title="Project in context">
+      <rl-icon name="folder" [size]="14" />{{ project.name }}
+    </span>
+    @if (project.currentBranch) {
+      <span class="chip mono"
+        ><rl-icon name="git-branch" [size]="14" />{{ project.currentBranch }}</span
+      >
+    }
+  }
+  @if (runningCount() > 0) {
+    <span class="chip"><span class="dot running"></span>{{ runningCount() }} running</span>
+  }
+  @if (waitingCount() > 0) {
+    <span class="needs"><span class="dot waiting"></span>{{ waitingCount() }} need you</span>
   }
 </div>
-@if (flat().length === 0) {
-  <div class="empty" role="status" aria-live="polite">
-    @if (loadingThreads()) {
-      <p class="title">Searching agent threads…</p>
-    } @else if (threadLoadFailed()) {
-      <p class="title">Could not load agent threads</p>
-    } @else {
-      <p class="title">No matching command</p>
-      <p class="body">Try a shorter word, or press Escape to close.</p>
+
+<div class="field">
+  <rl-icon name="search" [size]="20" />
+  <div class="input">
+    <span class="ghost" aria-hidden="true"
+      ><span class="typed">{{ query() }}</span
+      >{{ ghost() }}</span
+    >
+    <input
+      #field
+      type="text"
+      autocomplete="off"
+      spellcheck="false"
+      [placeholder]="placeholder()"
+      aria-label="Search commands"
+      role="combobox"
+      aria-autocomplete="list"
+      aria-expanded="true"
+      aria-controls="palette-results"
+      [attr.aria-activedescendant]="active() ? 'cmd-' + active()!.id : null"
+      [readOnly]="running()"
+      (input)="onQuery($any($event.target).value)"
+    />
+  </div>
+  <div class="modes" role="radiogroup" aria-label="Mode">
+    @for (m of modes; track m.id) {
+      <button
+        type="button"
+        class="mode"
+        role="radio"
+        tabindex="-1"
+        [attr.aria-checked]="mode() === m.id"
+        [class.on]="mode() === m.id"
+        (click)="setMode(m.id)"
+      >
+        <rl-icon [name]="m.icon" [size]="14" />{{ m.label }}
+      </button>
     }
   </div>
-}
+</div>
 
-<div
-  class="run-status"
-  [class.error]="runError()"
-  aria-live="polite"
-  aria-label="Command menu keyboard shortcuts"
->
+<div class="body">
+  <div
+    class="results"
+    id="palette-results"
+    role="listbox"
+    aria-label="Results"
+    [attr.aria-busy]="running() || loadingThreads()"
+  >
+    @for (group of view(); track group.section) {
+      <p class="u-caption section" role="presentation">{{ group.section }}</p>
+      @for (row of group.rows; track row.match.command.id) {
+        @let result = row.match.command;
+        <button
+          #row
+          type="button"
+          class="row"
+          role="option"
+          tabindex="-1"
+          [id]="'cmd-' + result.id"
+          [attr.aria-label]="result.title"
+          [class.is-active]="row.index === activeIndex()"
+          [attr.aria-selected]="row.index === activeIndex()"
+          [disabled]="running()"
+          (click)="run(result)"
+          (mousemove)="activeIndex.set(row.index)"
+        >
+          @if (tone(result); as color) {
+            <span class="u-entity-tile tile" [style.--entity-hue]="color">
+              <rl-icon [name]="result.icon ?? 'circle'" [size]="14" />
+            </span>
+          } @else {
+            <span class="tile plain"><rl-icon [name]="result.icon ?? 'circle'" [size]="14" /></span>
+          }
+          <span class="label">
+            <span class="title">
+              @for (part of titleParts(row.match); track $index) {
+                @if (part.matched) {
+                  <mark>{{ part.text }}</mark>
+                } @else {
+                  <span>{{ part.text }}</span>
+                }
+              }
+            </span>
+            @if (result.sub) {
+              <span class="sub">{{ result.sub }}</span>
+            }
+          </span>
+          @if (result.meta) {
+            <span class="meta">{{ result.meta }}</span>
+          }
+          @if (result.shortcut) {
+            <rl-kbd [keys]="result.shortcut" />
+          }
+        </button>
+      }
+    }
+
+    @if (flat().length === 0) {
+      <div class="empty" role="status" aria-live="polite">
+        @if (loadingThreads()) {
+          <p class="title">Searching Codex threads…</p>
+        } @else if (threadLoadFailed()) {
+          <p class="title">Could not load Codex threads</p>
+          <button type="button" class="retry" (click)="retryAgentThreads()">Retry</button>
+        } @else if (mode() === 'ask') {
+          <p class="title">Type a question</p>
+          <p class="body">
+            Codex answers in {{ context()?.name ?? 'a project' }}, in the background.
+          </p>
+        } @else {
+          <p class="title">Nothing matches</p>
+          <p class="body">Try a shorter word, or press Tab for another mode.</p>
+        }
+      </div>
+    }
+  </div>
+
+  <aside class="preview" aria-live="polite">
+    @if (active(); as result) {
+      <div class="preview-head">
+        @if (tone(result); as color) {
+          <span class="u-entity-tile tile-lg" [style.--entity-hue]="color">
+            <rl-icon [name]="result.icon ?? 'circle'" [size]="16" />
+          </span>
+        } @else {
+          <span class="tile-lg plain"
+            ><rl-icon [name]="result.icon ?? 'circle'" [size]="16"
+          /></span>
+        }
+        <div class="preview-title">
+          <p class="name">{{ result.title }}</p>
+          @if (result.sub) {
+            <p class="sub">{{ result.sub }}</p>
+          }
+        </div>
+      </div>
+
+      @if (result.note) {
+        <p class="note">{{ result.note }}</p>
+      }
+
+      @if (result.facts?.length) {
+        <dl class="facts">
+          @for (fact of result.facts; track fact[0]) {
+            <dt>{{ fact[0] }}</dt>
+            <dd>{{ fact[1] }}</dd>
+          }
+        </dl>
+      }
+
+      <div class="acts">
+        <button type="button" class="act primary" [disabled]="running()" (click)="run(result)">
+          {{ result.verb ?? 'Open' }}<rl-kbd [keys]="['Enter']" />
+        </button>
+        @for (action of result.more ?? []; track action.label) {
+          <button type="button" class="act" [disabled]="running()" (click)="action.run()">
+            {{ action.label }}
+          </button>
+        }
+      </div>
+    }
+  </aside>
+</div>
+
+<div class="foot" [class.error]="runError()" aria-live="polite" aria-label="Keyboard shortcuts">
   @if (running()) {
-    <span>Working…</span><span>Close</span><rl-kbd [keys]="['Esc']" />
+    <span>Working…</span>
   } @else if (runError()) {
     <span>Could not complete that action.</span><span>Retry</span><rl-kbd [keys]="['Enter']" />
-    <span>Close</span><rl-kbd [keys]="['Esc']" />
-  } @else if (threadLoadFailed()) {
-    <span>Thread search failed</span>
-    <button
-      #retryButton
-      type="button"
-      class="retry"
-      (click)="retryAgentThreads()"
-      (keydown)="$event.stopPropagation()"
-    >
-      Retry
-    </button>
-    <span>Close</span><rl-kbd [keys]="['Esc']" />
   } @else {
-    @if (loadingThreads() && flat().length > 0) {
-      <span>Finding threads…</span>
+    <span>Move</span><rl-kbd [keys]="['↑', '↓']" /> <span>Open</span><rl-kbd [keys]="['Enter']" />
+    @if (ghost()) {
+      <span>Complete</span><rl-kbd [keys]="['→']" />
     }
-    <span>Navigate</span><rl-kbd [keys]="['↑', '↓']" />
-    @if (active()) {
-      <span>Complete</span><rl-kbd [keys]="['Tab']" />
-    }
-    <span>Open</span><rl-kbd [keys]="['Enter']" /> <span>Close</span><rl-kbd [keys]="['Esc']" />
+    <span>Mode</span><rl-kbd [keys]="['Tab']" />
   }
+  <span class="spacer"></span>
+  <span>Activity</span><rl-kbd [keys]="['Ctrl', 'Alt', 'Space']" /> <span>Close</span
+  ><rl-kbd [keys]="['Esc']" />
 </div>

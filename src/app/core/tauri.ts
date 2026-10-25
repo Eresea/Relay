@@ -205,6 +205,16 @@ export class TauriBridge {
     return result;
   }
 
+  /** Starts a Codex thread as a background job; the answer arrives as a notification. */
+  async codexAsk(prompt: string, workingDirectory: string): Promise<void> {
+    await this.invoke('codex_ask', { prompt, workingDirectory });
+  }
+
+  /** Starts a workspace script as a background job; the result arrives as a notification. */
+  async projectScriptStart(path: string, script: string): Promise<void> {
+    await this.invoke('project_script_start', { path, script });
+  }
+
   async codexListThreads(cursor: string | null = null): Promise<CodexThreadPage> {
     const result = await this.invoke<CodexThreadPage>('codex_list_threads', { cursor });
     if (!result) throw new Error('Codex returned no thread list.');

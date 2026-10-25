@@ -133,6 +133,11 @@ pub struct NotificationOptions {
 }
 
 impl<S: EventSink> JobContext<S> {
+    /// Also the id of the job's own notification, for updating it in place.
+    pub fn id(&self) -> &JobId {
+        &self.id
+    }
+
     pub fn is_cancelled(&self) -> bool {
         self.cancelled.load(Ordering::Relaxed)
     }

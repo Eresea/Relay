@@ -11,10 +11,10 @@ export function updateRecentCommandIds(
   return [commandId, ...recentIds.filter((id) => id !== commandId)].slice(0, limit);
 }
 
-export function recentCommands(
-  commands: readonly Command[],
+export function recentCommands<T extends Command>(
+  commands: readonly T[],
   recentIds: readonly string[],
-): readonly Command[] {
+): readonly T[] {
   const byId = new Map(commands.map((command) => [command.id, command]));
   return recentIds.flatMap((id) => {
     const command = byId.get(id);

@@ -1855,6 +1855,32 @@ pub fn open_terminal(path: String) -> Result<()> {
 /// callback thread: `git fetch`/`pull` can block for as long as the network
 /// does, and every other command — including opening an unrelated popover —
 /// would stall behind it otherwise.
+/// Starts a Codex thread in the background and returns its job id at once.
+/// Progress and the answer arrive as notifications.
+#[cfg(desktop)]
+#[tauri::command]
+pub fn codex_ask(
+    app: AppHandle,
+    jobs: tauri::State<JobRegistry>,
+    prompt: String,
+    working_directory: String,
+) -> JobId {
+    crate::omnibar::ask_codex(app, jobs.inner().clone(), prompt, working_directory)
+}
+
+/// Starts a workspace's `package.json` script in the background and returns
+/// its job id at once. Progress and the result arrive as notifications.
+#[cfg(desktop)]
+#[tauri::command]
+pub fn project_script_start(
+    app: AppHandle,
+    jobs: tauri::State<JobRegistry>,
+    path: String,
+    script: String,
+) -> JobId {
+    crate::omnibar::run_script(app, jobs.inner().clone(), path, script)
+}
+
 #[tauri::command]
 pub async fn project_action(path: String, action: WorkspaceAction) -> Result<()> {
     tauri::async_runtime::spawn_blocking(move || crate::workspaces::run_action(&path, action))
