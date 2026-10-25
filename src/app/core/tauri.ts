@@ -40,6 +40,15 @@ export class TauriBridge {
     await this.invoke('cancel_job', { jobId });
   }
 
+  /**
+   * Sizes the attention overlay to its content and anchors it: the pill
+   * top-centre, the stack bottom-right. Shows the window if it is hidden.
+   * Sizes are CSS pixels; the core converts for the monitor's scale.
+   */
+  async hudLayout(mode: HudMode, width: number, height: number): Promise<void> {
+    await this.invoke('hud_layout', { mode, width, height });
+  }
+
   /** A pull-based check alongside the push-based `notificationDone` event. */
   async isJobRunning(jobId: string): Promise<boolean> {
     return (await this.invoke<boolean>('is_job_running', { jobId })) ?? false;
@@ -1412,6 +1421,9 @@ export class TauriBridge {
     return invoke<T>(command, args);
   }
 }
+
+/** Mirrors src-tauri/src/overlay.rs's `HudMode`. */
+export type HudMode = 'pill' | 'stack';
 
 /** Mirrors src-tauri/src/commands.rs's `CoreCommand`. */
 export type CoreCommand =

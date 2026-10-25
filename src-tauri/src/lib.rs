@@ -102,6 +102,7 @@ pub fn run() {
             .invoke_handler(tauri::generate_handler![
                 commands::core_commands,
                 commands::run_core_command,
+                commands::hud_layout,
                 commands::cancel_job,
                 commands::is_job_running,
                 commands::dismiss_palette,

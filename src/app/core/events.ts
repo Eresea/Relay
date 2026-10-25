@@ -54,4 +54,5 @@ export type AppEvent =
   | { readonly type: 'openAgentThreadRequested'; readonly threadId: string }
   | ({ readonly type: 'notification' } & NotificationPayload)
   | { readonly type: 'notificationDone'; readonly jobId: string; readonly ok: boolean }
+  | { readonly type: 'attentionToggleRequested' }
   | ({ readonly type: 'updateChanged' } & UpdateSnapshot);

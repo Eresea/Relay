@@ -10,7 +10,7 @@ import { UmbraInputComponent } from '@umbra/components/umbra-input/umbra-input.c
 import { UmbraSwitchComponent } from '@umbra/components/umbra-switch/umbra-switch.component';
 
 const HUD_TOP_OFFSET_KEY = 'hud.topOffset';
-const DEFAULT_HUD_TOP_OFFSET = 80;
+const DEFAULT_HUD_TOP_OFFSET = 0;
 const MAX_HUD_TOP_OFFSET = 2000;
 
 /**
@@ -91,8 +91,8 @@ const MAX_HUD_TOP_OFFSET = 2000;
         </div>
         <div class="row">
           <div>
-            <p class="label">Notification top offset</p>
-            <p class="hint">Distance from the top-right corner, in pixels.</p>
+            <p class="label">Activity pill offset</p>
+            <p class="hint">Extra space above the activity pill, in pixels.</p>
           </div>
           <span class="number-input">
             <umbra-input
@@ -101,7 +101,7 @@ const MAX_HUD_TOP_OFFSET = 2000;
               [max]="2000"
               [step]="1"
               [value]="hudTopOffset().toString()"
-              ariaLabel="Notification top offset in pixels"
+              ariaLabel="Activity pill offset in pixels"
               (valueChange)="saveHudTopOffset($event)"
             />
           </span>

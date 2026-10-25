@@ -98,6 +98,12 @@ pub struct OpenAgentThreadArgs {
     thread_id: String,
 }
 
+/// Sizes and anchors the attention overlay to what its webview drew.
+#[tauri::command]
+pub fn hud_layout(app: AppHandle, mode: overlay::HudMode, width: f64, height: f64) -> Result<()> {
+    overlay::layout_hud(&app, mode, width, height)
+}
+
 #[tauri::command]
 pub fn run_core_command(app: AppHandle, command: CoreCommand) -> Result<()> {
     match command {
