@@ -12,46 +12,125 @@
   .titlebar {
     display: flex;
     align-items: stretch;
-    justify-content: space-between;
+    gap: var(--space-4);
     flex: none;
     block-size: var(--titlebar-height);
-    padding-inline-start: var(--space-3);
+    padding-inline-start: var(--space-5);
     border-block-end: 1px solid var(--border-subtle);
     background: var(--bg-sunken);
   }
 
-  .titlebar-start {
-    display: flex;
-    align-items: center;
-    gap: var(--space-4);
+  .wordmark {
+    align-self: center;
+    font-size: var(--text-13);
+    font-weight: var(--weight-semibold);
+    letter-spacing: -0.045em;
+    color: var(--text-body);
   }
 
-  .home-btn {
-    display: grid;
-    place-items: center;
-    inline-size: var(--control-sm);
-    block-size: var(--control-sm);
+  .titlebar-kbd {
+    align-self: center;
+  }
+
+  /* Tabs hang from the titlebar's bottom edge into the page below. */
+  .tabs {
+    display: flex;
+    align-items: flex-end;
+    gap: var(--space-1);
+    flex: 1;
+    min-inline-size: 0;
+    margin-inline-start: var(--space-5);
+    overflow: hidden;
+  }
+
+  .tab {
+    display: flex;
+    align-items: center;
+    flex: none;
+    block-size: 30px;
+    padding-inline: var(--space-2);
     color: var(--text-subtle);
-    border-radius: var(--radius-sm);
+    border-radius: var(--radius-sm) var(--radius-sm) 0 0;
+    font-size: var(--text-12);
     transition:
       background-color var(--dur-hover) var(--ease-standard),
       color var(--dur-hover) var(--ease-standard);
   }
 
-  .home-btn:hover {
+  .tab:hover {
+    color: var(--text-body);
+  }
+
+  .tab.active {
+    color: var(--text-strong);
+    background: var(--bg-app);
+    box-shadow:
+      inset 0 1px 0 var(--border-default),
+      inset 1px 0 0 var(--border-subtle),
+      inset -1px 0 0 var(--border-subtle);
+  }
+
+  .tab-open {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+    block-size: 100%;
+    padding-inline: var(--space-4);
+    white-space: nowrap;
+  }
+
+  .tab-close {
+    display: grid;
+    place-items: center;
+    inline-size: 20px;
+    block-size: 20px;
+    color: var(--text-subtle);
+    border-radius: var(--radius-sm);
+  }
+
+  .tab-close:hover {
     color: var(--text-body);
     background: var(--tint-hover);
   }
 
-  .home-btn.active {
-    color: var(--text-strong);
+  .activity {
+    display: flex;
+    align-items: center;
+    gap: var(--space-5);
+    font-size: var(--text-11);
+    color: var(--text-subtle);
+    white-space: nowrap;
   }
 
-  .wordmark {
-    font-size: var(--text-13);
-    font-weight: var(--weight-semibold);
-    letter-spacing: -0.045em;
-    color: var(--text-body);
+  .activity-part,
+  .status-part {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-3);
+  }
+
+  .dot {
+    inline-size: 6px;
+    block-size: 6px;
+    border-radius: var(--radius-pill);
+    background: var(--status-idle);
+    flex: none;
+  }
+
+  .dot[data-status='running'] {
+    background: var(--status-running);
+  }
+
+  .dot[data-status='waiting'] {
+    background: var(--status-waiting);
+  }
+
+  .dot[data-status='blocked'] {
+    background: var(--status-blocked);
+  }
+
+  .dot[data-status='done'] {
+    background: var(--status-done);
   }
 
   .window-controls {
@@ -76,6 +155,10 @@
     background: var(--tint-hover);
   }
 
+  .window-btn.on {
+    color: var(--text-body);
+  }
+
   .window-btn.close:hover {
     color: var(--danger-ink);
     background: var(--danger);
@@ -87,73 +170,40 @@
     min-block-size: 0;
   }
 
+  /* Icon-only module rail: every module one click away, labels on hover. */
   .rail {
     display: flex;
     flex-direction: column;
+    align-items: center;
     flex: none;
-    inline-size: var(--sidebar-width-collapsed);
-    padding: var(--space-3);
+    inline-size: 52px;
+    padding-block: var(--space-5);
     border-inline-end: 1px solid var(--border-subtle);
     background: var(--bg-sunken);
-    transition: inline-size var(--dur-panel) var(--ease-standard);
-    overflow: visible;
   }
 
-  .rail.expanded {
-    inline-size: var(--sidebar-width);
-  }
-
-  /* Future page buttons stack here, growing downward from the top. */
-  .rail-top {
+  .rail-top,
+  .rail-bottom {
     display: flex;
     flex-direction: column;
+    align-items: center;
     gap: var(--space-2);
+  }
+
+  /* Settings and the account stay pinned to the rail's bottom edge. */
+  .rail-top {
     flex: 1;
     min-block-size: 0;
   }
 
-  /* Settings stays pinned to the rail's bottom edge, apart from the rest. */
-  .rail-bottom {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-2);
-    flex: none;
-  }
-
-  /* A 1:1 icon button — the toggle's own shape at every rail width, and
-   * a nav item's shape once the rail is narrow enough that its label is
-   * gone. Fixed square dimensions rather than a stretched-to-fit row, so
-   * it never reads as a wide bar with a stray icon in it. */
-  .rail-toggle {
+  .rail-item {
+    position: relative;
     display: grid;
     place-items: center;
-    flex: none;
-    inline-size: var(--control-sm);
-    block-size: var(--control-sm);
+    inline-size: 36px;
+    block-size: 36px;
     color: var(--text-subtle);
-    border-radius: var(--radius-sm);
-    transition:
-      background-color var(--dur-hover) var(--ease-standard),
-      color var(--dur-hover) var(--ease-standard);
-  }
-
-  .rail-toggle:hover {
-    color: var(--text-body);
-    background: var(--tint-hover);
-  }
-
-  .rail-item {
-    display: flex;
-    align-items: center;
-    gap: var(--space-3);
-    inline-size: 100%;
-    block-size: var(--control-sm);
-    /* Start padding is always 0 so the icon never shifts when the rail
-     * expands — only the end padding (breathing room before the label's
-     * row edge) responds to that. */
-    padding-inline: 0 var(--space-2);
-    color: var(--text-subtle);
-    border-radius: var(--radius-sm);
+    border-radius: var(--radius-md);
     transition:
       background-color var(--dur-hover) var(--ease-standard),
       color var(--dur-hover) var(--ease-standard);
@@ -164,14 +214,21 @@
     background: var(--tint-hover);
   }
 
-  .rail-item.active {
-    color: var(--text-strong);
-    background: var(--tint-hover);
-  }
-
+  .rail-item.active,
   .account-trigger[aria-expanded='true'] {
     color: var(--text-strong);
-    background: var(--tint-hover);
+    background: var(--tint-active);
+  }
+
+  .badge {
+    position: absolute;
+    inset-block-start: 7px;
+    inset-inline-end: 7px;
+    inline-size: 7px;
+    block-size: 7px;
+    border-radius: var(--radius-pill);
+    background: var(--status-waiting);
+    box-shadow: 0 0 0 2px var(--bg-sunken);
   }
 
   .avatar {
@@ -184,6 +241,153 @@
     background: var(--bg-app);
     font-size: var(--text-12);
     font-weight: var(--weight-semibold);
+  }
+
+  .content {
+    flex: 1;
+    min-inline-size: 0;
+    overflow-y: auto;
+  }
+
+  .inspector {
+    display: flex;
+    flex-direction: column;
+    flex: none;
+    inline-size: 300px;
+    border-inline-start: 1px solid var(--border-subtle);
+    background: var(--bg-card);
+    overflow-y: auto;
+  }
+
+  .sect {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+    padding: var(--space-5) var(--space-6);
+    border-block-end: 1px solid var(--border-subtle);
+  }
+
+  .sect .u-caption {
+    margin-block-end: var(--space-3);
+  }
+
+  .sect-item {
+    display: flex;
+    align-items: center;
+    gap: var(--space-4);
+    min-block-size: var(--control-sm);
+    margin-inline: calc(-1 * var(--space-3));
+    padding-inline: var(--space-3);
+    border-radius: var(--radius-sm);
+    text-align: start;
+    font-size: var(--text-12);
+    color: var(--text-body);
+  }
+
+  .sect-item:hover {
+    background: var(--tint-hover);
+  }
+
+  .sect-item .tile {
+    inline-size: 20px;
+    block-size: 20px;
+    border-radius: var(--radius-sm);
+  }
+
+  .sect-title {
+    flex: 1;
+    min-inline-size: 0;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+  }
+
+  .sect-meta {
+    flex: none;
+    max-inline-size: 40%;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+    font-family: var(--font-mono);
+    font-size: var(--text-11);
+    color: var(--text-subtle);
+  }
+
+  .sect-empty {
+    font-size: var(--text-12);
+    color: var(--text-subtle);
+  }
+
+  .kv {
+    display: grid;
+    grid-template-columns: 96px 1fr;
+    gap: var(--space-3) var(--space-5);
+    font-size: var(--text-12);
+
+    dt {
+      color: var(--text-subtle);
+    }
+
+    dd {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      color: var(--text-body);
+    }
+  }
+
+  .ask {
+    margin-block-start: auto;
+    border-block-end: 0;
+  }
+
+  .ask-field {
+    display: flex;
+    align-items: center;
+    gap: var(--space-4);
+    block-size: var(--control-md);
+    padding-inline: var(--space-4);
+    border: 1px solid var(--border-default);
+    border-radius: var(--radius-md);
+    background: var(--bg-app);
+    color: var(--text-subtle);
+
+    &:focus-within {
+      border-color: var(--border-focus);
+    }
+
+    input {
+      flex: 1;
+      min-inline-size: 0;
+      background: none;
+      border: 0;
+      outline: none;
+      font-size: var(--text-12);
+      color: var(--text-body);
+    }
+  }
+
+  .statusbar {
+    display: flex;
+    align-items: center;
+    gap: var(--space-6);
+    flex: none;
+    block-size: 24px;
+    padding-inline: var(--space-5);
+    border-block-start: 1px solid var(--border-subtle);
+    background: var(--bg-sunken);
+    font-size: var(--text-11);
+    color: var(--text-subtle);
+  }
+
+  .status-end {
+    display: flex;
+    align-items: center;
+    gap: var(--space-6);
+    margin-inline-start: auto;
+  }
+
+  .statusbar kbd {
+    block-size: 15px;
   }
 
   .account-menu {
@@ -418,53 +622,5 @@
       align-items: flex-start;
       flex-direction: column;
     }
-  }
-
-  .rail-icon {
-    display: grid;
-    place-items: center;
-    flex: none;
-    inline-size: var(--control-sm);
-    block-size: var(--control-sm);
-  }
-
-  .rail-label {
-    overflow: hidden;
-    white-space: nowrap;
-    text-overflow: ellipsis;
-    font-size: var(--text-13);
-    font-weight: var(--weight-medium);
-  }
-
-  /* Collapsed: only the icon shows, as a square the same size as the
-   * toggle above it — the label is removed from layout rather than just
-   * clipped, so it can't skew the icon off-centre or hold onto its row's
-   * width. */
-  .rail:not(.expanded) .rail-item {
-    inline-size: var(--control-sm);
-    padding-inline: 0;
-    gap: 0;
-  }
-
-  .rail:not(.expanded) .rail-label {
-    display: none;
-  }
-
-  .content {
-    flex: 1;
-    min-inline-size: 0;
-    overflow-y: auto;
-  }
-
-  .statusbar {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: var(--space-4);
-    flex: none;
-    block-size: var(--statusbar-height);
-    padding-inline: var(--space-3);
-    border-block-start: 1px solid var(--border-subtle);
-    background: var(--bg-sunken);
   }
 }

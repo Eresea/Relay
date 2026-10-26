@@ -1,4 +1,5 @@
 import {
+  Activity,
   ArrowLeft,
   ChevronDown,
   ChevronRight,
@@ -25,6 +26,7 @@ import {
   Minus,
   Moon,
   PanelLeft,
+  PanelRight,
   Pencil,
   Play,
   Plus,
@@ -50,6 +52,7 @@ import { cn } from '@/lib/utils';
  * and only these glyphs ship in the bundle.
  */
 const ICONS = {
+  activity: Activity,
   'arrow-left': ArrowLeft,
   'chevron-down': ChevronDown,
   'chevron-right': ChevronRight,
@@ -76,6 +79,7 @@ const ICONS = {
   minus: Minus,
   moon: Moon,
   'panel-left': PanelLeft,
+  'panel-right': PanelRight,
   pencil: Pencil,
   play: Play,
   plus: Plus,

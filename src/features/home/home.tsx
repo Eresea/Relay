@@ -1,8 +1,10 @@
 import { lazy, Suspense, useEffect } from 'react';
 
 import { NexusAccount } from '@/core/nexus-account';
+import { NotificationCenter } from '@/core/notification-center';
 import { TauriBridge } from '@/core/tauri';
 import { ThemeService } from '@/core/theme';
+import Today from '@/features/today/today-view';
 import { UpdateStatusBar } from '@/features/updates/update-status-bar';
 import { inject } from '@/lib/inject';
 import { computed, signal, useSignals } from '@/lib/signals';
@@ -10,8 +12,9 @@ import { cn } from '@/lib/utils';
 import { AppPopover, PopoverClose, PopoverContent, PopoverTrigger } from '@/shared/app-popover';
 import { BackgroundTaskIndicator } from '@/shared/background-task-indicator';
 import { Icon } from '@/shared/icon';
-import { NotificationPopover } from '@/shared/notification-popover';
+import { Kbd } from '@/shared/kbd';
 
+import { Inspector } from './inspector';
 import './home.css';
 
 const Settings = lazy(() => import('@/features/settings/settings'));
@@ -21,19 +24,34 @@ const Vault = lazy(() => import('@/features/vault/vault'));
 const Runtime = lazy(() => import('@/features/runtime/runtime'));
 const Projects = lazy(() => import('@/features/projects/projects'));
 
-const RAIL_EXPANDED_SETTING_KEY = 'rail.expanded';
+const INSPECTOR_SETTING_KEY = 'deck.inspector';
 
-export type HomeView = 'home' | 'linear' | 'settings' | 'vault' | 'runtime' | 'codex' | 'account';
-export type SettingsTab = 'general' | 'github' | 'linear';
-export interface LinearProjectRequest {
+type HomeView =
+  'today' | 'linear' | 'projects' | 'settings' | 'vault' | 'runtime' | 'codex' | 'account';
+type SettingsTab = 'general' | 'github' | 'linear';
+interface LinearProjectRequest {
   readonly organizationId: string;
   readonly projectId: string;
 }
+
+/** Every view the Deck can open as a tab, in rail order. */
+const VIEWS: Readonly<Record<HomeView, { icon: string; label: string }>> = {
+  today: { icon: 'house', label: 'Today' },
+  linear: { icon: 'inbox', label: 'My work' },
+  codex: { icon: 'sparkles', label: 'Agents' },
+  projects: { icon: 'folder', label: 'Projects' },
+  vault: { icon: 'lock', label: 'Vault' },
+  runtime: { icon: 'activity', label: 'Runtime' },
+  settings: { icon: 'settings', label: 'Settings' },
+  account: { icon: 'circle', label: 'Account' },
+};
+const RAIL: readonly HomeView[] = ['today', 'linear', 'codex', 'projects', 'vault', 'runtime'];
 
 /** The main window's navigation state. One per main window. */
 export class HomeState {
   readonly account = inject(NexusAccount);
   readonly theme = inject(ThemeService);
+  readonly center = inject(NotificationCenter);
   private readonly tauri = inject(TauriBridge);
 
   readonly accountName = computed(
@@ -42,19 +60,25 @@ export class HomeState {
   readonly avatar = computed(() =>
     this.account.status().connected ? this.accountName().trim().charAt(0).toLocaleUpperCase() : 'N',
   );
-  readonly view = signal<HomeView>('home');
+  /** Open tabs, left to right. Today is pinned first and never closes. */
+  readonly tabs = signal<readonly HomeView[]>(['today']);
+  readonly view = signal<HomeView>('today');
   readonly requestedAgentThreadId = signal<string | null>(null);
   readonly linearProjectRequest = signal<LinearProjectRequest | null>(null);
-  /** Starts collapsed, the safe default while the stored value loads, then follows it. */
-  readonly railExpanded = signal(false);
+  readonly inspector = signal(true);
   readonly settingsTab = signal<SettingsTab>('general');
   readonly maximized = signal(false);
+
+  readonly running = computed(() => this.center.items().filter((n) => n.status === 'running'));
+  readonly needsYou = computed(() =>
+    this.center.items().filter((n) => n.status === 'waiting' || n.status === 'blocked'),
+  );
 
   /** Window and event listeners; returns their disposer. */
   start(): () => void {
     void this.tauri
-      .getSetting<boolean>(RAIL_EXPANDED_SETTING_KEY, this.railExpanded())
-      .then((stored) => this.railExpanded.set(stored));
+      .getSetting<boolean>(INSPECTOR_SETTING_KEY, this.inspector())
+      .then((stored) => this.inspector.set(stored));
     void this.tauri.isWindowMaximized().then((value) => this.maximized.set(value));
 
     const unlisteners: Promise<() => void>[] = [
@@ -66,26 +90,43 @@ export class HomeState {
       // views over the event channel.
       this.tauri.onEvent((event) => {
         if (event.type === 'openSettingsRequested') this.openSettings();
-        if (event.type === 'openVaultRequested') this.view.set('vault');
-        if (event.type === 'openRuntimeRequested') this.view.set('runtime');
-        if (event.type === 'openAgentsRequested') this.view.set('codex');
-        if (event.type === 'openAgentThreadRequested') {
-          this.requestedAgentThreadId.set(event.threadId);
-          this.view.set('codex');
-        }
-        if (event.type === 'openGithubRequested') {
-          this.view.set('settings');
-          this.settingsTab.set('github');
-        }
-        if (event.type === 'openLinearRequested') this.view.set('linear');
+        if (event.type === 'openVaultRequested') this.open('vault');
+        if (event.type === 'openRuntimeRequested') this.open('runtime');
+        if (event.type === 'openAgentsRequested') this.open('codex');
+        if (event.type === 'openAgentThreadRequested') this.openThread(event.threadId);
+        if (event.type === 'openGithubRequested') this.openSettings('github');
+        if (event.type === 'openLinearRequested') this.open('linear');
       }),
     ];
     return () => unlisteners.forEach((p) => void p.then((stop) => stop()));
   }
 
+  /** Focuses a view's tab, opening one after the current tab if it has none. */
+  open(view: HomeView): void {
+    this.tabs.update((tabs) => {
+      if (tabs.includes(view)) return tabs;
+      const at = tabs.indexOf(this.view()) + 1;
+      return [...tabs.slice(0, at), view, ...tabs.slice(at)];
+    });
+    this.view.set(view);
+  }
+
+  close(view: HomeView): void {
+    if (view === 'today') return;
+    const tabs = this.tabs();
+    const at = tabs.indexOf(view);
+    this.tabs.set(tabs.filter((tab) => tab !== view));
+    if (this.view() === view) this.view.set(tabs[at - 1] ?? 'today');
+  }
+
+  openThread(threadId: string): void {
+    this.requestedAgentThreadId.set(threadId);
+    this.open('codex');
+  }
+
   openLinearProject(request: LinearProjectRequest): void {
     this.linearProjectRequest.set(request);
-    this.view.set('linear');
+    this.open('linear');
   }
 
   handleLinearProjectRequest(request: LinearProjectRequest): void {
@@ -98,15 +139,15 @@ export class HomeState {
     }
   }
 
-  openSettings(): void {
-    this.view.set('settings');
-    this.settingsTab.set('general');
+  openSettings(tab: SettingsTab = 'general'): void {
+    this.settingsTab.set(tab);
+    this.open('settings');
   }
 
-  toggleRail(): void {
-    const expanded = !this.railExpanded();
-    this.railExpanded.set(expanded);
-    void this.tauri.setSetting(RAIL_EXPANDED_SETTING_KEY, expanded);
+  toggleInspector(): void {
+    const shown = !this.inspector();
+    this.inspector.set(shown);
+    void this.tauri.setSetting(INSPECTOR_SETTING_KEY, shown);
   }
 
   minimize(): void {
@@ -117,23 +158,16 @@ export class HomeState {
     void this.tauri.toggleMaximizeWindow();
   }
 
-  close(): void {
+  closeWindow(): void {
     void this.tauri.closeWindow();
   }
 }
 
-const RAIL: readonly { view: HomeView; icon: string; label: string }[] = [
-  { view: 'linear', icon: 'inbox', label: 'My work' },
-  { view: 'home', icon: 'library', label: 'Projects' },
-  { view: 'runtime', icon: 'info', label: 'Runtime' },
-  { view: 'codex', icon: 'command', label: 'Codex' },
-];
-
 /**
- * The main window. `decorations: false` in tauri.conf.json means the OS draws
- * no title bar, so everything here — the window buttons and the rail included
- * — is drawn by Relay and must behave like a native shell: a titlebar that
- * never scrolls away, and window buttons flush with the window's own edges.
+ * The Deck: the main window. `decorations: false` in tauri.conf.json means the
+ * OS draws no title bar, so everything here — tabs, window buttons, rail — is
+ * drawn by Relay and must behave like a native shell: a titlebar that never
+ * scrolls away, and window buttons flush with the window's own edges.
  */
 export default function Home() {
   useSignals();
@@ -142,23 +176,66 @@ export default function Home() {
 
   const view = s.view();
   const status = s.account.status();
+  const running = s.running().length;
+  const needsYou = s.needsYou().length;
 
   return (
     <div className="home">
       <header className="titlebar u-chrome" data-tauri-drag-region="">
-        <div className="titlebar-start">
+        <span className="wordmark" data-tauri-drag-region="">
+          Relay
+        </span>
+        <Kbd keys={['Ctrl', 'Space']} className="titlebar-kbd" />
+        <div className="tabs" role="tablist" aria-label="Open views" data-tauri-drag-region="">
+          {s.tabs().map((tab) => (
+            <div key={tab} className={cn('tab', view === tab && 'active')}>
+              <button
+                type="button"
+                role="tab"
+                aria-selected={view === tab}
+                className="tab-open"
+                onClick={() => s.view.set(tab)}
+              >
+                <Icon name={VIEWS[tab].icon} size={14} />
+                {VIEWS[tab].label}
+              </button>
+              {tab !== 'today' && (
+                <button
+                  type="button"
+                  className="tab-close"
+                  aria-label={`Close ${VIEWS[tab].label}`}
+                  onClick={() => s.close(tab)}
+                >
+                  <Icon name="x" size={14} />
+                </button>
+              )}
+            </div>
+          ))}
+        </div>
+        <span className="activity" data-tauri-drag-region="">
+          {running > 0 && (
+            <span className="activity-part">
+              <span className="dot" data-status="running" />
+              {running} running
+            </span>
+          )}
+          {needsYou > 0 && (
+            <span className="activity-part">
+              <span className="dot" data-status="waiting" />
+              {needsYou} need{needsYou === 1 ? 's' : ''} you
+            </span>
+          )}
+        </span>
+        <div className="window-controls">
           <button
             type="button"
-            className={cn('home-btn', view === 'home' && 'active')}
-            onClick={() => s.view.set('home')}
-            aria-label="Home"
+            className={cn('window-btn', s.inspector() && 'on')}
+            onClick={() => s.toggleInspector()}
+            aria-label={s.inspector() ? 'Hide inspector' : 'Show inspector'}
+            aria-pressed={s.inspector()}
           >
-            <Icon name="house" size={16} />
+            <Icon name="panel-right" size={14} />
           </button>
-          <span className="wordmark">Relay</span>
-          <NotificationPopover />
-        </div>
-        <div className="window-controls">
           <button
             type="button"
             className="window-btn"
@@ -186,7 +263,7 @@ export default function Home() {
           <button
             type="button"
             className="window-btn close"
-            onClick={() => s.close()}
+            onClick={() => s.closeWindow()}
             aria-label="Close"
           >
             <Icon name="x" size={14} />
@@ -195,28 +272,19 @@ export default function Home() {
       </header>
 
       <div className="body">
-        <nav className={cn('rail u-chrome', s.railExpanded() && 'expanded')}>
+        <nav className="rail u-chrome" aria-label="Modules">
           <div className="rail-top">
-            <button
-              type="button"
-              className="rail-toggle"
-              onClick={() => s.toggleRail()}
-              aria-label={s.railExpanded() ? 'Collapse sidebar' : 'Expand sidebar'}
-            >
-              <Icon name="panel-left" size={16} />
-            </button>
             {RAIL.map((item) => (
               <button
-                key={item.view}
+                key={item}
                 type="button"
-                className={cn('rail-item', view === item.view && 'active')}
-                onClick={() => s.view.set(item.view)}
-                aria-label={item.label}
+                className={cn('rail-item', view === item && 'active')}
+                onClick={() => s.open(item)}
+                aria-label={VIEWS[item].label}
+                title={VIEWS[item].label}
               >
-                <span className="rail-icon">
-                  <Icon name={item.icon} size={16} />
-                </span>
-                <span className="rail-label">{item.label}</span>
+                <Icon name={VIEWS[item].icon} size={16} />
+                {item === 'today' && needsYou > 0 && <span className="badge" />}
               </button>
             ))}
           </div>
@@ -227,11 +295,9 @@ export default function Home() {
               className={cn('rail-item', view === 'settings' && 'active')}
               onClick={() => s.openSettings()}
               aria-label="Settings"
+              title="Settings"
             >
-              <span className="rail-icon">
-                <Icon name="settings" size={16} />
-              </span>
-              <span className="rail-label">Settings</span>
+              <Icon name="settings" size={16} />
             </button>
             <AppPopover>
               <PopoverTrigger>
@@ -241,13 +307,8 @@ export default function Home() {
                   aria-label="Nexus account"
                   title={status.connected ? s.accountName() : 'Sign in with Nexus'}
                 >
-                  <span className="rail-icon">
-                    <span className="avatar" aria-hidden="true">
-                      {s.avatar()}
-                    </span>
-                  </span>
-                  <span className="rail-label">
-                    {status.connected ? s.accountName() : 'Account'}
+                  <span className="avatar" aria-hidden="true">
+                    {s.avatar()}
                   </span>
                 </button>
               </PopoverTrigger>
@@ -266,7 +327,7 @@ export default function Home() {
                       <p className="account-email">{status.email}</p>
                     )}
                     <PopoverClose asChild>
-                      <button type="button" role="menuitem" onClick={() => s.view.set('account')}>
+                      <button type="button" role="menuitem" onClick={() => s.open('account')}>
                         Account details
                       </button>
                     </PopoverClose>
@@ -310,9 +371,11 @@ export default function Home() {
           </div>
         </nav>
 
-        <main className="content">
+        <main className="content" role="tabpanel" aria-label={VIEWS[view].label}>
           <Suspense fallback={<div className="page-loading" aria-busy="true" />}>
-            {view === 'account' ? (
+            {view === 'today' ? (
+              <Today />
+            ) : view === 'account' ? (
               <AccountPage s={s} />
             ) : view === 'settings' ? (
               <Settings initialTab={s.settingsTab()} />
@@ -335,11 +398,23 @@ export default function Home() {
             )}
           </Suspense>
         </main>
+
+        {s.inspector() && <Inspector onOpenThread={(id) => s.openThread(id)} />}
       </div>
 
       <footer className="statusbar u-chrome">
-        <UpdateStatusBar />
+        <span className="status-part">
+          <span className="dot" data-status={status.connected ? 'done' : 'idle'} />
+          {status.connected ? `Nexus · ${s.accountName()}` : 'Nexus · signed out'}
+        </span>
         <BackgroundTaskIndicator />
+        <span className="status-end">
+          <UpdateStatusBar />
+          <span className="status-part">
+            <Kbd keys={['Ctrl', 'Alt', 'Space']} />
+            Activity
+          </span>
+        </span>
       </footer>
     </div>
   );
@@ -350,8 +425,8 @@ function AccountPage({ s }: { s: HomeState }) {
   return (
     <section className="account-page" aria-labelledby="account-page-title">
       <header className="account-page-header">
-        <button type="button" className="account-back" onClick={() => s.view.set('home')}>
-          <Icon name="arrow-left" size={14} /> Back to projects
+        <button type="button" className="account-back" onClick={() => s.close('account')}>
+          <Icon name="arrow-left" size={14} /> Back
         </button>
         <p className="u-caption">PROFILE</p>
         <h1 id="account-page-title">Your account</h1>
