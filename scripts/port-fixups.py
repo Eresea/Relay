@@ -24,6 +24,45 @@ FIXUPS = {
         ),
         ("import { marked } from 'marked';", "import DOMPurify from 'dompurify';\nimport { marked } from 'marked';", 1),
     ],
+    "mobile": [
+        ("import { Settings } from '@/features/settings/settings';", "import Settings from '@/features/settings/settings';", 1),
+        ("import { Vault } from '@/features/vault/vault';", "import Vault from '@/features/vault/vault';", 1),
+        # Angular's afterRenderEffect: track the signals now, touch the DOM once
+        # React has committed (the rail is inert until then, so focus would fail).
+        # React commits in a microtask; a zero timeout runs after it.
+        (
+            "    afterRenderEffect(() => {\n"
+            "      if (this.focusModuleHeading()) {\n"
+            "        this.pageTitle.current?.focus();\n"
+            "        this.focusModuleHeading.set(false);\n"
+            "      } else if (this.railOpen()) {\n"
+            "        this.moduleSearch.current?.focus();\n"
+            "      }\n"
+            "    });\n",
+            "    this.destroyRef.effect(() => {\n"
+            "      const focusHeading = this.focusModuleHeading();\n"
+            "      const railOpen = this.railOpen();\n"
+            "      const timer = setTimeout(() => {\n"
+            "        if (focusHeading) {\n"
+            "          this.pageTitle.current?.focus();\n"
+            "          this.focusModuleHeading.set(false);\n"
+            "        } else if (railOpen) {\n"
+            "          this.moduleSearch.current?.focus();\n"
+            "        }\n"
+            "      });\n"
+            "      return () => clearTimeout(timer);\n"
+            "    });\n",
+            1,
+        ),
+    ],
+    "mobile-activedescendant": [
+        ("s.activeModule() ? 'mobile-' + s.activeModule()!.id : undefined", "s.activeModule() ? `mobile-${s.activeModule()?.id}` : undefined", 1),
+    ],
+    "mobile-connections": [
+        ("  const s = useController(() => new MobileConnectionsState());\n", "", 1),
+        ("export class MobileConnectionsState {}\n", "", 1),
+        ("import { useController, useSignals } from '@/lib/signals';", "import { useSignals } from '@/lib/signals';", 1),
+    ],
     "vault": [
         ("  private readonly masterPasswordField =\n    viewChild<ElementRef<HTMLInputElement>>('masterPasswordField');\n", "", 1),
         (

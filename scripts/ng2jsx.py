@@ -63,6 +63,9 @@ EVENTS = {
     "dragstart": "onDragStart", "dragend": "onDragEnd", "dragover": "onDragOver",
     "dragenter": "onDragEnter", "dragleave": "onDragLeave", "drop": "onDrop", "scroll": "onScroll",
     "paste": "onPaste", "wheel": "onWheel", "toggle": "onToggle", "load": "onLoad",
+    "pointercancel": "onPointerCancel", "transitionend": "onTransitionEnd",
+    "animationend": "onAnimationEnd", "touchstart": "onTouchStart", "touchmove": "onTouchMove",
+    "touchend": "onTouchEnd", "touchcancel": "onTouchCancel", "focusIn": "onFocus",
 }
 KEYS = {"enter": "Enter", "escape": "Escape", "esc": "Escape", "space": " ", "tab": "Tab",
         "arrowdown": "ArrowDown", "arrowup": "ArrowUp", "backspace": "Backspace", "delete": "Delete"}
@@ -445,9 +448,11 @@ def component_name(tag: str) -> str:
 
 
 class Emitter:
-    def __init__(self, members: set[str]):
+    def __init__(self, members: set[str], refs: dict[str, str] | None = None):
         self.tx = Translator(members)
         self.uses: set[str] = set()
+        # Template ref name -> the state field (a React ref) that viewChild read it into.
+        self.refs = refs or {}
 
     def nodes(self, nodes: list, locals_: set[str]) -> str:
         out = []
@@ -547,7 +552,8 @@ class Emitter:
             if name in DROP_ATTRS:
                 continue
             if name.startswith("#"):
-                props.append(f"ref={{/* TODO ref {name[1:]} */ undefined}}")
+                field = self.refs.get(name[1:])
+                props.append(f"ref={{s.{field}}}" if field else f"ref={{/* TODO ref {name[1:]} */ undefined}}")
                 continue
             if name == "class":
                 class_static = v
@@ -577,6 +583,8 @@ class Emitter:
                 # Angular removes an attribute bound to null; React does the same for
                 # undefined, which is also what React's attribute types accept.
                 js = re.sub(r"(?<![\w.])null(?![\w])", "undefined", self.tx.expr(v, locals_))
+                if attr == "inert":  # Angular: present when bound to ''; React: a boolean
+                    js = f"({js}) !== undefined"
                 props.append(f"{attr}={{{js}}}")
             elif name == "(ngModelChange)":
                 continue  # folded into the [(ngModel)] handler below
@@ -712,7 +720,9 @@ def convert(path: str):
     end_marker = "`,\n})"
     template_end = template_start + (rest.index(styles_marker) if styles_marker in rest else rest.index(end_marker))
     template = source[template_start:template_end]
-    emitter = Emitter(class_members(source))
+    refs = dict((selector, field) for field, selector in re.findall(
+        r"readonly (\w+) =\s*viewChild(?:\.required)?<ElementRef<\w+>>\('(\w+)'\)", source))
+    emitter = Emitter(class_members(source), refs)
     jsx = emitter.nodes(Parser(template).nodes(), set())
     return source, emitter.uses, jsx
 
@@ -775,6 +785,16 @@ def assemble(path: str, name: str, root: str, target: str) -> None:
         header = re.sub(r"(import \{[^}]*?)\beffect,\s*", r"\1", header)
         header = re.sub(r",\s*effect\b(?=[^}]*\} from '@/lib/signals')", "", header)
         header = re.sub(r"import \{\s*effect\s*\} from '@/lib/signals';\n?", "", header)
+    # viewChild element refs become React refs; reading one is `.current`.
+    body = re.sub(r"(?:private |protected )?readonly (\w+) =\s*viewChild(?:\.required)?<ElementRef<(\w+)>>\('\w+'\);",
+                  r"readonly \1 = createRef<\2>();", body)
+    body = re.sub(r"this\.(\w+)\(\)\?\.nativeElement(?=\.)", r"this.\1.current?", body)
+    body = re.sub(r"this\.(\w+)\(\)\?\.nativeElement", r"this.\1.current", body)
+    body = re.sub(r"this\.(\w+)\(\)!?\.nativeElement", r"this.\1.current!", body)
+    if "createRef<" in body:
+        react_extra = ["createRef"]
+    else:
+        react_extra = []
     # Angular's OnDestroy hook runs when the controller's screen unmounts.
     body = re.sub(r"\s+implements OnDestroy\b", "", body)
     if re.search(r"\n  ngOnDestroy\(\): void \{", body):
@@ -800,7 +820,7 @@ def assemble(path: str, name: str, root: str, target: str) -> None:
     if inputs and not re.search(r"import \{[^}]*\bsignal\b[^}]*\} from '@/lib/signals'", header):
         lines.append("import { signal } from '@/lib/signals';")
     css = "./" + target.replace("\\", "/").rsplit("/", 1)[-1].rsplit(".", 1)[0] + ".css"
-    react_names = (["Fragment"] if "Fragment" in uses else []) + (["useLayoutEffect"] if inputs else [])
+    react_names = (["Fragment"] if "Fragment" in uses else []) + (["useLayoutEffect"] if inputs else []) + react_extra
     lines = [l for l in lines if not l.startswith("import { Fragment } from 'react'")]
     if react_names:
         lines.insert(0, f"import {{ {', '.join(react_names)} }} from 'react';")

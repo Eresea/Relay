@@ -1,0 +1,99 @@
+.mobile-connections {
+  & {
+    display: block;
+  }
+
+  .connections {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-3);
+    padding: var(--space-5);
+  }
+
+  .connections-intro {
+    margin-block-end: var(--space-2);
+  }
+
+  .intro-copy {
+    margin-block-start: var(--space-2);
+    color: var(--text-muted);
+    font-size: var(--text-14);
+    line-height: 1.5;
+  }
+
+  .connection-card {
+    overflow: hidden;
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-lg);
+    background: var(--bg-raised);
+  }
+
+  .connection-card > summary {
+    display: flex;
+    align-items: center;
+    min-block-size: 72px;
+    gap: var(--space-3);
+    padding: var(--space-3) var(--space-4);
+    cursor: pointer;
+    list-style: none;
+  }
+
+  .connection-card > summary::-webkit-details-marker {
+    display: none;
+  }
+
+  .connection-card > summary:hover,
+  .connection-card > summary:focus-visible {
+    background: var(--tint-hover);
+  }
+
+  .connection-card[open] > summary {
+    border-block-end: 1px solid var(--border-subtle);
+  }
+
+  .connection-icon {
+    display: grid;
+    flex: none;
+    place-items: center;
+    inline-size: 36px;
+    block-size: 36px;
+    color: var(--primary-ink);
+    background: var(--tint-selected);
+    border-radius: var(--radius-md);
+  }
+
+  .connection-heading {
+    display: flex;
+    min-inline-size: 0;
+    flex: 1;
+    flex-direction: column;
+    gap: var(--space-1);
+  }
+
+  .connection-heading strong {
+    color: var(--text-body);
+    font-size: var(--text-13);
+    font-weight: var(--weight-medium);
+  }
+
+  .connection-heading span {
+    overflow: hidden;
+    color: var(--text-muted);
+    font-size: var(--text-12);
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .summary-chevron {
+    color: var(--text-muted);
+    transition: transform 160ms var(--ease-standard);
+  }
+
+  .connection-card[open] .summary-chevron {
+    transform: rotate(180deg);
+  }
+
+  .connection-body {
+    padding: var(--space-4);
+  }
+}
