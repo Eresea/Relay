@@ -617,4 +617,54 @@ mod tests {
         assert!(read_session_in(&root, "../../etc").is_err());
         std::fs::remove_dir_all(root).unwrap();
     }
+
+    /// Records what Claude asked and allows it.
+    #[derive(Default)]
+    struct Allowing {
+        asked: Vec<PermissionRequest>,
+        tools: Vec<String>,
+    }
+
+    impl Host for Allowing {
+        fn progress(&mut self, tool: &str) {
+            self.tools.push(tool.to_owned());
+        }
+
+        fn approve(&mut self, request: PermissionRequest) -> impl Future<Output = bool> + Send {
+            self.asked.push(request);
+            async { true }
+        }
+    }
+
+    /// One real Claude Code turn: costs a model call, so it only runs when
+    /// asked for (`cargo test live_ -- --ignored --nocapture`). Proves the
+    /// can_use_tool request reaches the host and the allow reply lets the
+    /// tool run.
+    #[tokio::test]
+    #[ignore = "runs a real, billed Claude Code turn"]
+    async fn live_a_write_asks_and_runs_once_allowed() {
+        let folder = std::env::temp_dir().join(format!("relay-claude-live-{}", std::process::id()));
+        std::fs::create_dir_all(&folder).unwrap();
+        let mut host = Allowing::default();
+        let run = run(
+            "Create a file named hello.txt in the current folder containing exactly: hi. Do nothing else.".into(),
+            folder.to_string_lossy().into_owned(),
+            None,
+            &mut host,
+        )
+        .await;
+        println!("asked: {:?}", host.asked);
+        println!("tools: {:?}", host.tools);
+        println!("run: {run:?}");
+        let written = std::fs::read_to_string(folder.join("hello.txt"));
+        let _ = std::fs::remove_dir_all(&folder);
+
+        let run = run.unwrap();
+        assert!(valid_session_id(&run.session_id));
+        assert!(
+            host.asked.iter().any(|r| r.tool == "Write"),
+            "expected a Write permission request"
+        );
+        assert_eq!(written.unwrap().trim(), "hi");
+    }
 }
