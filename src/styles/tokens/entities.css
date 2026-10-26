@@ -26,6 +26,29 @@
 
   --entity-fill-alpha: 0.13;
   --entity-edge-alpha: 0.3;
+
+  /* Module hues follow the same rule one level up: which module, never how
+   * it is going. Built-in modules have a fixed hue; a third-party module gets
+   * an entity hue by stable hash (hueFor in entity-hue.ts). Saturation and
+   * lightness are per theme so a glyph stays legible on either ladder. */
+  --module-s: 85%;
+  --module-l: 72%;
+  --module-agents: hsl(258 var(--module-s) var(--module-l));
+  --module-mail: hsl(22 var(--module-s) var(--module-l));
+  --module-github: hsl(152 var(--module-s) var(--module-l));
+  --module-linear: hsl(228 var(--module-s) var(--module-l));
+  --module-flow: hsl(188 var(--module-s) var(--module-l));
+  --module-files: hsl(44 var(--module-s) var(--module-l));
+  --module-vault: hsl(336 var(--module-s) var(--module-l));
+  --module-runtime: hsl(98 var(--module-s) var(--module-l));
+  --module-chat: hsl(300 var(--module-s) var(--module-l));
+  --module-relay: hsl(212 var(--module-s) var(--module-l));
+}
+
+:root.light,
+:root[data-theme='light'] {
+  --module-s: 70%;
+  --module-l: 42%;
 }
 
 /* Tile recipe. Set --entity-hue on the element (see hueFor() in

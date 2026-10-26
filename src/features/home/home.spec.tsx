@@ -77,3 +77,36 @@ it('manages Nexus sign-in from the avatar below Settings and reports failures', 
   fireEvent.keyDown(document.activeElement ?? document.body, { key: 'Escape' });
   expect(container.querySelector('.account-menu')).toBeNull();
 });
+
+it('opens views as tabs and closes them like browser tabs', () => {
+  provideBridge({ available: false });
+  provide(ThemeService, {
+    theme: signal('dark'),
+    toggle: () => undefined,
+  } as unknown as ThemeService);
+  render(<Home />);
+  const tabs = () => screen.getAllByRole('tab').map((tab) => tab.textContent);
+  const selected = () => screen.getByRole('tab', { selected: true }).textContent;
+
+  fireEvent.click(screen.getByRole('button', { name: 'Vault' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Runtime' }));
+  expect(tabs()).toEqual(['Today', 'Vault', 'Runtime']);
+  expect(selected()).toBe('Runtime');
+
+  // Middle click closes the tab under the pointer, not the selected one.
+  const vault = screen.getByRole('tab', { name: 'Vault' }).parentElement!;
+  fireEvent.mouseDown(vault, { button: 1 });
+  fireEvent(vault, new MouseEvent('auxclick', { bubbles: true, button: 1 }));
+  expect(tabs()).toEqual(['Today', 'Runtime']);
+
+  fireEvent.keyDown(window, { key: 'Tab', ctrlKey: true });
+  expect(selected()).toBe('Today');
+  fireEvent.keyDown(window, { key: 'Tab', ctrlKey: true, shiftKey: true });
+  expect(selected()).toBe('Runtime');
+
+  // Ctrl+W closes the selected tab; Today is pinned and stays.
+  fireEvent.keyDown(window, { key: 'w', ctrlKey: true });
+  fireEvent.keyDown(window, { key: 'w', ctrlKey: true });
+  expect(tabs()).toEqual(['Today']);
+  expect(selected()).toBe('Today');
+});

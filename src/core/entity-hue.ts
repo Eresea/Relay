@@ -37,3 +37,21 @@ export function hueFor(id: string): EntityHue {
 export function hueVar(hue: EntityHue): string {
   return `var(--entity-${hue})`;
 }
+
+/** Built-in modules, each with a fixed hue (--module-* in entities.css). */
+export type ModuleHue =
+  | 'agents'
+  | 'mail'
+  | 'github'
+  | 'linear'
+  | 'flow'
+  | 'files'
+  | 'vault'
+  | 'runtime'
+  | 'chat'
+  | 'relay';
+
+/** The CSS custom property for a built-in module's hue, for --entity-hue. */
+export function moduleHueVar(module: ModuleHue): string {
+  return `var(--module-${module})`;
+}

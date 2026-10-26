@@ -30,12 +30,21 @@
 :root[data-theme='dark'] {
   color-scheme: dark;
 
-  /* Surfaces stack by value, not by shadow. */
-  --bg-sunken: #050506;
-  --bg-app: #09090b;
-  --bg-card: #0d0d10;
-  --bg-raised: #18181b;
-  --bg-overlay: #101013;
+  /* Umbra 2 tonal ladder: panes separate by tone, not by hairline. Each
+   * step up is one pane nearer the eye: chrome, page, side panel, raised
+   * control, hover on a raised control. */
+  --bg-0: #07070a;
+  --bg-1: #0c0c10;
+  --bg-2: #111115;
+  --bg-3: #17171c;
+  --bg-4: #1e1e24;
+
+  /* Surfaces stack by value, not by shadow. Roles map onto the ladder. */
+  --bg-sunken: var(--bg-0);
+  --bg-app: var(--bg-1);
+  --bg-card: var(--bg-2);
+  --bg-raised: var(--bg-3);
+  --bg-overlay: var(--bg-2);
 
   /* Four ink levels. */
   --text-strong: #fafafa;
@@ -82,11 +91,17 @@
 :root[data-theme='light'] {
   color-scheme: light;
 
-  --bg-sunken: #f4f4f5;
-  --bg-app: #ffffff;
-  --bg-card: #fafafa;
-  --bg-raised: #ffffff;
-  --bg-overlay: #ffffff;
+  --bg-0: #ececef;
+  --bg-1: #f4f4f6;
+  --bg-2: #fafafb;
+  --bg-3: #ffffff;
+  --bg-4: #ffffff;
+
+  --bg-sunken: var(--bg-0);
+  --bg-app: var(--bg-1);
+  --bg-card: var(--bg-2);
+  --bg-raised: var(--bg-3);
+  --bg-overlay: var(--bg-3);
 
   --text-strong: #09090b;
   --text-body: #27272a;

@@ -1,5 +1,6 @@
 import { lazy, Suspense, useEffect } from 'react';
 
+import { moduleHueVar, type ModuleHue } from '@/core/entity-hue';
 import { NexusAccount } from '@/core/nexus-account';
 import { NotificationCenter } from '@/core/notification-center';
 import { TauriBridge } from '@/core/tauri';
@@ -8,7 +9,7 @@ import Today from '@/features/today/today-view';
 import { UpdateStatusBar } from '@/features/updates/update-status-bar';
 import { inject } from '@/lib/inject';
 import { computed, signal, useSignals } from '@/lib/signals';
-import { cn } from '@/lib/utils';
+import { cn, vars } from '@/lib/utils';
 import { AppPopover, PopoverClose, PopoverContent, PopoverTrigger } from '@/shared/app-popover';
 import { BackgroundTaskIndicator } from '@/shared/background-task-indicator';
 import { Icon } from '@/shared/icon';
@@ -35,15 +36,15 @@ interface LinearProjectRequest {
 }
 
 /** Every view the Deck can open as a tab, in rail order. */
-const VIEWS: Readonly<Record<HomeView, { icon: string; label: string }>> = {
-  today: { icon: 'house', label: 'Today' },
-  linear: { icon: 'inbox', label: 'My work' },
-  codex: { icon: 'sparkles', label: 'Agents' },
-  projects: { icon: 'folder', label: 'Projects' },
-  vault: { icon: 'lock', label: 'Vault' },
-  runtime: { icon: 'activity', label: 'Runtime' },
-  settings: { icon: 'settings', label: 'Settings' },
-  account: { icon: 'circle', label: 'Account' },
+const VIEWS: Readonly<Record<HomeView, { icon: string; label: string; module: ModuleHue }>> = {
+  today: { icon: 'house', label: 'Today', module: 'relay' },
+  linear: { icon: 'inbox', label: 'My work', module: 'linear' },
+  codex: { icon: 'sparkles', label: 'Agents', module: 'agents' },
+  projects: { icon: 'folder', label: 'Projects', module: 'files' },
+  vault: { icon: 'lock', label: 'Vault', module: 'vault' },
+  runtime: { icon: 'activity', label: 'Runtime', module: 'runtime' },
+  settings: { icon: 'settings', label: 'Settings', module: 'relay' },
+  account: { icon: 'circle', label: 'Account', module: 'relay' },
 };
 const RAIL: readonly HomeView[] = ['today', 'linear', 'codex', 'projects', 'vault', 'runtime'];
 
@@ -98,7 +99,12 @@ export class HomeState {
         if (event.type === 'openLinearRequested') this.open('linear');
       }),
     ];
-    return () => unlisteners.forEach((p) => void p.then((stop) => stop()));
+    const keys = (event: KeyboardEvent) => this.onKey(event);
+    window.addEventListener('keydown', keys);
+    return () => {
+      window.removeEventListener('keydown', keys);
+      unlisteners.forEach((p) => void p.then((stop) => stop()));
+    };
   }
 
   /** Focuses a view's tab, opening one after the current tab if it has none. */
@@ -117,6 +123,20 @@ export class HomeState {
     const at = tabs.indexOf(view);
     this.tabs.set(tabs.filter((tab) => tab !== view));
     if (this.view() === view) this.view.set(tabs[at - 1] ?? 'today');
+  }
+
+  /** Browser tab keys: Ctrl+W closes the tab, Ctrl+Tab and Ctrl+Shift+Tab cycle. */
+  private onKey(event: KeyboardEvent): void {
+    if (!event.ctrlKey || event.altKey || event.metaKey) return;
+    if (event.key.toLowerCase() === 'w' && !event.shiftKey) {
+      event.preventDefault();
+      this.close(this.view());
+    } else if (event.key === 'Tab') {
+      event.preventDefault();
+      const tabs = this.tabs();
+      const step = event.shiftKey ? -1 : 1;
+      this.view.set(tabs[(tabs.indexOf(this.view()) + step + tabs.length) % tabs.length]);
+    }
   }
 
   openThread(threadId: string): void {
@@ -188,7 +208,18 @@ export default function Home() {
         <Kbd keys={['Ctrl', 'Space']} className="titlebar-kbd" />
         <div className="tabs" role="tablist" aria-label="Open views" data-tauri-drag-region="">
           {s.tabs().map((tab) => (
-            <div key={tab} className={cn('tab', view === tab && 'active')}>
+            <div
+              key={tab}
+              className={cn('tab', view === tab && 'active')}
+              // Middle click closes a tab, as in a browser; the mousedown
+              // guard stops the webview starting autoscroll first.
+              onMouseDown={(event) => {
+                if (event.button === 1) event.preventDefault();
+              }}
+              onAuxClick={(event) => {
+                if (event.button === 1) s.close(tab);
+              }}
+            >
               <button
                 type="button"
                 role="tab"
@@ -196,7 +227,16 @@ export default function Home() {
                 className="tab-open"
                 onClick={() => s.view.set(tab)}
               >
-                <Icon name={VIEWS[tab].icon} size={14} />
+                {tab === 'today' ? (
+                  <Icon name={VIEWS[tab].icon} size={14} />
+                ) : (
+                  <span
+                    className="u-entity-tile tab-tile"
+                    style={vars({ '--entity-hue': moduleHueVar(VIEWS[tab].module) })}
+                  >
+                    <Icon name={VIEWS[tab].icon} size={14} />
+                  </span>
+                )}
                 {VIEWS[tab].label}
               </button>
               {tab !== 'today' && (

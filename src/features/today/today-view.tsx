@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react';
 
 import { Button } from '@/components/ui/button';
-import { hueFor, hueVar } from '@/core/entity-hue';
+import { moduleHueVar } from '@/core/entity-hue';
 import type { NotificationAction, NotificationStatus } from '@/core/events';
 import { NotificationCenter } from '@/core/notification-center';
 import { TauriBridge } from '@/core/tauri';
@@ -80,7 +80,9 @@ class TodayState {
   }
 }
 
-const tone = (item: TodayItem) => vars({ '--entity-hue': hueVar(hueFor(item.hueSource)) });
+/** Today colours a row by the module it came from, as the prototype's triage does. */
+const tone = (item: TodayItem) =>
+  vars({ '--entity-hue': moduleHueVar(SOURCES[item.source].module) });
 const age = (item: TodayItem) => (item.createdAt === undefined ? 'now' : ago(item.createdAt));
 
 /**

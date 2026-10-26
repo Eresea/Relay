@@ -1,6 +1,6 @@
 import type { FormEvent } from 'react';
 
-import { hueFor, hueVar } from '@/core/entity-hue';
+import { moduleHueVar } from '@/core/entity-hue';
 import { NexusAccount } from '@/core/nexus-account';
 import { TauriBridge, type CodexThreadSummary, type WorkspaceSummary } from '@/core/tauri';
 import { ago } from '@/features/palette/omnibar';
@@ -81,7 +81,7 @@ export function Inspector({ onOpenThread }: { onOpenThread: (threadId: string) =
             >
               <span
                 className="u-entity-tile tile"
-                style={vars({ '--entity-hue': hueVar(hueFor(w.path)) })}
+                style={vars({ '--entity-hue': moduleHueVar('files') })}
               >
                 <Icon name="folder" size={14} />
               </span>
@@ -108,7 +108,7 @@ export function Inspector({ onOpenThread }: { onOpenThread: (threadId: string) =
             >
               <span
                 className="u-entity-tile tile"
-                style={vars({ '--entity-hue': hueVar(hueFor('codex')) })}
+                style={vars({ '--entity-hue': moduleHueVar('agents') })}
               >
                 <Icon name="sparkles" size={14} />
               </span>

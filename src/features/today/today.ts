@@ -1,15 +1,17 @@
+import type { ModuleHue } from '@/core/entity-hue';
 import type { NotificationPayload, NotificationRecord, NotificationStatus } from '@/core/events';
 
 /** Where an item came from, read from the `hueSource` its producer set. */
 export type Source = 'agents' | 'github' | 'mail' | 'scripts' | 'relay';
 
-export const SOURCES: Readonly<Record<Source, { label: string; icon: string }>> = {
-  agents: { label: 'Agents', icon: 'sparkles' },
-  github: { label: 'GitHub', icon: 'git-pull-request' },
-  mail: { label: 'Mail', icon: 'inbox' },
-  scripts: { label: 'Scripts', icon: 'terminal' },
-  relay: { label: 'Relay', icon: 'circle' },
-};
+export const SOURCES: Readonly<Record<Source, { label: string; icon: string; module: ModuleHue }>> =
+  {
+    agents: { label: 'Agents', icon: 'sparkles', module: 'agents' },
+    github: { label: 'GitHub', icon: 'git-pull-request', module: 'github' },
+    mail: { label: 'Mail', icon: 'inbox', module: 'mail' },
+    scripts: { label: 'Scripts', icon: 'terminal', module: 'flow' },
+    relay: { label: 'Relay', icon: 'circle', module: 'relay' },
+  };
 
 export function sourceOf(hueSource: string): Source {
   if (hueSource === 'codex') return 'agents';
