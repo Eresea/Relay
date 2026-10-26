@@ -8,8 +8,7 @@ import { useController, useSignals } from '@/lib/signals';
 import { DestroyRef } from '@/lib/signals';
 import { inject } from '@/lib/inject';
 import { computed, signal } from '@/lib/signals';
-import DOMPurify from 'dompurify';
-import { marked } from 'marked';
+import { renderMarkdown } from '@/shared/markdown';
 
 import {
   TauriBridge,
@@ -27,7 +26,6 @@ import './codex.css';
 export class CodexState {
   readonly destroyRef = new DestroyRef();
   private readonly tauri = inject(TauriBridge);
-  private readonly markdownCache = new Map<string, string>();
   private openGeneration = 0;
   readonly openThreadId = signal<string | null>(null);
   onThreadHandled: () => void = () => undefined;
@@ -337,13 +335,7 @@ export class CodexState {
   }
 
   renderMarkdown(text: string): string {
-    const cached = this.markdownCache.get(text);
-    if (cached !== undefined) return cached;
-    const rendered = marked.parse(text, { async: false });
-    // Agent-written Markdown becomes HTML: sanitize before it reaches the DOM.
-    const safe = DOMPurify.sanitize(rendered);
-    this.markdownCache.set(text, safe);
-    return safe;
+    return renderMarkdown(text);
   }
 
   openInCodex(): void {

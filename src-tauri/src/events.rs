@@ -102,6 +102,12 @@ pub enum AppEvent {
     /// The "Agent threads" command was run from another surface.
     OpenAgentsRequested,
 
+    /// Claude Code was opened from another surface, at a session or its list.
+    OpenClaudeRequested {
+        #[serde(rename = "sessionId")]
+        session_id: Option<String>,
+    },
+
     /// A specific Codex thread was selected from the command palette.
     OpenAgentThreadRequested {
         #[serde(rename = "threadId")]
@@ -319,6 +325,15 @@ mod tests {
     fn open_github_requested_is_a_bare_tag() {
         let json = serde_json::to_string(&AppEvent::OpenGithubRequested).unwrap();
         assert_eq!(json, r#"{"type":"openGithubRequested"}"#);
+    }
+
+    #[test]
+    fn open_claude_requested_names_its_session() {
+        let json = serde_json::to_string(&AppEvent::OpenClaudeRequested {
+            session_id: Some("0f3a".into()),
+        })
+        .unwrap();
+        assert_eq!(json, r#"{"type":"openClaudeRequested","sessionId":"0f3a"}"#);
     }
 
     #[test]

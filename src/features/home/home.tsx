@@ -21,6 +21,7 @@ import './home.css';
 
 const Settings = lazy(() => import('@/features/settings/settings'));
 const Codex = lazy(() => import('@/features/codex/codex'));
+const Claude = lazy(() => import('@/features/claude/claude'));
 const Linear = lazy(() => import('@/features/linear/linear'));
 const Vault = lazy(() => import('@/features/vault/vault'));
 const Runtime = lazy(() => import('@/features/runtime/runtime'));
@@ -55,6 +56,9 @@ export class HomeState {
   readonly tabs = signal<readonly HomeView[]>(['today']);
   readonly view = signal<HomeView>('today');
   readonly requestedAgentThreadId = signal<string | null>(null);
+  readonly requestedClaudeSessionId = signal<string | null>(null);
+  /** Stable, so the Claude tab's effect does not re-run on every render. */
+  readonly claudeSessionHandled = () => this.requestedClaudeSessionId.set(null);
   readonly linearProjectRequest = signal<LinearProjectRequest | null>(null);
   readonly inspector = signal(true);
   readonly settingsTab = signal<SettingsTab>('general');
@@ -94,6 +98,10 @@ export class HomeState {
         if (event.type === 'openRuntimeRequested') this.open('runtime');
         if (event.type === 'openAgentsRequested') this.open('codex');
         if (event.type === 'openAgentThreadRequested') this.openThread(event.threadId);
+        if (event.type === 'openClaudeRequested') {
+          this.requestedClaudeSessionId.set(event.sessionId);
+          this.open('claude');
+        }
         if (event.type === 'openGithubRequested') this.openSettings('github');
         if (event.type === 'openLinearRequested') this.open('linear');
       }),
@@ -435,6 +443,11 @@ export default function Home() {
               <AccountPage s={s} />
             ) : view === 'settings' ? (
               <Settings initialTab={s.settingsTab()} />
+            ) : view === 'claude' ? (
+              <Claude
+                openSessionId={s.requestedClaudeSessionId()}
+                onSessionHandled={s.claudeSessionHandled}
+              />
             ) : view === 'codex' ? (
               <Codex
                 openThreadId={s.requestedAgentThreadId()}

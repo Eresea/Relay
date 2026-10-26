@@ -29,6 +29,7 @@ const ids = (items: readonly { id: string }[]) => items.map((item) => item.id);
 describe('sourceOf', () => {
   it('reads the producer from the hue source', () => {
     expect(sourceOf('codex')).toBe('agents');
+    expect(sourceOf('claude')).toBe('claude');
     expect(sourceOf('github')).toBe('github');
     expect(sourceOf('gmail')).toBe('mail');
     expect(sourceOf('F:\\Code\\Apps\\Relay')).toBe('scripts');

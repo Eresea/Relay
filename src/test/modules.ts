@@ -45,9 +45,17 @@ export const MODULES: readonly ModuleInfo[] = [
     name: 'Codex',
     icon: 'sparkles',
     hue: 'agents',
-    surface: tab('Agents', 'sparkles'),
+    surface: tab('Codex', 'sparkles'),
     commands: ['relay.agents.open'],
     needs: [{ permission: 'shell', scope: 'the Codex CLI' }],
+  }),
+  module({
+    id: 'claude',
+    name: 'Claude Code',
+    icon: 'bot',
+    hue: 'agents',
+    surface: tab('Claude', 'bot'),
+    commands: ['relay.claude.open'],
   }),
   module({
     id: 'projects',

@@ -174,6 +174,9 @@ export class TauriBridge {
 
   /** Opens a URL in the user's default browser. A no-op outside Tauri. */
   async openUrl(url: string): Promise<void> {
+    // Relay's own links open a view in the main window rather than leave the app.
+    const claude = /^relay:\/\/claude\/([\w-]+)$/.exec(url);
+    if (claude) return this.runCoreCommand({ id: 'open_claude', args: { sessionId: claude[1] } });
     if (!this.available) return;
     const { openUrl } = await import('@tauri-apps/plugin-opener');
     await openUrl(url);
@@ -210,6 +213,36 @@ export class TauriBridge {
       threadId,
     });
     if (!result) throw new Error('Codex returned no result.');
+    return result;
+  }
+
+  /** Starts a Claude Code session as a background job; the answer arrives as a notification. */
+  async claudeAsk(prompt: string, workingDirectory: string): Promise<void> {
+    await this.invoke('claude_ask', { prompt, workingDirectory });
+  }
+
+  /** One Claude Code turn, awaited; resumes `sessionId` when given. */
+  async claudeSend(
+    prompt: string,
+    workingDirectory: string,
+    sessionId: string | null,
+  ): Promise<ClaudeRun> {
+    const result = await this.invoke<ClaudeRun>('claude_send', {
+      prompt,
+      workingDirectory,
+      sessionId,
+    });
+    if (!result) throw new Error('Claude Code returned no result.');
+    return result;
+  }
+
+  async claudeListSessions(): Promise<readonly ClaudeSessionSummary[]> {
+    return (await this.invoke<ClaudeSessionSummary[]>('claude_list_sessions')) ?? [];
+  }
+
+  async claudeReadSession(sessionId: string): Promise<ClaudeSession> {
+    const result = await this.invoke<ClaudeSession>('claude_read_session', { sessionId });
+    if (!result) throw new Error('Claude Code returned no session.');
     return result;
   }
 
@@ -1454,7 +1487,33 @@ export type CoreCommand =
   | { readonly id: 'open_runtime' }
   | { readonly id: 'open_agents' }
   | { readonly id: 'open_agent_thread'; readonly args: { readonly threadId: string } }
+  | { readonly id: 'open_claude'; readonly args: { readonly sessionId: string | null } }
   | { readonly id: 'quit' };
+
+/** Mirrors src-tauri/src/claude.rs. */
+export interface ClaudeRun {
+  readonly sessionId: string;
+  readonly response: string;
+  readonly costUsd: number | null;
+}
+
+export interface ClaudeSessionSummary {
+  readonly id: string;
+  readonly title: string;
+  readonly cwd: string;
+  /** Seconds since the epoch. */
+  readonly updatedAt: number;
+}
+
+export interface ClaudeMessage {
+  readonly role: 'user' | 'assistant';
+  readonly text: string;
+  readonly timestamp: string | null;
+}
+
+export interface ClaudeSession extends ClaudeSessionSummary {
+  readonly messages: readonly ClaudeMessage[];
+}
 
 export interface CodexThreadDetails {
   readonly thread: CodexThread;

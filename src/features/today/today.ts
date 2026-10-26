@@ -1,11 +1,12 @@
 import type { NotificationPayload, NotificationRecord, NotificationStatus } from '@/core/events';
 
 /** Where an item came from, read from the `hueSource` its producer set. */
-export type Source = 'agents' | 'github' | 'mail' | 'scripts' | 'relay';
+export type Source = 'agents' | 'claude' | 'github' | 'mail' | 'scripts' | 'relay';
 
 /** Each source and the module that produces it (an id in core/modules.ts). */
 export const SOURCES: Readonly<Record<Source, { label: string; icon: string; module: string }>> = {
-  agents: { label: 'Agents', icon: 'sparkles', module: 'codex' },
+  agents: { label: 'Codex', icon: 'sparkles', module: 'codex' },
+  claude: { label: 'Claude', icon: 'bot', module: 'claude' },
   github: { label: 'GitHub', icon: 'git-pull-request', module: 'github' },
   mail: { label: 'Mail', icon: 'inbox', module: 'gmail' },
   scripts: { label: 'Scripts', icon: 'terminal', module: 'projects' },
@@ -14,6 +15,7 @@ export const SOURCES: Readonly<Record<Source, { label: string; icon: string; mod
 
 export function sourceOf(hueSource: string): Source {
   if (hueSource === 'codex') return 'agents';
+  if (hueSource === 'claude') return 'claude';
   if (hueSource === 'github') return 'github';
   if (hueSource === 'gmail') return 'mail';
   // Script jobs are coloured by their workspace: a path.

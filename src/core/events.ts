@@ -52,6 +52,7 @@ export type AppEvent =
   | { readonly type: 'openRuntimeRequested' }
   | { readonly type: 'openAgentsRequested' }
   | { readonly type: 'openAgentThreadRequested'; readonly threadId: string }
+  | { readonly type: 'openClaudeRequested'; readonly sessionId: string | null }
   | ({ readonly type: 'notification' } & NotificationPayload)
   | { readonly type: 'notificationDone'; readonly jobId: string; readonly ok: boolean }
   | { readonly type: 'attentionToggleRequested' }

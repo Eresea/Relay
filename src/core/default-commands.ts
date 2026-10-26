@@ -40,6 +40,14 @@ export function registerDefaultCommands(): () => void {
       run: () => tauri.runCoreCommand({ id: 'open_agents' }),
     },
     {
+      id: 'relay.claude.open',
+      title: 'Claude Code sessions',
+      group: 'Claude',
+      icon: 'bot',
+      keywords: ['agent', 'claude', 'anthropic', 'session', 'conversation'],
+      run: () => tauri.runCoreCommand({ id: 'open_claude', args: { sessionId: null } }),
+    },
+    {
       id: 'relay.theme.toggle',
       title: 'Toggle theme',
       group: 'Appearance',

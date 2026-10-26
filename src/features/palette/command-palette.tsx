@@ -36,6 +36,7 @@ const WORKSPACE_REFRESH_MS = 5 * 60_000;
 const THREAD_REFRESH_MS = 60_000;
 const ASK_PROJECTS = 4;
 const CODEX_TONE = hueVar(hueFor('codex'));
+const CLAUDE_TONE = hueVar(hueFor('claude'));
 
 const STATUS_LABEL = {
   running: 'Running',
@@ -337,28 +338,47 @@ export class OmnibarState {
     };
   }
 
+  /** One row per agent and workspace: Codex and Claude Code, each while its module is on. */
   private askResults(): readonly OmniResult[] {
     const prompt = this.query().trim();
     if (!prompt || this.mode() !== 'ask') return [];
+    const on = (id: string) => this.modules.get(id)?.enabled !== false;
     return this.ordered()
       .slice(0, ASK_PROJECTS)
-      .map((w) => ({
-        id: `relay.ask.${w.path}`,
-        title: prompt,
-        section: 'Ask',
-        group: 'Ask',
-        icon: 'sparkles',
-        tone: CODEX_TONE,
-        sub: `Codex · ${w.name}`,
-        verb: 'Ask',
-        note: 'Starts a new Codex thread in the background. The answer arrives in the activity pill.',
-        facts: [
+      .flatMap((w) => {
+        const facts = [
           ['Project', w.name],
           ['Folder', w.path],
           ...(w.currentBranch ? [['Branch', w.currentBranch] as const] : []),
-        ],
-        run: () => this.tauri.codexAsk(prompt, w.path),
-      }));
+        ] as const;
+        const codex: OmniResult = {
+          id: `relay.ask.${w.path}`,
+          title: prompt,
+          section: 'Ask',
+          group: 'Ask',
+          icon: 'sparkles',
+          tone: CODEX_TONE,
+          sub: `Codex · ${w.name}`,
+          verb: 'Ask',
+          note: 'Starts a new Codex thread in the background. The answer arrives in the activity pill.',
+          facts,
+          run: () => this.tauri.codexAsk(prompt, w.path),
+        };
+        const claude: OmniResult = {
+          id: `relay.ask.claude.${w.path}`,
+          title: prompt,
+          section: 'Ask',
+          group: 'Ask',
+          icon: 'bot',
+          tone: CLAUDE_TONE,
+          sub: `Claude · ${w.name}`,
+          verb: 'Ask',
+          note: 'Starts a new Claude Code session in the background. It reads the project but changes nothing; the answer arrives in the activity pill.',
+          facts,
+          run: () => this.tauri.claudeAsk(prompt, w.path),
+        };
+        return [...(on('codex') ? [codex] : []), ...(on('claude') ? [claude] : [])];
+      });
   }
 
   private runResults(): readonly OmniResult[] {

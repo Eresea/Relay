@@ -8,6 +8,7 @@
 use std::path::Path;
 use std::time::{Duration, Instant};
 
+use crate::claude;
 use crate::codex;
 use crate::error::{Error, Result};
 use crate::events::{EventSink, NotificationAction, NotificationStatus};
@@ -46,6 +47,46 @@ pub fn ask_codex<S: EventSink>(
                         actions: vec![NotificationAction::Open {
                             label: "Open thread".to_owned(),
                             url: format!("codex://threads/{}", run.thread_id),
+                        }],
+                    },
+                );
+                Ok(())
+            }
+            Err(error) => fail(&ctx, title, error),
+        }
+    })
+}
+
+/// Sends `prompt` to Claude Code in `working_directory` as a new session.
+pub fn ask_claude<S: EventSink>(
+    sink: S,
+    registry: JobRegistry,
+    prompt: String,
+    working_directory: String,
+) -> JobId {
+    jobs::spawn(sink, registry, "claude", move |ctx| async move {
+        let title = format!("Claude · {}", clip(&prompt, 60));
+        let place = folder_name(&working_directory);
+        ctx.report(
+            NotificationStatus::Running,
+            title.clone(),
+            Some(format!("Working in {place}")),
+            None,
+        );
+        match claude::send(prompt, working_directory, None).await {
+            Ok(run) => {
+                ctx.report_notification(
+                    NotificationStatus::Done,
+                    title,
+                    Some(clip(&first_line(&run.response), 160)),
+                    None,
+                    NotificationOptions {
+                        notification_id: ctx.id().to_string(),
+                        auto_dismiss_ms: Some(ANSWER_READ_MS),
+                        // Relay's own link: the interface opens the session in its Claude tab.
+                        actions: vec![NotificationAction::Open {
+                            label: "Open session".to_owned(),
+                            url: format!("relay://claude/{}", run.session_id),
                         }],
                     },
                 );

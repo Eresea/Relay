@@ -89,7 +89,14 @@ pub enum CoreCommand {
     OpenRuntime,
     OpenAgents,
     OpenAgentThread(OpenAgentThreadArgs),
+    OpenClaude(OpenClaudeArgs),
     Quit,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct OpenClaudeArgs {
+    session_id: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -146,6 +153,13 @@ pub fn run_core_command(app: AppHandle, command: CoreCommand) -> Result<()> {
             overlay::show_main(&app)?;
             app.emit(AppEvent::OpenAgentThreadRequested {
                 thread_id: args.thread_id,
+            });
+            Ok(())
+        }
+        CoreCommand::OpenClaude(args) => {
+            overlay::show_main(&app)?;
+            app.emit(AppEvent::OpenClaudeRequested {
+                session_id: args.session_id,
             });
             Ok(())
         }
@@ -1866,6 +1880,46 @@ pub fn codex_ask(
     working_directory: String,
 ) -> JobId {
     crate::omnibar::ask_codex(app, jobs.inner().clone(), prompt, working_directory)
+}
+
+/// Starts a Claude Code session in the background and returns its job id at
+/// once. Progress and the answer arrive as notifications.
+#[cfg(desktop)]
+#[tauri::command]
+pub fn claude_ask(
+    app: AppHandle,
+    jobs: tauri::State<JobRegistry>,
+    prompt: String,
+    working_directory: String,
+) -> JobId {
+    crate::omnibar::ask_claude(app, jobs.inner().clone(), prompt, working_directory)
+}
+
+/// One turn, awaited: the Claude tab's reply box.
+#[cfg(desktop)]
+#[tauri::command]
+pub async fn claude_send(
+    prompt: String,
+    working_directory: String,
+    session_id: Option<String>,
+) -> Result<crate::claude::ClaudeRun> {
+    crate::claude::send(prompt, working_directory, session_id).await
+}
+
+#[cfg(desktop)]
+#[tauri::command]
+pub async fn claude_list_sessions() -> Result<Vec<crate::claude::ClaudeSessionSummary>> {
+    tauri::async_runtime::spawn_blocking(crate::claude::list_sessions)
+        .await
+        .map_err(|error| std::io::Error::other(error.to_string()).into())
+}
+
+#[cfg(desktop)]
+#[tauri::command]
+pub async fn claude_read_session(session_id: String) -> Result<crate::claude::ClaudeSession> {
+    tauri::async_runtime::spawn_blocking(move || crate::claude::read_session(&session_id))
+        .await
+        .map_err(|error| std::io::Error::other(error.to_string()))?
 }
 
 /// Starts a workspace's `package.json` script in the background and returns

@@ -2,6 +2,8 @@
 #![allow(clippy::too_many_arguments)]
 
 #[cfg(desktop)]
+mod claude;
+#[cfg(desktop)]
 mod codex;
 mod commands;
 mod error;
@@ -255,6 +257,10 @@ pub fn run() {
                 commands::codex_list_threads,
                 commands::codex_read_thread,
                 commands::codex_older_turns,
+                commands::claude_ask,
+                commands::claude_send,
+                commands::claude_list_sessions,
+                commands::claude_read_session,
                 commands::update_status,
                 commands::update_check,
                 commands::update_download,
