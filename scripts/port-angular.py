@@ -9,6 +9,7 @@ port; this only does what is safe to do blindly.
     python scripts/port-angular.py css src/app/features/hud/hud.ts hud-card out.css [--append]
 """
 import io
+import os
 import re
 import sys
 
@@ -68,6 +69,7 @@ def scope_css(css: str, root: str) -> str:
 
 
 if __name__ == "__main__":
+    os.makedirs(os.path.dirname(sys.argv[-1] if sys.argv[-1] != "--append" else sys.argv[-2]) or ".", exist_ok=True)
     if sys.argv[1] == "css":
         source, root, target = sys.argv[2], sys.argv[3], sys.argv[4]
         text = io.open(source, encoding="utf-8").read()

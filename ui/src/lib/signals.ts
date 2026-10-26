@@ -77,3 +77,51 @@ export function useSignalEffect(fn: () => void | (() => void)): void {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => effect(fn), []);
 }
+
+/**
+ * What a screen's state object releases when its screen unmounts: event
+ * listeners, effects, timers. Angular's DestroyRef, kept by name so ported
+ * code reads the same: `this.destroyRef.onDestroy(unlisten)`, and
+ * `this.destroyRef.effect(...)` for an effect that should stop with the screen.
+ */
+export class DestroyRef {
+  destroyed = false;
+  private readonly callbacks: (() => void)[] = [];
+
+  onDestroy(callback: () => void): void {
+    if (this.destroyed) callback();
+    else this.callbacks.push(callback);
+  }
+
+  effect(fn: () => void | (() => void)): void {
+    this.onDestroy(effect(fn));
+  }
+
+  destroy(): void {
+    this.destroyed = true;
+    for (const callback of this.callbacks.splice(0)) callback();
+  }
+}
+
+/**
+ * A screen's state object, created once per mount like an Angular component
+ * instance. Its optional `start()` runs after mount and returns a disposer;
+ * its optional `destroyRef` is destroyed on unmount.
+ */
+interface Lifecycle {
+  start?: () => () => void;
+  destroyRef?: DestroyRef;
+}
+
+export function useController<T extends object>(create: () => T): T {
+  const [controller] = useState(create);
+  useEffect(() => {
+    const { start, destroyRef } = controller as Lifecycle;
+    const stop = start?.call(controller);
+    return () => {
+      stop?.();
+      destroyRef?.destroy();
+    };
+  }, [controller]);
+  return controller;
+}

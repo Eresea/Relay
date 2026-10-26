@@ -35,8 +35,7 @@ export function App() {
 /**
  * Everything that must happen once per window, before React renders: the
  * theme, the overlay document class, the command floor, and the one
- * subscription to the core's event channel. Kept out of React so development
- * mode's double-run effects cannot register commands twice.
+ * subscription to the core's event channel. Runs once, outside React.
  */
 export function bootstrap(): void {
   // Constructing the theme service runs the effect that writes data-theme.

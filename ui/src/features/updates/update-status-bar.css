@@ -1,0 +1,109 @@
+.update-status {
+  & {
+    display: block;
+    flex: none;
+    /* Nudges the dot to sit under the rail's settings icon center. */
+    margin-inline-start: 5px;
+  }
+
+  .update-wrap {
+    position: relative;
+    display: flex;
+    justify-content: flex-end;
+    align-items: center;
+  }
+
+  .indicator {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+    block-size: var(--statusbar-height);
+    padding-inline: var(--space-3);
+    color: var(--text-subtle);
+    border-radius: var(--radius-sm);
+  }
+
+  .indicator:hover,
+  .indicator:focus-visible {
+    color: var(--text-body);
+    background: var(--tint-hover);
+  }
+
+  .version {
+    color: var(--text-muted);
+    font-size: var(--text-11);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .dot {
+    inline-size: 6px;
+    block-size: 6px;
+    flex: none;
+    border-radius: var(--radius-pill);
+    background: var(--status-done);
+  }
+
+  [data-state='checking'] .dot,
+  [data-state='downloading'] .dot,
+  [data-state='installing'] .dot {
+    background: var(--status-running);
+    animation: update-pulse 1.4s ease-in-out infinite;
+  }
+
+  [data-state='available'] .dot {
+    background: var(--status-waiting);
+  }
+
+  [data-state='ready'] .dot {
+    background: var(--status-done);
+  }
+
+  [data-state='error'] .dot {
+    background: var(--status-blocked);
+  }
+
+  .track {
+    position: relative;
+    display: block;
+    inline-size: 52px;
+    block-size: 2px;
+    overflow: hidden;
+    border-radius: var(--radius-pill);
+    background: var(--border-strong);
+  }
+
+  .fill {
+    display: block;
+    block-size: 100%;
+    background: var(--status-running);
+    transition: inline-size var(--dur-panel) var(--ease-standard);
+  }
+
+  .track.indeterminate::after {
+    position: absolute;
+    inset: 0 auto 0 -35%;
+    inline-size: 35%;
+    content: '';
+    background: var(--status-running);
+    animation: update-slide 1.2s ease-in-out infinite;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .dot,
+    .track.indeterminate::after {
+      animation: none;
+    }
+  }
+}
+
+@keyframes update-pulse {
+  50% {
+    opacity: 0.45;
+  }
+}
+
+@keyframes update-slide {
+  to {
+    transform: translateX(385%);
+  }
+}

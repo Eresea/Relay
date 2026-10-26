@@ -26,3 +26,12 @@ export function provide<T>(service: ServiceClass<T>, instance: T): void {
 export function resetInjector(): void {
   instances.clear();
 }
+
+declare global {
+  interface Window {
+    /** Development only: live service instances, for poking at state from devtools. */
+    __relay?: { readonly instances: ReadonlyMap<ServiceClass<unknown>, unknown> };
+  }
+}
+
+if (import.meta.env.DEV) window.__relay = { instances };
