@@ -165,7 +165,7 @@
     min-inline-size: 0;
   }
 
-  .thread-pr .[data-slot='button'] {
+  .thread-pr [data-slot='button'] {
     min-inline-size: 0;
     padding-inline: var(--space-2);
   }
@@ -177,7 +177,7 @@
     max-inline-size: 100%;
   }
 
-  .thread-pr-detail .[data-slot='button'] {
+  .thread-pr-detail [data-slot='button'] {
     max-inline-size: 100%;
     overflow: hidden;
     text-overflow: ellipsis;

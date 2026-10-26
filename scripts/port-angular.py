@@ -51,7 +51,8 @@ def scope_css(css: str, root: str) -> str:
     css = re.sub(r":host\(([^()]*(?:\([^()]*\))?[^()]*)\)", r"&\1", css)
     css = css.replace(":host ::ng-deep ", "").replace("::ng-deep ", "")
     css = css.replace(":host", "&")
-    css = re.sub(r"\bumbra-button\b(?![-\w])", "[data-slot='button']", css)
+    # Both the umbra-button host and its inner .umbra-button are now one <button>.
+    css = re.sub(r"(?<![-\w.])\.?umbra-button\b(?![-\w])", "[data-slot='button']", css)
     css = re.sub(r"\brl-kbd\b(?![-\w])", "[data-slot='kbd']", css)
     css = re.sub(r"\brl-icon\b(?![-\w])", "svg", css)
     keyframes: list[str] = []
