@@ -582,7 +582,9 @@ mod tests {
         let mut root = std::env::temp_dir();
         let mut suffix = [0u8; 12];
         OsRng.fill_bytes(&mut suffix);
-        root.push(format!("relay-vault-{}", BASE64.encode(suffix)));
+        // Hex, not Base64: a '/' in the name would make it a nested path.
+        let name: String = suffix.iter().map(|byte| format!("{byte:02x}")).collect();
+        root.push(format!("relay-vault-{name}"));
         fs::create_dir(&root).unwrap();
         let file = root.join("vault.json");
         fs::write(&file, b"old").unwrap();
