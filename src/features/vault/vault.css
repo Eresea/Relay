@@ -178,6 +178,30 @@
     opacity: 0.5;
   }
 
+  .secondary {
+    padding: var(--space-3) var(--space-5);
+    font-size: var(--text-13);
+    font-weight: var(--weight-medium);
+    color: var(--text-body);
+    border: 1px solid var(--border-default);
+    border-radius: var(--radius-sm);
+  }
+
+  .secondary:hover {
+    background: var(--tint-hover);
+  }
+
+  .secondary:disabled {
+    opacity: 0.5;
+  }
+
+  .hello-row {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: var(--space-5);
+  }
+
   .link {
     font-size: var(--text-13);
     color: var(--accent);

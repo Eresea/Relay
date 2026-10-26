@@ -35,6 +35,7 @@ mod tray;
 #[cfg(desktop)]
 mod updates;
 mod vault;
+mod vault_passkey;
 mod workspaces;
 
 use tauri::Manager;
@@ -139,6 +140,10 @@ pub fn run() {
                 commands::vault_unlock,
                 commands::vault_lock,
                 commands::generate_password,
+                commands::vault_passkey_status,
+                commands::vault_passkey_enroll,
+                commands::vault_passkey_unlock,
+                commands::vault_passkey_remove,
                 commands::vault_add_entry,
                 commands::vault_list_entries,
                 commands::vault_reveal_password,
@@ -288,6 +293,10 @@ pub fn run() {
             commands::vault_lock,
             commands::generate_password,
             commands::vault_add_entry,
+            commands::vault_passkey_status,
+            commands::vault_passkey_enroll,
+            commands::vault_passkey_unlock,
+            commands::vault_passkey_remove,
             commands::vault_list_entries,
             commands::vault_reveal_password,
             commands::vault_delete_entry,

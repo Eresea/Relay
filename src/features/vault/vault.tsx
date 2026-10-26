@@ -12,6 +12,7 @@ import {
   type OpenCloudStatus,
   type PasswordOptions,
   type VaultEntrySummary,
+  type VaultPasskeyStatus,
   type VaultSyncRevision,
 } from '@/core/tauri';
 
@@ -35,6 +36,8 @@ export class VaultState {
 
   readonly masterPassword = signal('');
   readonly confirmPassword = signal('');
+  readonly hello = signal<VaultPasskeyStatus | null>(null);
+  readonly helloMessage = signal('');
 
   readonly entries = signal<readonly VaultEntrySummary[]>([]);
   readonly revealedId = signal<string | null>(null);
@@ -94,6 +97,7 @@ export class VaultState {
   }
 
   private async refreshStatus(): Promise<void> {
+    void this.refreshHello();
     const result = await this.tauri.vaultStatus();
     if (!result.exists) {
       this.status.set('missing');
@@ -167,6 +171,7 @@ export class VaultState {
       this.syncPassword.set('');
       await this.loadEntries();
       this.syncMessage.set('Remote copy restored on this device.');
+      void this.refreshHello();
     } catch (error) {
       this.syncMessage.set(
         this.errorMessage(error, 'Could not restore the remote copy. Check the master password.'),
@@ -206,6 +211,51 @@ export class VaultState {
       this.error.set('Wrong master password.');
     } finally {
       this.busy.set(false);
+    }
+  }
+
+  private async refreshHello(): Promise<void> {
+    this.hello.set(await this.tauri.vaultPasskeyStatus().catch(() => null));
+  }
+
+  /** Windows prompts for face, fingerprint or PIN; the core does the rest. */
+  async unlockWithHello(): Promise<void> {
+    this.error.set('');
+    this.busy.set(true);
+    try {
+      await this.tauri.vaultPasskeyUnlock();
+      await this.refreshStatus();
+    } catch (error) {
+      this.error.set(this.errorMessage(error, 'Windows Hello could not unlock the vault.'));
+      void this.refreshHello();
+    } finally {
+      this.busy.set(false);
+    }
+  }
+
+  async enrollHello(): Promise<void> {
+    this.helloMessage.set('');
+    this.busy.set(true);
+    try {
+      await this.tauri.vaultPasskeyEnroll();
+      this.helloMessage.set('Windows Hello unlocks this vault on this device now.');
+    } catch (error) {
+      this.helloMessage.set(this.errorMessage(error, 'Could not set up Windows Hello.'));
+    } finally {
+      this.busy.set(false);
+      void this.refreshHello();
+    }
+  }
+
+  async removeHello(): Promise<void> {
+    this.helloMessage.set('');
+    try {
+      await this.tauri.vaultPasskeyRemove();
+      this.helloMessage.set('Windows Hello unlock is off. Your master password still works.');
+    } catch (error) {
+      this.helloMessage.set(this.errorMessage(error, 'Could not turn off Windows Hello.'));
+    } finally {
+      void this.refreshHello();
     }
   }
 
@@ -479,6 +529,43 @@ export default function Vault() {
 
             {s.view() === 'credentials' ? (
               <>
+                <section className="group">
+                  <h2 className="u-caption">Windows Hello</h2>
+                  {!s.hello()?.available ? (
+                    <p className="hint">
+                      Windows Hello is not set up on this device. Set up a PIN, face or fingerprint
+                      in Windows Settings to unlock the vault with it.
+                    </p>
+                  ) : s.hello()?.enrolled && s.hello()?.current ? (
+                    <div className="hello-row">
+                      <p className="hint">
+                        On. This device unlocks the vault with your face, fingerprint or PIN; the
+                        master password still works. Nothing about it is synced.
+                      </p>
+                      <button className="link" type="button" onClick={() => void s.removeHello()}>
+                        Turn off
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="hello-row">
+                      <p className="hint">
+                        {s.hello()?.enrolled
+                          ? 'The master password changed since Windows Hello was set up, so it no longer opens this vault.'
+                          : 'Unlock this vault with your face, fingerprint or PIN on this device. Nothing about it is synced.'}
+                      </p>
+                      <button
+                        className="link"
+                        type="button"
+                        disabled={s.busy()}
+                        onClick={() => void s.enrollHello()}
+                      >
+                        {s.hello()?.enrolled ? 'Set up again' : 'Set up'}
+                      </button>
+                    </div>
+                  )}
+                  {s.helloMessage() && <p className="hint">{s.helloMessage()}</p>}
+                </section>
+
                 <section className="group">
                   <h2 className="u-caption">Sync encrypted vault</h2>
                   <p className="hint">
@@ -1067,6 +1154,22 @@ export default function Vault() {
               <button className="primary" type="submit" disabled={s.busy()}>
                 Unlock
               </button>
+              {s.hello()?.available && s.hello()?.enrolled && s.hello()?.current && (
+                <button
+                  className="secondary"
+                  type="button"
+                  disabled={s.busy()}
+                  onClick={() => void s.unlockWithHello()}
+                >
+                  Unlock with Windows Hello
+                </button>
+              )}
+              {s.hello()?.enrolled && !s.hello()?.current && (
+                <p className="hint">
+                  Windows Hello stopped matching after the master password changed. Unlock with the
+                  password, then set it up again.
+                </p>
+              )}
             </form>
           </>
         ) : s.status() === 'missing' ? (

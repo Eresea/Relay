@@ -525,6 +525,31 @@ export class TauriBridge {
     await this.invoke('vault_delete_entry', { id });
   }
 
+  /** Whether Windows Hello can, and is set up to, unlock the vault on this device. */
+  async vaultPasskeyStatus(): Promise<VaultPasskeyStatus> {
+    return (
+      (await this.invoke<VaultPasskeyStatus>('vault_passkey_status')) ?? {
+        available: false,
+        enrolled: false,
+        current: false,
+      }
+    );
+  }
+
+  /** Sets up Windows Hello unlock for the open vault; Windows prompts. */
+  async vaultPasskeyEnroll(): Promise<void> {
+    await this.invoke('vault_passkey_enroll');
+  }
+
+  /** Opens the vault with Windows Hello; Windows prompts. */
+  async vaultPasskeyUnlock(): Promise<void> {
+    await this.invoke('vault_passkey_unlock');
+  }
+
+  async vaultPasskeyRemove(): Promise<void> {
+    await this.invoke('vault_passkey_remove');
+  }
+
   /** Writes an encrypted copy of the vault to disk and returns the path. */
   async vaultExport(): Promise<string> {
     return (await this.invoke<string>('vault_export')) ?? '';
@@ -1654,6 +1679,16 @@ export interface CodexRun {
   readonly threadId: string;
   readonly response: string;
 }
+/** Mirrors src-tauri/src/vault_passkey.rs. */
+export interface VaultPasskeyStatus {
+  /** Windows Hello is set up on this device. */
+  readonly available: boolean;
+  /** Hello unlock was set up for a vault here. */
+  readonly enrolled: boolean;
+  /** It still matches the vault's current key. */
+  readonly current: boolean;
+}
+
 
 export interface CodexThreadSummary {
   readonly id: string;

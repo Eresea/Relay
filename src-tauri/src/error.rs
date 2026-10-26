@@ -59,6 +59,21 @@ pub enum Error {
     #[error("wrong master password")]
     WrongMasterPassword,
 
+    #[error("Windows Hello is not set up on this device")]
+    PasskeyUnavailable,
+
+    #[error("Windows Hello was cancelled")]
+    PasskeyCancelled,
+
+    #[error("Windows Hello unlock is not set up for this vault")]
+    PasskeyNotEnrolled,
+
+    #[error("the vault's key changed since Windows Hello was set up; unlock with your master password and set it up again")]
+    PasskeyStale,
+
+    #[error("Windows Hello failed: {0}")]
+    PasskeyFailed(String),
+
     #[error("no vault entry `{0}`")]
     UnknownVaultEntry(String),
 

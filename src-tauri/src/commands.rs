@@ -15,7 +15,7 @@
 //! change without touching how a command is presented.
 
 use serde::{Deserialize, Serialize};
-use tauri::AppHandle;
+use tauri::{AppHandle, Manager};
 
 use crate::error::Result;
 #[cfg(desktop)]
@@ -235,6 +235,44 @@ pub fn vault_lock(vault: tauri::State<VaultState>) -> Result<()> {
 pub fn generate_password(options: PasswordOptions) -> Result<String> {
     vault::generate_password(&options)
 }
+#[tauri::command]
+pub fn vault_passkey_status(app: AppHandle) -> Result<crate::vault_passkey::PasskeyStatus> {
+    crate::vault_passkey::status(&app, &crate::vault_passkey::VAULT_HELLO)
+}
+
+/// Windows Hello prompts block until answered, so they run off the IPC thread.
+async fn with_hello<T: Send + 'static>(
+    work: impl FnOnce() -> Result<T> + Send + 'static,
+) -> Result<T> {
+    tauri::async_runtime::spawn_blocking(work)
+        .await
+        .map_err(|error| std::io::Error::other(error.to_string()))?
+}
+
+/// Sets up Windows Hello unlock for the open vault.
+#[tauri::command]
+pub async fn vault_passkey_enroll(app: AppHandle) -> Result<()> {
+    with_hello(move || {
+        let state = app.state::<VaultState>();
+        crate::vault_passkey::enroll(&app, &state, &crate::vault_passkey::VAULT_HELLO)
+    })
+    .await
+}
+
+#[tauri::command]
+pub async fn vault_passkey_unlock(app: AppHandle) -> Result<()> {
+    with_hello(move || {
+        let state = app.state::<VaultState>();
+        crate::vault_passkey::unlock(&app, &state, &crate::vault_passkey::VAULT_HELLO)
+    })
+    .await
+}
+
+#[tauri::command]
+pub async fn vault_passkey_remove(app: AppHandle) -> Result<()> {
+    with_hello(move || crate::vault_passkey::remove(&app, &crate::vault_passkey::VAULT_HELLO)).await
+}
+
 
 /// Adds a new entry to the unlocked vault and persists it immediately.
 #[tauri::command]

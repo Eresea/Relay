@@ -34,9 +34,9 @@ use zeroize::Zeroize;
 use crate::error::{Error, Result};
 
 const VAULT_FILE: &str = "vault.json";
-const SALT_LEN: usize = 16;
+pub(crate) const SALT_LEN: usize = 16;
 const NONCE_LEN: usize = 12;
-const KEY_LEN: usize = 32;
+pub(crate) const KEY_LEN: usize = 32;
 const MIN_MASTER_PASSWORD_LEN: usize = 8;
 const VAULT_FILE_MAGIC: &[u8] = b"RLYENC1\0";
 
@@ -379,6 +379,41 @@ pub fn unlock(app: &AppHandle, state: &VaultState, master_password: &str) -> Res
     let key = derive_key(master_password, &salt)?;
     let entries = decrypt_entries(&key, &file.nonce, &file.ciphertext)?;
 
+    *state.0.lock().unwrap() = Some(Unlocked { key, salt, entries });
+    Ok(())
+}
+
+fn file_salt(file: &VaultFile) -> Result<[u8; SALT_LEN]> {
+    BASE64
+        .decode(&file.salt)
+        .map_err(|_| Error::VaultCorrupt("salt is not valid base64".into()))?
+        .try_into()
+        .map_err(|_| Error::VaultCorrupt("salt has the wrong length".into()))
+}
+
+/// The open vault's key and the salt it was derived with, for wrapping the
+/// key under another unlock method (see `vault_passkey.rs`).
+pub(crate) fn current_key(state: &VaultState) -> Result<([u8; KEY_LEN], [u8; SALT_LEN])> {
+    let guard = state.0.lock().unwrap();
+    let unlocked = guard.as_ref().ok_or(Error::VaultLocked)?;
+    Ok((unlocked.key, unlocked.salt))
+}
+
+/// The salt of the vault on disk: it changes whenever the key does.
+pub(crate) fn stored_salt(app: &AppHandle) -> Result<[u8; SALT_LEN]> {
+    file_salt(&read_file(app)?.ok_or(Error::VaultNotFound)?)
+}
+
+/// Opens the vault with a key recovered some other way than the password.
+/// The GCM tag still decides: a wrong key opens nothing.
+pub(crate) fn unlock_with_key(
+    app: &AppHandle,
+    state: &VaultState,
+    key: [u8; KEY_LEN],
+) -> Result<()> {
+    let file = read_file(app)?.ok_or(Error::VaultNotFound)?;
+    let salt = file_salt(&file)?;
+    let entries = decrypt_entries(&key, &file.nonce, &file.ciphertext)?;
     *state.0.lock().unwrap() = Some(Unlocked { key, salt, entries });
     Ok(())
 }
