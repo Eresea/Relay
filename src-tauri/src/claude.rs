@@ -124,6 +124,8 @@ pub fn record_spend(app: &AppHandle, session_id: &str, usd: f64) {
     }
 }
 
+/// One step of a conversation: "user", "assistant", "thinking" (the model's
+/// reasoning, when Claude Code kept it) or "tool" (what it did, in a line).
 #[derive(Debug, Serialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct ClaudeMessage {
@@ -138,6 +140,30 @@ pub struct ClaudeSession {
     #[serde(flatten)]
     pub summary: ClaudeSessionSummary,
     pub messages: Vec<ClaudeMessage>,
+    /// The model of the latest answer, as Claude Code recorded it.
+    pub model: Option<String>,
+}
+
+/// What a turn runs on. None leaves Claude Code's own default.
+#[derive(Debug, Default, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ModelChoice {
+    pub model: Option<String>,
+    pub effort: Option<String>,
+}
+
+/// `--effort` levels Claude Code accepts.
+const EFFORTS: &[&str] = &["low", "medium", "high", "xhigh", "max"];
+
+/// A model alias or id ("opus", "claude-opus-5-5", "sonnet[1m]"); nothing
+/// that could read as a flag reaches the command line.
+fn valid_model(model: &str) -> bool {
+    !model.is_empty()
+        && model.len() <= 64
+        && !model.starts_with('-')
+        && model
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || "-._[]".contains(c))
 }
 
 fn claude_error(message: impl std::fmt::Display) -> Error {
@@ -269,8 +295,12 @@ fn summarize_request(tool: &str, input: &Value) -> String {
         ("Bash" | "PowerShell", Some(command), _, _) => format!("Run `{}`", clip(command, 140)),
         ("Write", _, Some(path), _) => format!("Write {path}"),
         ("Edit" | "MultiEdit" | "NotebookEdit", _, Some(path), _) => format!("Edit {path}"),
+        (_, _, Some(path), _) => format!("{tool} {path}"),
         (_, _, _, Some(url)) => format!("{tool} {}", clip(url, 140)),
-        _ => format!("Use {tool} · {}", clip(&input.to_string(), 120)),
+        _ => match field("pattern").or(field("query")).or(field("description")) {
+            Some(what) => format!("{tool} {}", clip(what, 140)),
+            None => format!("Use {tool} · {}", clip(&input.to_string(), 120)),
+        },
     }
 }
 
@@ -304,6 +334,7 @@ pub async fn run(
     prompt: String,
     working_directory: String,
     session_id: Option<String>,
+    choice: ModelChoice,
     host: &mut impl Host,
 ) -> Result<ClaudeRun> {
     let prompt = prompt.trim().to_owned();
@@ -327,12 +358,29 @@ pub async fn run(
         "--verbose",
         "--permission-prompt-tool",
         "stdio",
+        // Keeps reasoning summaries in the transcript, where the Agents tab
+        // reads them; headless runs omit them otherwise. ponytail: a hidden
+        // flag (2.1.x); drop it if Claude Code ever refuses it.
+        "--thinking-display",
+        "summarized",
     ]);
     if let Some(id) = session_id.as_deref() {
         if !valid_session_id(id) {
             return Err(claude_error("That is not a Claude Code session id"));
         }
         command.args(["--resume", id]);
+    }
+    if let Some(model) = choice.model.as_deref().filter(|m| !m.is_empty()) {
+        if !valid_model(model) {
+            return Err(claude_error("That is not a Claude model name"));
+        }
+        command.args(["--model", model]);
+    }
+    if let Some(effort) = choice.effort.as_deref().filter(|e| !e.is_empty()) {
+        if !EFFORTS.contains(&effort) {
+            return Err(claude_error("That is not a Claude Code effort level"));
+        }
+        command.args(["--effort", effort]);
     }
     let mut child = command
         .current_dir(folder)
@@ -511,24 +559,65 @@ pub fn read_session_in(root: &Path, id: &str) -> Result<ClaudeSession> {
         .find(|path| path.file_stem().and_then(|s| s.to_str()) == Some(id))
         .ok_or_else(|| claude_error("No such Claude Code session"))?;
     let summary = summarize(&path).ok_or_else(|| claude_error("That session has no prompts"))?;
-    let messages = records(&path)?
-        .filter_map(|record| {
-            let role = match record.get("type").and_then(Value::as_str)? {
-                "user" => "user",
-                "assistant" => "assistant",
-                _ => return None,
-            };
-            Some(ClaudeMessage {
+    let mut messages = Vec::new();
+    let mut model = None;
+    for record in records(&path)? {
+        let timestamp = record
+            .get("timestamp")
+            .and_then(Value::as_str)
+            .map(str::to_owned);
+        let mut say = |role, text: String| {
+            messages.push(ClaudeMessage {
                 role,
-                text: message_text(&record)?,
-                timestamp: record
-                    .get("timestamp")
-                    .and_then(Value::as_str)
-                    .map(str::to_owned),
-            })
-        })
-        .collect();
-    Ok(ClaudeSession { summary, messages })
+                text,
+                timestamp: timestamp.clone(),
+            });
+        };
+        match record.get("type").and_then(Value::as_str) {
+            Some("user") => {
+                if let Some(text) = message_text(&record) {
+                    say("user", text);
+                }
+            }
+            Some("assistant") => {
+                if let Some(name) = record.pointer("/message/model").and_then(Value::as_str) {
+                    // "<synthetic>" marks Claude Code's own stand-in replies.
+                    if !name.starts_with('<') {
+                        model = Some(name.to_owned());
+                    }
+                }
+                let blocks = record.pointer("/message/content").and_then(Value::as_array);
+                for block in blocks.into_iter().flatten() {
+                    let field = |name| block.get(name).and_then(Value::as_str).map(str::trim);
+                    match field("type") {
+                        Some("text") => match field("text") {
+                            Some(text) if !text.is_empty() => say("assistant", text.to_owned()),
+                            _ => {}
+                        },
+                        // Claude Code may keep only a signature; empty thinking is not shown.
+                        Some("thinking") => match field("thinking") {
+                            Some(text) if !text.is_empty() => say("thinking", text.to_owned()),
+                            _ => {}
+                        },
+                        Some("tool_use") => say(
+                            "tool",
+                            summarize_request(
+                                field("name").unwrap_or("a tool"),
+                                block.get("input").unwrap_or(&Value::Null),
+                            ),
+                        ),
+                        _ => {}
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+    Ok(ClaudeSession {
+        summary,
+        messages,
+        model,
+    })
 }
 
 pub fn list_sessions() -> Vec<ClaudeSessionSummary> {
@@ -640,6 +729,16 @@ mod tests {
     }
 
     #[test]
+    fn only_plain_model_names_reach_the_command_line() {
+        assert!(valid_model("opus"));
+        assert!(valid_model("claude-opus-5-5"));
+        assert!(valid_model("sonnet[1m]"));
+        assert!(!valid_model("--dangerously-skip-permissions"));
+        assert!(!valid_model("opus --verbose"));
+        assert!(!valid_model(""));
+    }
+
+    #[test]
     fn only_uuid_shaped_ids_reach_the_command_line() {
         assert!(valid_session_id("24f45911-f12e-4bfe-a250-7a2b7f9389bd"));
         assert!(!valid_session_id("--dangerously-skip-permissions"));
@@ -657,7 +756,7 @@ mod tests {
             r#"{"type":"queue-operation","sessionId":"x"}"#,
             r#"{"type":"user","cwd":"F:\\Code\\Leaf","message":{"role":"user","content":"<command-name>/clear</command-name>"}}"#,
             r#"{"type":"user","cwd":"F:\\Code\\Leaf","timestamp":"2026-10-26T10:00:00Z","message":{"role":"user","content":"Why is the probe failing?\nIt was fine yesterday."}}"#,
-            r#"{"type":"assistant","message":{"role":"assistant","content":[{"type":"thinking","thinking":"hm"},{"type":"tool_use","name":"Read"}]}}"#,
+            r#"{"type":"assistant","message":{"role":"assistant","model":"claude-opus-5-5","content":[{"type":"thinking","thinking":"hm"},{"type":"thinking","thinking":""},{"type":"tool_use","name":"Read","input":{"file_path":"probe.rs"}}]}}"#,
             r#"{"type":"user","message":{"role":"user","content":[{"type":"tool_result","content":"..."}]}}"#,
             r#"{"type":"assistant","isSidechain":true,"message":{"role":"assistant","content":[{"type":"text","text":"subagent"}]}}"#,
             r#"{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"The token expired."}]}}"#,
@@ -680,9 +779,12 @@ mod tests {
             said,
             [
                 ("user", "Why is the probe failing?\nIt was fine yesterday."),
+                ("thinking", "hm"),
+                ("tool", "Read probe.rs"),
                 ("assistant", "The token expired."),
             ]
         );
+        assert_eq!(session.model.as_deref(), Some("claude-opus-5-5"));
         assert!(read_session_in(&root, "../../etc").is_err());
         std::fs::remove_dir_all(root).unwrap();
     }
@@ -719,6 +821,7 @@ mod tests {
             "Create a file named hello.txt in the current folder containing exactly: hi. Do nothing else.".into(),
             folder.to_string_lossy().into_owned(),
             None,
+            ModelChoice::default(),
             &mut host,
         )
         .await;

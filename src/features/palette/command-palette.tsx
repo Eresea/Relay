@@ -18,6 +18,7 @@ import { computed, signal, useSignals } from '@/lib/signals';
 import { cn, vars } from '@/lib/utils';
 import { Icon } from '@/shared/icon';
 import { Kbd } from '@/shared/kbd';
+import { loadChoices } from '@/features/agents/chat';
 
 import {
   MODES,
@@ -338,7 +339,7 @@ export class OmnibarState {
     };
   }
 
-  /** One row per agent and workspace: Codex and Claude Code, each while its module is on. */
+  /** One row per agent and workspace, on the model and effort last picked in Agents. */
   private askResults(): readonly OmniResult[] {
     const prompt = this.query().trim();
     if (!prompt || this.mode() !== 'ask') return [];
@@ -362,7 +363,9 @@ export class OmnibarState {
           verb: 'Ask',
           note: 'Starts a new Codex thread in the background. The answer arrives in the activity pill.',
           facts,
-          run: () => this.tauri.codexAsk(prompt, w.path),
+          run: async () => {
+            await this.tauri.codexAsk(prompt, w.path, null, (await loadChoices(this.tauri)).codex);
+          },
         };
         const claude: OmniResult = {
           id: `relay.ask.claude.${w.path}`,
@@ -376,10 +379,15 @@ export class OmnibarState {
           note: 'Starts a new Claude Code session in the background. It reads freely; each edit or command waits for your Allow in the activity stack.',
           facts,
           run: async () => {
-            await this.tauri.claudeAsk(prompt, w.path);
+            await this.tauri.claudeAsk(
+              prompt,
+              w.path,
+              null,
+              (await loadChoices(this.tauri)).claude,
+            );
           },
         };
-        return [...(on('codex') ? [codex] : []), ...(on('claude') ? [claude] : [])];
+        return on('agents') ? [codex, claude] : [];
       });
   }
 

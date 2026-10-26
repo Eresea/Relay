@@ -5,8 +5,8 @@ export type Source = 'agents' | 'claude' | 'github' | 'mail' | 'scripts' | 'rela
 
 /** Each source and the module that produces it (an id in core/modules.ts). */
 export const SOURCES: Readonly<Record<Source, { label: string; icon: string; module: string }>> = {
-  agents: { label: 'Codex', icon: 'sparkles', module: 'codex' },
-  claude: { label: 'Claude', icon: 'bot', module: 'claude' },
+  agents: { label: 'Codex', icon: 'sparkles', module: 'agents' },
+  claude: { label: 'Claude', icon: 'bot', module: 'agents' },
   github: { label: 'GitHub', icon: 'git-pull-request', module: 'github' },
   mail: { label: 'Mail', icon: 'inbox', module: 'gmail' },
   scripts: { label: 'Scripts', icon: 'terminal', module: 'projects' },

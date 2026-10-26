@@ -12,6 +12,7 @@ use tokio::{
     process::{Child, ChildStdin, ChildStdout, Command},
 };
 
+use crate::claude::ModelChoice;
 use crate::error::{Error, Result};
 
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(20);
@@ -249,11 +250,14 @@ impl CodexClient {
         }
     }
 
-    async fn run_turn(&mut self, thread_id: &str, cwd: &Path, prompt: &str) -> Result<String> {
-        let started = self
-            .request(
-                "turn/start",
-                json!({
+    async fn run_turn(
+        &mut self,
+        thread_id: &str,
+        cwd: &Path,
+        prompt: &str,
+        choice: &ModelChoice,
+    ) -> Result<String> {
+        let mut params = json!({
                     "threadId": thread_id,
                     "cwd": cwd.to_string_lossy(),
                     "approvalPolicy": "never",
@@ -268,9 +272,15 @@ impl CodexClient {
                         "networkAccess": false
                     },
                     "input": [{ "type": "text", "text": prompt }]
-                }),
-            )
-            .await?;
+        });
+        // Each sets the thread's model or effort from this turn on; None keeps it.
+        if let Some(model) = &choice.model {
+            params["model"] = json!(model);
+        }
+        if let Some(effort) = &choice.effort {
+            params["effort"] = json!(effort);
+        }
+        let started = self.request("turn/start", params).await?;
         let turn_id = started
             .get("turn")
             .and_then(|turn| turn.get("id"))
@@ -322,6 +332,51 @@ impl CodexClient {
 
         Ok(response)
     }
+}
+
+/// A model Codex offers, and how hard it can think.
+#[derive(Debug, Serialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct CodexModel {
+    pub id: String,
+    pub name: String,
+    pub description: String,
+    pub efforts: Vec<String>,
+    pub default_effort: Option<String>,
+    pub is_default: bool,
+}
+
+/// The models `model/list` names, without the hidden ones.
+pub async fn models(state: &CodexState) -> Result<Vec<CodexModel>> {
+    parse_models(&state.request("model/list", json!({})).await?)
+}
+
+fn parse_models(page: &Value) -> Result<Vec<CodexModel>> {
+    let text = |value: &Value, key: &str| value.get(key).and_then(Value::as_str).map(str::to_owned);
+    Ok(page
+        .get("data")
+        .and_then(Value::as_array)
+        .ok_or_else(|| protocol_error("Codex app-server returned an invalid model list"))?
+        .iter()
+        .filter(|m| m.get("hidden").and_then(Value::as_bool) != Some(true))
+        .filter_map(|m| {
+            let id = text(m, "model").or_else(|| text(m, "id"))?;
+            Some(CodexModel {
+                name: text(m, "displayName").unwrap_or_else(|| id.clone()),
+                description: text(m, "description").unwrap_or_default(),
+                efforts: m
+                    .get("supportedReasoningEfforts")
+                    .and_then(Value::as_array)
+                    .into_iter()
+                    .flatten()
+                    .filter_map(|e| text(e, "reasoningEffort"))
+                    .collect(),
+                default_effort: text(m, "defaultReasoningEffort"),
+                is_default: m.get("isDefault").and_then(Value::as_bool) == Some(true),
+                id,
+            })
+        })
+        .collect())
 }
 
 #[derive(Debug, Serialize)]
@@ -440,6 +495,7 @@ pub async fn send(
     prompt: String,
     working_directory: String,
     thread_id: Option<String>,
+    choice: ModelChoice,
 ) -> Result<CodexRun> {
     let prompt = prompt.trim();
     if prompt.is_empty() || prompt.len() > MAX_PROMPT_LENGTH {
@@ -491,7 +547,7 @@ pub async fn send(
         .and_then(Value::as_str)
         .ok_or_else(|| protocol_error("Codex app-server returned no thread id"))?
         .to_owned();
-    let response = client.run_turn(&thread_id, &cwd, prompt).await?;
+    let response = client.run_turn(&thread_id, &cwd, prompt, &choice).await?;
     Ok(CodexRun {
         thread_id,
         response,
@@ -532,6 +588,29 @@ mod tests {
         assert_eq!(page.turns[0]["items"][0]["type"], "userMessage");
         assert_eq!(page.next_cursor.as_deref(), Some("earlier"));
         assert!(parse_turn_page(json!({"data": null})).is_err());
+    }
+
+    #[test]
+    fn models_keep_their_efforts_and_skip_hidden_ones() {
+        let models = parse_models(&json!({ "data": [
+            { "id": "gpt-6-astra", "model": "gpt-6-astra", "displayName": "GPT-6-Astra",
+              "description": "Frontier", "hidden": false, "isDefault": true,
+              "defaultReasoningEffort": "low",
+              "supportedReasoningEfforts": [{ "reasoningEffort": "low" }, { "reasoningEffort": "max" }] },
+            { "id": "secret", "model": "secret", "hidden": true }
+        ]}))
+        .unwrap();
+        assert_eq!(
+            models,
+            [CodexModel {
+                id: "gpt-6-astra".into(),
+                name: "GPT-6-Astra".into(),
+                description: "Frontier".into(),
+                efforts: vec!["low".into(), "max".into()],
+                default_effort: Some("low".into()),
+                is_default: true,
+            }]
+        );
     }
 
     #[tokio::test]

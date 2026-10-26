@@ -1865,7 +1865,16 @@ pub async fn codex_send(
     working_directory: String,
     thread_id: Option<String>,
 ) -> Result<crate::codex::CodexRun> {
-    crate::codex::send(prompt, working_directory, thread_id).await
+    crate::codex::send(prompt, working_directory, thread_id, Default::default()).await
+}
+
+/// The models Codex offers, each with the reasoning efforts it supports.
+#[cfg(desktop)]
+#[tauri::command]
+pub async fn codex_models(
+    state: tauri::State<'_, crate::codex::CodexState>,
+) -> Result<Vec<crate::codex::CodexModel>> {
+    crate::codex::models(&state).await
 }
 
 #[cfg(desktop)]
@@ -1907,8 +1916,9 @@ pub fn open_terminal(path: String) -> Result<()> {
 /// callback thread: `git fetch`/`pull` can block for as long as the network
 /// does, and every other command — including opening an unrelated popover —
 /// would stall behind it otherwise.
-/// Starts a Codex thread in the background and returns its job id at once.
-/// Progress and the answer arrive as notifications.
+/// Starts a Codex turn in the background, new or continuing `thread_id`,
+/// and returns its job id at once. Progress and the answer arrive as
+/// notifications.
 #[cfg(desktop)]
 #[tauri::command]
 pub fn codex_ask(
@@ -1916,8 +1926,17 @@ pub fn codex_ask(
     jobs: tauri::State<JobRegistry>,
     prompt: String,
     working_directory: String,
+    thread_id: Option<String>,
+    choice: Option<crate::claude::ModelChoice>,
 ) -> JobId {
-    crate::omnibar::ask_codex(app, jobs.inner().clone(), prompt, working_directory)
+    crate::omnibar::ask_codex(
+        app,
+        jobs.inner().clone(),
+        prompt,
+        working_directory,
+        thread_id,
+        choice.unwrap_or_default(),
+    )
 }
 
 /// Starts a Claude Code turn in the background, new or resuming
@@ -1932,6 +1951,7 @@ pub fn claude_ask(
     prompt: String,
     working_directory: String,
     session_id: Option<String>,
+    choice: Option<crate::claude::ModelChoice>,
 ) -> JobId {
     let ledger = app.clone();
     crate::omnibar::ask_claude(
@@ -1941,6 +1961,7 @@ pub fn claude_ask(
         prompt,
         working_directory,
         session_id,
+        choice.unwrap_or_default(),
         move |session_id, usd| crate::claude::record_spend(&ledger, session_id, usd),
     )
 }

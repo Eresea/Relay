@@ -124,7 +124,7 @@ it('builds the rail from the core registry and drops a module turned off on the 
   const rail = () =>
     [...document.querySelectorAll('.rail-top .rail-item')].map((b) => b.getAttribute('aria-label'));
   await waitFor(() =>
-    expect(rail()).toEqual(['Today', 'My work', 'Codex', 'Claude', 'Projects', 'Vault', 'Runtime']),
+    expect(rail()).toEqual(['Today', 'My work', 'Agents', 'Projects', 'Vault', 'Runtime']),
   );
 
   fireEvent.click(screen.getByRole('button', { name: 'Vault' }));

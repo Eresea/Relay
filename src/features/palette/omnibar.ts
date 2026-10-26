@@ -15,7 +15,7 @@ export const MODES: readonly {
   readonly placeholder: string;
 }[] = [
   { id: 'do', label: 'Do', icon: 'command', placeholder: 'Type a command or search' },
-  { id: 'ask', label: 'Ask', icon: 'sparkles', placeholder: 'Ask Codex about a project' },
+  { id: 'ask', label: 'Ask', icon: 'sparkles', placeholder: 'Ask Codex or Claude about a project' },
   { id: 'find', label: 'Find', icon: 'search', placeholder: 'Find a project, thread or update' },
   { id: 'run', label: 'Run', icon: 'terminal', placeholder: 'Run a script or open a terminal' },
 ];

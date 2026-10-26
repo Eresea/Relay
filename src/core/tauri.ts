@@ -177,6 +177,9 @@ export class TauriBridge {
     // Relay's own links open a view in the main window rather than leave the app.
     const claude = /^relay:\/\/claude\/([\w-]+)$/.exec(url);
     if (claude) return this.runCoreCommand({ id: 'open_claude', args: { sessionId: claude[1] } });
+    const codex = /^relay:\/\/codex\/([\w-]+)$/.exec(url);
+    if (codex)
+      return this.runCoreCommand({ id: 'open_agent_thread', args: { threadId: codex[1] } });
     if (!this.available) return;
     const { openUrl } = await import('@tauri-apps/plugin-opener');
     await openUrl(url);
@@ -225,8 +228,9 @@ export class TauriBridge {
     prompt: string,
     workingDirectory: string,
     sessionId: string | null = null,
+    choice: ModelChoice | null = null,
   ): Promise<string | null> {
-    return this.invoke<string>('claude_ask', { prompt, workingDirectory, sessionId });
+    return this.invoke<string>('claude_ask', { prompt, workingDirectory, sessionId, choice });
   }
 
   /** Answers a job's question: Allow or Deny on a notification card. */
@@ -253,9 +257,22 @@ export class TauriBridge {
     return result;
   }
 
-  /** Starts a Codex thread as a background job; the answer arrives as a notification. */
-  async codexAsk(prompt: string, workingDirectory: string): Promise<void> {
-    await this.invoke('codex_ask', { prompt, workingDirectory });
+  /**
+   * Starts a Codex turn as a background job, new or continuing `threadId`,
+   * and returns the job id. The answer arrives as a notification.
+   */
+  async codexAsk(
+    prompt: string,
+    workingDirectory: string,
+    threadId: string | null = null,
+    choice: ModelChoice | null = null,
+  ): Promise<string | null> {
+    return this.invoke<string>('codex_ask', { prompt, workingDirectory, threadId, choice });
+  }
+
+  /** The models Codex offers, each with the reasoning efforts it supports. */
+  async codexModels(): Promise<readonly CodexModel[]> {
+    return (await this.invoke<CodexModel[]>('codex_models')) ?? [];
   }
 
   /** Starts a workspace script as a background job; the result arrives as a notification. */
@@ -1534,13 +1551,32 @@ export interface ClaudeSessionSummary {
 }
 
 export interface ClaudeMessage {
-  readonly role: 'user' | 'assistant';
+  /** "thinking" is the model's reasoning summary; "tool" is what it did, in a line. */
+  readonly role: 'user' | 'assistant' | 'thinking' | 'tool';
   readonly text: string;
   readonly timestamp: string | null;
 }
 
 export interface ClaudeSession extends ClaudeSessionSummary {
   readonly messages: readonly ClaudeMessage[];
+  /** The model of the latest answer, as Claude Code recorded it. */
+  readonly model: string | null;
+}
+
+/** What an agent's turn runs on; null keeps the agent's own default. Mirrors claude::ModelChoice. */
+export interface ModelChoice {
+  readonly model: string | null;
+  readonly effort: string | null;
+}
+
+/** Mirrors codex::CodexModel. */
+export interface CodexModel {
+  readonly id: string;
+  readonly name: string;
+  readonly description: string;
+  readonly efforts: readonly string[];
+  readonly defaultEffort: string | null;
+  readonly isDefault: boolean;
 }
 
 export interface CodexThreadDetails {
@@ -1713,6 +1749,7 @@ export interface CodexThreadPage {
 
 export interface CodexThread extends CodexThreadSummary {
   readonly turns: readonly CodexTurn[];
+  readonly reasoningEffort?: string | null;
 }
 
 export function codexThreadTitle(thread: Pick<CodexThreadSummary, 'name' | 'preview'>): string {

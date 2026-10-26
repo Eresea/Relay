@@ -13,7 +13,7 @@ it('draws from the core and settles a change on what the core says', async () =>
   await modules.load();
 
   expect(modules.isEnabled('vault')).toBe(false);
-  expect(modules.isEnabled('codex')).toBe(true);
+  expect(modules.isEnabled('agents')).toBe(true);
   expect(modules.isEnabled('missing')).toBe(false);
   // A command belongs to its module; one no module claims is always there.
   expect(modules.commandEnabled('relay.vault.open')).toBe(false);

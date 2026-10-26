@@ -262,6 +262,7 @@ pub fn run() {
                 runtime::runtime_nexus_readiness,
                 commands::codex_send,
                 commands::codex_ask,
+                commands::codex_models,
                 commands::project_script_start,
                 commands::codex_list_threads,
                 commands::codex_read_thread,

@@ -10,7 +10,7 @@ use std::path::Path;
 use std::time::{Duration, Instant};
 
 use crate::approvals::Approvals;
-use crate::claude::{self, PermissionRequest};
+use crate::claude::{self, ModelChoice, PermissionRequest};
 use crate::codex;
 use crate::error::{Error, Result};
 use crate::events::{EventSink, NotificationAction, NotificationStatus};
@@ -20,12 +20,15 @@ use crate::workspaces::{self, WorkspaceAction};
 /// An answer is worth more than "done": keep it on screen long enough to read.
 const ANSWER_READ_MS: u64 = 30_000;
 
-/// Sends `prompt` to Codex in `working_directory` as a new thread.
+/// Sends `prompt` to Codex in `working_directory`, as a new thread or
+/// continuing `thread_id`.
 pub fn ask_codex<S: EventSink>(
     sink: S,
     registry: JobRegistry,
     prompt: String,
     working_directory: String,
+    thread_id: Option<String>,
+    choice: ModelChoice,
 ) -> JobId {
     jobs::spawn(sink, registry, "codex", move |ctx| async move {
         let title = format!("Codex · {}", clip(&prompt, 60));
@@ -36,7 +39,7 @@ pub fn ask_codex<S: EventSink>(
             Some(format!("Working in {place}")),
             None,
         );
-        match codex::send(prompt, working_directory, None).await {
+        match codex::send(prompt, working_directory, thread_id, choice).await {
             Ok(run) => {
                 ctx.report_notification(
                     NotificationStatus::Done,
@@ -46,9 +49,10 @@ pub fn ask_codex<S: EventSink>(
                     NotificationOptions {
                         notification_id: ctx.id().to_string(),
                         auto_dismiss_ms: Some(ANSWER_READ_MS),
+                        // Relay's own link: the interface opens the thread in its Agents tab.
                         actions: vec![NotificationAction::Open {
                             label: "Open thread".to_owned(),
-                            url: format!("codex://threads/{}", run.thread_id),
+                            url: format!("relay://codex/{}", run.thread_id),
                         }],
                     },
                 );
@@ -72,6 +76,7 @@ pub fn ask_claude<S: EventSink>(
     prompt: String,
     working_directory: String,
     session_id: Option<String>,
+    choice: ModelChoice,
     on_spend: impl FnOnce(&str, f64) + Send + 'static,
 ) -> JobId {
     jobs::spawn(sink, registry, "claude", move |ctx| async move {
@@ -88,7 +93,7 @@ pub fn ask_claude<S: EventSink>(
             approvals,
             title: title.clone(),
         };
-        match claude::run(prompt, working_directory, session_id, &mut card).await {
+        match claude::run(prompt, working_directory, session_id, choice, &mut card).await {
             Ok(run) => {
                 let answer = clip(&first_line(&run.response), 150);
                 let detail = match run.cost_usd {
