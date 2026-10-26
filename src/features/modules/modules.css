@@ -1,0 +1,281 @@
+.modules {
+  & {
+    display: flex;
+    flex-direction: column;
+    block-size: 100%;
+    min-block-size: 0;
+  }
+
+  .panehead {
+    display: flex;
+    align-items: center;
+    gap: var(--space-4);
+    flex: none;
+    block-size: var(--titlebar-height);
+    padding-inline: var(--space-6);
+    border-block-end: 1px solid var(--border-subtle);
+
+    h1 {
+      font-size: var(--text-13);
+      font-weight: var(--weight-medium);
+      color: var(--text-strong);
+    }
+  }
+
+  .count {
+    font-size: var(--text-12);
+    color: var(--text-subtle);
+  }
+
+  .search {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+    inline-size: 220px;
+    block-size: 26px;
+    margin-inline-start: auto;
+    padding-inline: var(--space-4);
+    border: 1px solid var(--border-default);
+    border-radius: var(--radius-sm);
+    background: var(--bg-app);
+    color: var(--text-subtle);
+
+    &:focus-within {
+      border-color: var(--border-focus);
+    }
+
+    input {
+      flex: 1;
+      min-inline-size: 0;
+      background: none;
+      border: 0;
+      outline: none;
+      font-size: var(--text-12);
+      color: var(--text-body);
+    }
+  }
+
+  .modules-body {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 320px;
+    flex: 1;
+    min-block-size: 0;
+  }
+
+  .modules-main {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-6);
+    padding: var(--space-7);
+    overflow-y: auto;
+  }
+
+  /* Hairlines come from the 1px gap over a line-coloured background, so the
+   * cells reflow from four across to two without stray borders. */
+  .contract {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 1px;
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-md);
+    background: var(--border-subtle);
+    overflow: hidden;
+    font-size: var(--text-12);
+
+    > div {
+      padding: var(--space-5);
+      background: var(--bg-card);
+    }
+
+    dt {
+      font-weight: var(--weight-medium);
+      color: var(--text-strong);
+    }
+
+    dd {
+      color: var(--text-subtle);
+    }
+  }
+
+  .intro {
+    max-inline-size: 70ch;
+    font-size: var(--text-12);
+    color: var(--text-muted);
+  }
+
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    gap: var(--space-5);
+  }
+
+  .card {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-4);
+    padding: var(--space-5);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-md);
+    background: var(--bg-card);
+  }
+
+  .card.on {
+    border-color: var(--border-strong);
+  }
+
+  .card.off .card-open {
+    opacity: 0.55;
+  }
+
+  .card-head,
+  .detail-head {
+    display: flex;
+    align-items: center;
+    gap: var(--space-4);
+  }
+
+  .card-open {
+    display: flex;
+    align-items: center;
+    gap: var(--space-5);
+    flex: 1;
+    min-inline-size: 0;
+    text-align: start;
+  }
+
+  .tile {
+    inline-size: 32px;
+    block-size: 32px;
+  }
+
+  .tile-xl {
+    inline-size: 40px;
+    block-size: 40px;
+  }
+
+  .card-name {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-inline-size: 0;
+  }
+
+  .name {
+    font-size: var(--text-13);
+    font-weight: var(--weight-medium);
+    color: var(--text-strong);
+  }
+
+  .summary {
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+    font-size: var(--text-11);
+    color: var(--text-subtle);
+  }
+
+  .always {
+    font-size: var(--text-11);
+    color: var(--text-subtle);
+    white-space: nowrap;
+  }
+
+  .gives {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-2);
+    min-block-size: 18px;
+  }
+
+  .chip {
+    display: inline-flex;
+    align-items: center;
+    block-size: 18px;
+    padding-inline: var(--space-3);
+    border-radius: var(--radius-pill);
+    font-size: var(--text-11);
+    color: var(--text-muted);
+    background: var(--tint-hover);
+    box-shadow: inset 0 0 0 1px var(--border-subtle);
+  }
+
+  .needs {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+    font-size: var(--text-11);
+    color: var(--text-subtle);
+  }
+
+  .module-detail {
+    display: flex;
+    flex-direction: column;
+    border-inline-start: 1px solid var(--border-subtle);
+    background: var(--bg-card);
+    overflow-y: auto;
+  }
+
+  .sect {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+    padding: var(--space-6);
+    border-block-end: 1px solid var(--border-subtle);
+
+    .u-caption {
+      margin-block-end: var(--space-3);
+    }
+  }
+
+  .description {
+    margin-block-start: var(--space-4);
+    font-size: var(--text-12);
+    line-height: 1.5;
+    color: var(--text-muted);
+  }
+
+  .perm {
+    display: flex;
+    align-items: center;
+    gap: var(--space-4);
+    min-block-size: var(--control-sm);
+    font-size: var(--text-12);
+    color: var(--text-body);
+
+    svg {
+      color: var(--status-done);
+    }
+  }
+
+  .perm.unasked {
+    color: var(--text-subtle);
+
+    svg {
+      color: var(--text-subtle);
+    }
+  }
+
+  .sect:nth-of-type(3) .perm svg {
+    color: var(--text-subtle);
+  }
+
+  .perm-name {
+    flex: 1;
+    min-inline-size: 0;
+  }
+
+  .perm-scope {
+    font-family: var(--font-mono);
+    font-size: var(--text-11);
+    color: var(--text-subtle);
+    text-align: end;
+  }
+
+  .actions {
+    flex-direction: row;
+    border-block-end: 0;
+  }
+}

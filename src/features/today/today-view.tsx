@@ -3,6 +3,7 @@ import type { ReactNode } from 'react';
 import { Button } from '@/components/ui/button';
 import { moduleHueVar } from '@/core/entity-hue';
 import type { NotificationAction, NotificationStatus } from '@/core/events';
+import { ModuleRegistry } from '@/core/modules';
 import { NotificationCenter } from '@/core/notification-center';
 import { TauriBridge } from '@/core/tauri';
 import { ago } from '@/features/palette/omnibar';
@@ -24,13 +25,16 @@ const STATUS_LABEL: Record<NotificationStatus, string> = {
 /** Today's selection and filter, over the notification center the HUD also reads. */
 class TodayState {
   private readonly center = inject(NotificationCenter);
+  private readonly modules = inject(ModuleRegistry);
   private readonly tauri = inject(TauriBridge);
 
   readonly filter = signal<Filter>('all');
   private readonly selectedId = signal<string | null>(null);
 
   readonly today = computed(() =>
-    buildToday(this.center.items(), this.center.history(), this.filter()),
+    buildToday(this.center.items(), this.center.history(), this.filter(), (source) =>
+      this.modules.isEnabled(SOURCES[source].module),
+    ),
   );
   /** The picked item, or the first that most deserves a look. */
   readonly selected = computed(() => {
@@ -82,7 +86,11 @@ class TodayState {
 
 /** Today colours a row by the module it came from, as the prototype's triage does. */
 const tone = (item: TodayItem) =>
-  vars({ '--entity-hue': moduleHueVar(SOURCES[item.source].module) });
+  vars({
+    '--entity-hue': moduleHueVar(
+      inject(ModuleRegistry).get(SOURCES[item.source].module)?.hue ?? 'relay',
+    ),
+  });
 const age = (item: TodayItem) => (item.createdAt === undefined ? 'now' : ago(item.createdAt));
 
 /**

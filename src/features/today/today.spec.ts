@@ -77,6 +77,18 @@ describe('buildToday', () => {
     expect(today.total).toBe(4);
   });
 
+  it('leaves out items from sources whose module is off', () => {
+    const today = buildToday(
+      [live('agent', { hueSource: 'codex' }), live('pr', { hueSource: 'github' })],
+      [record('mail', 3, { hueSource: 'gmail' })],
+      'all',
+      (source) => source !== 'mail',
+    );
+    expect(ids(today.happening)).toEqual(['agent', 'pr']);
+    expect(today.quiet).toEqual([]);
+    expect(today.counts).toEqual({ agents: 1, github: 1 });
+  });
+
   it('keeps quiet history to a catch-up, not an archive', () => {
     const history = Array.from({ length: QUIET_LIMIT + 5 }, (_, i) => record(`r${i}`, i));
     expect(buildToday([], history).quiet).toHaveLength(QUIET_LIMIT);

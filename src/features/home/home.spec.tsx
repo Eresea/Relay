@@ -38,7 +38,7 @@ it('manages Nexus sign-in from the avatar below Settings and reports failures', 
 
   const { container } = render(<Home />);
   const trigger = screen.getByRole('button', { name: 'Nexus account' });
-  expect(container.querySelector('.rail-bottom')?.children[0]?.getAttribute('aria-label')).toBe(
+  expect(container.querySelector('.rail-bottom')?.children[1]?.getAttribute('aria-label')).toBe(
     'Settings',
   );
   expect(trigger.querySelector('.avatar')?.textContent?.trim()).toBe('N');
@@ -109,4 +109,24 @@ it('opens views as tabs and closes them like browser tabs', () => {
   fireEvent.keyDown(window, { key: 'w', ctrlKey: true });
   expect(tabs()).toEqual(['Today']);
   expect(selected()).toBe('Today');
+});
+
+it('builds the rail from the registry and drops a module turned off on the Modules screen', async () => {
+  provideBridge({ available: false });
+  provide(ThemeService, {
+    theme: signal('dark'),
+    toggle: () => undefined,
+  } as unknown as ThemeService);
+  render(<Home />);
+  const rail = () =>
+    [...document.querySelectorAll('.rail-top .rail-item')].map((b) => b.getAttribute('aria-label'));
+  expect(rail()).toEqual(['Today', 'My work', 'Agents', 'Projects', 'Vault', 'Runtime']);
+
+  fireEvent.click(screen.getByRole('button', { name: 'Vault' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Modules' }));
+  fireEvent.click(await screen.findByRole('switch', { name: 'Vault on' }));
+
+  expect(rail()).not.toContain('Vault');
+  expect(screen.getAllByRole('tab').map((tab) => tab.textContent)).toEqual(['Today', 'Modules']);
+  expect(screen.getByRole('switch', { name: 'Vault on' })).toHaveProperty('checked', false);
 });

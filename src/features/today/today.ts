@@ -1,17 +1,16 @@
-import type { ModuleHue } from '@/core/entity-hue';
 import type { NotificationPayload, NotificationRecord, NotificationStatus } from '@/core/events';
 
 /** Where an item came from, read from the `hueSource` its producer set. */
 export type Source = 'agents' | 'github' | 'mail' | 'scripts' | 'relay';
 
-export const SOURCES: Readonly<Record<Source, { label: string; icon: string; module: ModuleHue }>> =
-  {
-    agents: { label: 'Agents', icon: 'sparkles', module: 'agents' },
-    github: { label: 'GitHub', icon: 'git-pull-request', module: 'github' },
-    mail: { label: 'Mail', icon: 'inbox', module: 'mail' },
-    scripts: { label: 'Scripts', icon: 'terminal', module: 'flow' },
-    relay: { label: 'Relay', icon: 'circle', module: 'relay' },
-  };
+/** Each source and the module that produces it (an id in core/modules.ts). */
+export const SOURCES: Readonly<Record<Source, { label: string; icon: string; module: string }>> = {
+  agents: { label: 'Agents', icon: 'sparkles', module: 'codex' },
+  github: { label: 'GitHub', icon: 'git-pull-request', module: 'github' },
+  mail: { label: 'Mail', icon: 'inbox', module: 'gmail' },
+  scripts: { label: 'Scripts', icon: 'terminal', module: 'projects' },
+  relay: { label: 'Relay', icon: 'circle', module: 'today' },
+};
 
 export function sourceOf(hueSource: string): Source {
   if (hueSource === 'codex') return 'agents';
@@ -69,6 +68,8 @@ export function buildToday(
   live: readonly NotificationPayload[],
   history: readonly NotificationRecord[],
   filter: Filter = 'all',
+  /** Sources whose module is on; an off module's items disappear, counts included. */
+  isOn: (source: Source) => boolean = () => true,
 ): Today {
   const records = new Map(history.map((r) => [r.notificationId, r]));
   const liveIds = new Set(live.map((n) => n.notificationId));
@@ -113,7 +114,7 @@ export function buildToday(
       live: false,
     }));
 
-  const all = [...fromLive, ...fromHistory];
+  const all = [...fromLive, ...fromHistory].filter((item) => isOn(item.source));
   const counts: Partial<Record<Source, number>> = {};
   for (const item of all) counts[item.source] = (counts[item.source] ?? 0) + 1;
   const shown = filter === 'all' ? all : all.filter((item) => item.source === filter);

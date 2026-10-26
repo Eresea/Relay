@@ -41,6 +41,11 @@ import {
   TriangleAlert,
   X,
   type LucideIcon,
+  Blocks,
+  Check,
+  Mail,
+  Shield,
+  User,
 } from 'lucide-react';
 
 import { cn } from '@/lib/utils';
@@ -92,6 +97,11 @@ const ICONS = {
   terminal: Terminal,
   'trash-2': Trash2,
   'triangle-alert': TriangleAlert,
+  blocks: Blocks,
+  check: Check,
+  mail: Mail,
+  shield: Shield,
+  user: User,
   x: X,
 } satisfies Record<string, LucideIcon>;
 

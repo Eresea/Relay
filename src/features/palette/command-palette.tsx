@@ -2,6 +2,7 @@ import { useEffect, type KeyboardEvent } from 'react';
 
 import type { Command } from '@/core/command';
 import { CommandRegistry } from '@/core/command-registry';
+import { ModuleRegistry } from '@/core/modules';
 import { hueFor, hueVar } from '@/core/entity-hue';
 import type { NotificationRecord } from '@/core/events';
 import { NotificationCenter } from '@/core/notification-center';
@@ -50,6 +51,7 @@ const STATUS_LABEL = {
  */
 export class OmnibarState {
   private readonly registry = inject(CommandRegistry);
+  private readonly modules = inject(ModuleRegistry);
   private readonly tauri = inject(TauriBridge);
   private readonly center = inject(NotificationCenter);
   private focusGeneration = 0;
@@ -96,7 +98,10 @@ export class OmnibarState {
   readonly placeholder = computed(() => MODES.find((m) => m.id === this.mode())?.placeholder ?? '');
 
   private readonly sources = computed<Sources>(() => ({
-    Actions: this.registry.commands().map((c) => this.commandResult(c)),
+    Actions: this.registry
+      .commands()
+      .filter((c) => this.modules.commandEnabled(c.id))
+      .map((c) => this.commandResult(c)),
     Ask: this.askResults(),
     Run: this.runResults(),
     Projects: this.ordered().map((w) => this.projectResult(w)),
@@ -137,6 +142,8 @@ export class OmnibarState {
             this.paletteBlurred = false;
           }
           void this.loadWorkspaces();
+          // Modules may have been turned on or off in the main window.
+          void this.modules.load();
           this.field?.focus();
         } else {
           this.paletteBlurred = true;

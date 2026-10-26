@@ -2,6 +2,7 @@ import { lazy, Suspense, type ComponentType } from 'react';
 
 import { CommandRegistry } from '@/core/command-registry';
 import { registerDefaultCommands } from '@/core/default-commands';
+import { ModuleRegistry } from '@/core/modules';
 import { NotificationCenter } from '@/core/notification-center';
 import { currentSurface, isOverlaySurface, type Surface } from '@/core/surface';
 import { TauriBridge, type CoreCommand } from '@/core/tauri';
@@ -44,6 +45,7 @@ export function bootstrap(): void {
   if (isOverlaySurface(surface)) document.documentElement.classList.add('overlay-window');
 
   registerDefaultCommands();
+  void inject(ModuleRegistry).load();
 
   if (surface === 'mobile') {
     void setupMobileNotifications().then(subscribeToEvents);

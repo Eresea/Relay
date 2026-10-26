@@ -1,6 +1,7 @@
 import { lazy, Suspense, useEffect } from 'react';
 
-import { moduleHueVar, type ModuleHue } from '@/core/entity-hue';
+import { moduleHueVar } from '@/core/entity-hue';
+import { ModuleRegistry } from '@/core/modules';
 import { NexusAccount } from '@/core/nexus-account';
 import { NotificationCenter } from '@/core/notification-center';
 import { TauriBridge } from '@/core/tauri';
@@ -24,35 +25,24 @@ const Linear = lazy(() => import('@/features/linear/linear'));
 const Vault = lazy(() => import('@/features/vault/vault'));
 const Runtime = lazy(() => import('@/features/runtime/runtime'));
 const Projects = lazy(() => import('@/features/projects/projects'));
+const Modules = lazy(() => import('@/features/modules/modules'));
 
 const INSPECTOR_SETTING_KEY = 'deck.inspector';
 
-type HomeView =
-  'today' | 'linear' | 'projects' | 'settings' | 'vault' | 'runtime' | 'codex' | 'account';
+/** A Deck view is a module's surface, named by the module's id. */
+type HomeView = string;
 type SettingsTab = 'general' | 'github' | 'linear';
 interface LinearProjectRequest {
   readonly organizationId: string;
   readonly projectId: string;
 }
 
-/** Every view the Deck can open as a tab, in rail order. */
-const VIEWS: Readonly<Record<HomeView, { icon: string; label: string; module: ModuleHue }>> = {
-  today: { icon: 'house', label: 'Today', module: 'relay' },
-  linear: { icon: 'inbox', label: 'My work', module: 'linear' },
-  codex: { icon: 'sparkles', label: 'Agents', module: 'agents' },
-  projects: { icon: 'folder', label: 'Projects', module: 'files' },
-  vault: { icon: 'lock', label: 'Vault', module: 'vault' },
-  runtime: { icon: 'activity', label: 'Runtime', module: 'runtime' },
-  settings: { icon: 'settings', label: 'Settings', module: 'relay' },
-  account: { icon: 'circle', label: 'Account', module: 'relay' },
-};
-const RAIL: readonly HomeView[] = ['today', 'linear', 'codex', 'projects', 'vault', 'runtime'];
-
 /** The main window's navigation state. One per main window. */
 export class HomeState {
   readonly account = inject(NexusAccount);
   readonly theme = inject(ThemeService);
   readonly center = inject(NotificationCenter);
+  readonly modules = inject(ModuleRegistry);
   private readonly tauri = inject(TauriBridge);
 
   readonly accountName = computed(
@@ -69,6 +59,14 @@ export class HomeState {
   readonly inspector = signal(true);
   readonly settingsTab = signal<SettingsTab>('general');
   readonly maximized = signal(false);
+
+  /** Modules with a surface on the rail's top, in registry order. */
+  readonly rail = computed(() =>
+    this.modules.enabled().filter((m) => m.surface && m.surface.rail !== false),
+  );
+  /** Open tabs whose module is on: turning a module off closes its tab. */
+  readonly openTabs = computed(() => this.tabs().filter((id) => this.modules.isEnabled(id)));
+  readonly current = computed(() => (this.modules.isEnabled(this.view()) ? this.view() : 'today'));
 
   readonly running = computed(() => this.center.items().filter((n) => n.status === 'running'));
   readonly needsYou = computed(() =>
@@ -109,9 +107,10 @@ export class HomeState {
 
   /** Focuses a view's tab, opening one after the current tab if it has none. */
   open(view: HomeView): void {
+    if (!this.modules.get(view)?.surface || !this.modules.isEnabled(view)) return;
     this.tabs.update((tabs) => {
       if (tabs.includes(view)) return tabs;
-      const at = tabs.indexOf(this.view()) + 1;
+      const at = tabs.indexOf(this.current()) + 1;
       return [...tabs.slice(0, at), view, ...tabs.slice(at)];
     });
     this.view.set(view);
@@ -119,10 +118,10 @@ export class HomeState {
 
   close(view: HomeView): void {
     if (view === 'today') return;
-    const tabs = this.tabs();
+    const tabs = this.openTabs();
     const at = tabs.indexOf(view);
-    this.tabs.set(tabs.filter((tab) => tab !== view));
-    if (this.view() === view) this.view.set(tabs[at - 1] ?? 'today');
+    this.tabs.update((all) => all.filter((tab) => tab !== view));
+    if (this.current() === view) this.view.set(tabs[at - 1] ?? 'today');
   }
 
   /** Browser tab keys: Ctrl+W closes the tab, Ctrl+Tab and Ctrl+Shift+Tab cycle. */
@@ -130,12 +129,12 @@ export class HomeState {
     if (!event.ctrlKey || event.altKey || event.metaKey) return;
     if (event.key.toLowerCase() === 'w' && !event.shiftKey) {
       event.preventDefault();
-      this.close(this.view());
+      this.close(this.current());
     } else if (event.key === 'Tab') {
       event.preventDefault();
-      const tabs = this.tabs();
+      const tabs = this.openTabs();
       const step = event.shiftKey ? -1 : 1;
-      this.view.set(tabs[(tabs.indexOf(this.view()) + step + tabs.length) % tabs.length]);
+      this.view.set(tabs[(tabs.indexOf(this.current()) + step + tabs.length) % tabs.length]);
     }
   }
 
@@ -194,7 +193,9 @@ export default function Home() {
   const s = inject(HomeState);
   useEffect(() => s.start(), [s]);
 
-  const view = s.view();
+  const view = s.current();
+  const surface = (id: string) => s.modules.get(id)?.surface ?? { label: id, icon: 'circle' };
+  const hue = (id: string) => moduleHueVar(s.modules.get(id)?.hue ?? 'relay');
   const status = s.account.status();
   const running = s.running().length;
   const needsYou = s.needsYou().length;
@@ -207,7 +208,7 @@ export default function Home() {
         </span>
         <Kbd keys={['Ctrl', 'Space']} className="titlebar-kbd" />
         <div className="tabs" role="tablist" aria-label="Open views" data-tauri-drag-region="">
-          {s.tabs().map((tab) => (
+          {s.openTabs().map((tab) => (
             <div
               key={tab}
               className={cn('tab', view === tab && 'active')}
@@ -228,22 +229,22 @@ export default function Home() {
                 onClick={() => s.view.set(tab)}
               >
                 {tab === 'today' ? (
-                  <Icon name={VIEWS[tab].icon} size={14} />
+                  <Icon name={surface(tab).icon} size={14} />
                 ) : (
                   <span
                     className="u-entity-tile tab-tile"
-                    style={vars({ '--entity-hue': moduleHueVar(VIEWS[tab].module) })}
+                    style={vars({ '--entity-hue': hue(tab) })}
                   >
-                    <Icon name={VIEWS[tab].icon} size={14} />
+                    <Icon name={surface(tab).icon} size={14} />
                   </span>
                 )}
-                {VIEWS[tab].label}
+                {surface(tab).label}
               </button>
               {tab !== 'today' && (
                 <button
                   type="button"
                   className="tab-close"
-                  aria-label={`Close ${VIEWS[tab].label}`}
+                  aria-label={`Close ${surface(tab).label}`}
                   onClick={() => s.close(tab)}
                 >
                   <Icon name="x" size={14} />
@@ -312,24 +313,33 @@ export default function Home() {
       </header>
 
       <div className="body">
-        <nav className="rail u-chrome" aria-label="Modules">
+        <nav className="rail u-chrome" aria-label="Rail">
           <div className="rail-top">
-            {RAIL.map((item) => (
+            {s.rail().map((module) => (
               <button
-                key={item}
+                key={module.id}
                 type="button"
-                className={cn('rail-item', view === item && 'active')}
-                onClick={() => s.open(item)}
-                aria-label={VIEWS[item].label}
-                title={VIEWS[item].label}
+                className={cn('rail-item', view === module.id && 'active')}
+                onClick={() => s.open(module.id)}
+                aria-label={surface(module.id).label}
+                title={surface(module.id).label}
               >
-                <Icon name={VIEWS[item].icon} size={16} />
-                {item === 'today' && needsYou > 0 && <span className="badge" />}
+                <Icon name={surface(module.id).icon} size={16} />
+                {module.id === 'today' && needsYou > 0 && <span className="badge" />}
               </button>
             ))}
           </div>
 
           <div className="rail-bottom">
+            <button
+              type="button"
+              className={cn('rail-item', view === 'modules' && 'active')}
+              onClick={() => s.open('modules')}
+              aria-label="Modules"
+              title="Modules"
+            >
+              <Icon name="blocks" size={16} />
+            </button>
             <button
               type="button"
               className={cn('rail-item', view === 'settings' && 'active')}
@@ -411,10 +421,12 @@ export default function Home() {
           </div>
         </nav>
 
-        <main className="content" role="tabpanel" aria-label={VIEWS[view].label}>
+        <main className="content" role="tabpanel" aria-label={surface(view).label}>
           <Suspense fallback={<div className="page-loading" aria-busy="true" />}>
             {view === 'today' ? (
               <Today />
+            ) : view === 'modules' ? (
+              <Modules onOpen={(id) => s.open(id)} />
             ) : view === 'account' ? (
               <AccountPage s={s} />
             ) : view === 'settings' ? (
