@@ -50,6 +50,7 @@ STATIC_NAMES = {
     "srcset": "srcSet",
     "crossorigin": "crossOrigin",
 }
+NUMERIC_ATTRS = {"maxLength", "minLength", "rows", "cols", "size", "span", "colSpan", "rowSpan"}
 BOOLEAN_ATTRS = {"disabled", "hidden", "required", "checked", "multiple", "selected", "readonly",
                  "autofocus", "novalidate", "open"}
 EVENTS = {
@@ -510,12 +511,19 @@ class Emitter:
             consts.append(f"const {name} = {value};")
         key = self.tx.expr(node.track, inner)
         source = self.tx.expr(node.expr, locals_)
+        if not re.fullmatch(r"[\w$.?()\[\]'!]+", source):
+            source = f"({source})"  # `a ?? []` must stay one operand of .map
         array_param = ", $array" if "$array" in " ".join(consts) else ""
         own_body = body
         while ".map((" in own_body:  # a nested loop's $index is its own
             start = own_body.index(".map((")
             open_brace = own_body.index("=> {", start) + 3
-            own_body = own_body[:start] + own_body[matching(own_body, open_brace, "{", "}") + 1:]
+            depth, end = 0, open_brace  # plain brace count: JSX text has apostrophes, not strings
+            for end in range(open_brace, len(own_body)):
+                depth += {"{": 1, "}": -1}.get(own_body[end], 0)
+                if depth == 0:
+                    break
+            own_body = own_body[:start] + own_body[end + 1:]
         uses_index = array_param or re.search(r"\$index\b", own_body + key + " ".join(consts))
         params = f"{node.item}, $index{array_param}" if uses_index else node.item
         mapped = (f"{source}.map(({params}) => {{ {' '.join(consts)} "
@@ -614,6 +622,9 @@ class Emitter:
                 # Textarea pass them through); component outputs become onOutput.
                 react = EVENTS.get(event) if event in EVENTS and (not is_component or event != "input") \
                     else "on" + event[0].upper() + event[1:]
+                if not is_component:
+                    # A method that takes the event wants a DOM Event, not React's wrapper.
+                    handler = re.sub(r"\$event(?![\w.])", "$event.nativeEvent", handler)
                 arg = "$event" if "$event" in handler else ""
                 props.append(f"{react}={{({arg}) => {handler}}}")
             elif re.match(r"^[a-z][A-Za-z]*$", name) and value is None and name.startswith(("rl", "umbra")):
@@ -624,6 +635,8 @@ class Emitter:
                     props.append(attr if name in BOOLEAN_ATTRS or is_component else f'{attr}=""')
                 elif attr == "spellCheck":
                     props.append(f"spellCheck={{{v}}}")
+                elif attr in NUMERIC_ATTRS and re.fullmatch(r"-?\d+", v):
+                    props.append(f"{attr}={{{v}}}")
                 elif attr == "tabIndex":
                     props.append(f"tabIndex={{{v}}}")
                 elif name in BOOLEAN_ATTRS:
