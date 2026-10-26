@@ -1,6 +1,6 @@
 # Architecture
 
-Relay is a Rust core with an Angular interface, packaged by Tauri. The split
+Relay is a Rust core with a React interface, packaged by Tauri. The split
 is deliberate and load-bearing: the core owns everything that must survive the
 interface being closed, and the interface owns nothing but what is on screen.
 
@@ -16,7 +16,7 @@ command palette, the HUD, and the main window. Which one a webview shows is
 decided by a `?surface=` query parameter set in `tauri.conf.json`, so every
 surface also renders in a plain browser during development.
 
-They meet at exactly one place: `src/app/core/tauri.ts` on one side and
+They meet at exactly one place: `src/core/tauri.ts` on one side and
 `src-tauri/src/commands.rs` on the other. Nothing else in the frontend calls
 `invoke`, and nothing else in the core is exposed to the webview. Keeping that
 surface small is what lets `src-tauri/capabilities/default.json` stay narrow —
@@ -44,7 +44,7 @@ above centre. A centred overlay reads as lower than it is.
 ## Commands
 
 A command is a title, a group, an optional shortcut and a function
-(`src/app/core/command.ts`). Both halves contribute them:
+(`src/core/command.ts`). Both halves contribute them:
 
 - Frontend features register on init and dispose on teardown, through
   `CommandRegistry`.
@@ -74,7 +74,7 @@ anything long-running — a job, eventually a watcher or an agent run — report
 progress without the frontend polling for it.
 
 `AppEvent` is internally tagged (`#[serde(tag = "type")]`) and mirrored by
-hand in `src/app/core/events.ts`; there is no schema generation, so a field
+hand in `src/core/events.ts`; there is no schema generation, so a field
 added on one side and not the other is a silent bug caught only by the
 wire-shape tests in `events.rs` — extend those tests along with the enum.
 `TauriBridge.onEvent()` is the one place the frontend listens; `App`'s
@@ -145,11 +145,19 @@ being fine once jobs start shelling out to agents or external tools, and
 should be revisited (most likely by catching panics at the boundary in
 `jobs::spawn`) before then.
 
-## Change detection
+## State and rendering
 
-The app is zoneless. There is no `zone.js`; state is signals throughout and
-every component is `OnPush`. This is not a micro-optimisation — an app that
-sits idle in the tray all day should do no work at all when nothing changed.
+State is signals throughout: `src/lib/signals.ts` puts Preact signals behind a
+call syntax (`count()`, `set`, `update`, `computed`, `effect`). Services are
+plain classes, one instance per window, reached with `inject()` from
+`src/lib/inject.ts`. A component calls `useSignals()` once and re-renders only
+when a signal it read changes; a screen keeps its state in a class created
+per mount (`useController`), whose `DestroyRef` releases listeners and effects
+on unmount. This is not a micro-optimisation — an app that sits idle in the
+tray all day should do no work at all when nothing changed.
+
+StrictMode is off: its development-only double mount would run a screen's
+constructor-time subscriptions twice and destroy the survivor's.
 
 ## Errors
 
@@ -180,7 +188,7 @@ is pure and stateless, so the palette's password generator works before a
 vault even exists. `export` writes a second, still-encrypted `VaultFile` to
 the user's documents folder — a portable backup, not a plaintext dump.
 
-The frontend surface is `src/app/features/vault/vault.ts`, reached the same
+The frontend surface is `src/features/vault/vault.tsx`, reached the same
 way Settings is: a palette command dispatches `CoreCommand::OpenVault`, which
 shows the main window and emits `AppEvent::OpenVaultRequested` for `Home` to
 switch views to, since the palette and the main window are separate webviews
@@ -303,8 +311,8 @@ name — silently swallowed anything else into a bare
 what made an early version of this feature look like clicking "Connect" did
 nothing at all.
 
-The frontend surface is `src/app/features/github/github.ts`, rendered inside
-a "GitHub" tab on the Settings page (`src/app/features/settings/settings.ts`)
+The frontend surface is `src/features/github/github.tsx`, rendered inside
+a "GitHub" tab on the Settings page (`src/features/settings/settings.tsx`)
 rather than as its own top-level view. `CoreCommand::OpenGithub` still shows
 the main window and emits `AppEvent::OpenGithubRequested`, exactly as
 `OpenVaultRequested` does for the vault; `Home` now treats it as "open
@@ -378,7 +386,7 @@ settings. `KeyStore` is a trait for the same reason `EventSink` is: most test
 environments have no keychain daemon at all, so the test suite runs against
 an in-memory `FakeKeyStore`.
 
-The frontend surface, `src/app/features/gmail/gmail.ts`, is a "Gmail" tab on
+The frontend surface, `src/features/gmail/gmail.tsx`, is a "Gmail" tab on
 the Settings page (`<rl-gmail />`) alongside GitHub's, rather than a
 top-level view of its own — unlike the vault, there is no separate workspace
 here, just a panel of connector settings, so it needs neither a palette

@@ -80,9 +80,9 @@ a healthy service. Use text and timestamps alongside color.
 
 ## Module seam
 
-Keep the view in `src/app/features/runtime/`. Keep Grafana HTTP access,
+Keep the view in `src/features/runtime/`. Keep Grafana HTTP access,
 authentication, timeouts, response parsing, and error redaction in the Rust
-core, behind the existing Tauri bridge. The Angular view consumes a small,
+core, behind the existing Tauri bridge. The React view consumes a small,
 typed, normalized runtime snapshot and does not build Grafana queries or handle
 credentials.
 
@@ -238,7 +238,7 @@ Keep product-specific meaning and thresholds close to each product's owner.
   as proof of Leaf-to-Nexus connectivity.
 - Missing, stale, failed, and maintenance data cannot appear as healthy.
 - A user can reach the existing Grafana view from the relevant row.
-- Grafana credentials stay out of the Angular UI, settings JSON, and logs.
+- Grafana credentials stay out of the interface, settings JSON, and logs.
 - Grafana outages do not prevent Relay from opening or using other features.
 - All requests are read-only; no remote restart or deployment action is part of
   the pilot.

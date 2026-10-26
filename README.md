@@ -40,10 +40,10 @@ Windows beyond the Visual Studio build tools that rustup offers to install.
 
 ```bash
 npm install
-npm run dev          # Tauri dev build: Rust core + Angular dev server
+npm run dev          # Tauri dev build: Rust core + Vite dev server
 ```
 
-`npm run dev` starts the Angular dev server on port 1420 and launches the
+`npm run dev` starts the Vite dev server on port 1420 and launches the
 desktop shell against it. The main window is hidden by default — press
 **Ctrl+Space** for the palette, or use the tray icon.
 
@@ -69,7 +69,7 @@ npm run dev          # run the desktop app against the dev server
 npm run app:build    # produce installers (NSIS, deb, AppImage)
 npm run build        # frontend only
 npm test             # frontend unit tests (Vitest)
-npm run lint         # ESLint over TypeScript and templates
+npm run lint         # ESLint over TypeScript and TSX
 npm run format       # Prettier
 npm run rust:lint    # clippy, warnings denied
 npm run rust:test    # cargo test
@@ -78,12 +78,14 @@ npm run rust:test    # cargo test
 ## Layout
 
 ```
-src/                  Angular frontend
-  app/core/           command registry, IPC bridge, theme, entity hues
-  app/features/       palette, HUD, main window
-  app/shared/         Icon, Kbd
+src/                  React interface (Vite, Tailwind, Radix)
+  core/               command registry, IPC bridge, theme, entity hues
+  features/           Omnibar, attention overlay, main window screens, mobile
+  components/ui/      shadcn-style controls drawn with Umbra's tokens
+  shared/             Icon, Kbd, popovers
+  lib/                signals, the service injector, class helpers
   styles/tokens/      the Umbra token layer — mirrors Umbra's own file names
-  assets/             vendored Geist fonts and Lucide glyphs
+  assets/             vendored Geist fonts
 src-tauri/            Rust core
   src/overlay.rs      show/hide behaviour for the floating windows
   src/commands.rs     the entire IPC surface

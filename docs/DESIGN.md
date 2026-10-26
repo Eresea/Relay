@@ -8,10 +8,22 @@ a complete mirror of every semantic token.
 ## How the binding works
 
 `packages/umbra` is the Git subtree for [Umbra](https://github.com/Eresea/Umbra).
-`src/styles.scss` imports its canonical tokens and baseline, and `@umbra/*`
-resolves shared Angular components. `src/styles.css` still loads the token
-compatibility layer and mobile command styles while older screens migrate to
-the shared tokens.
+`src/styles/umbra.scss` loads its canonical tokens and baseline into an
+`umbra` cascade layer, and `src/styles/index.css` adds the token compatibility
+layer and mobile command styles to the same layer. Tailwind's preflight sits
+below that layer and its utilities above it (`src/styles/layers.css`), so a
+utility always beats a reset while the tokens stay Umbra's.
+
+`index.css` also maps Umbra's tokens into Tailwind's theme (`bg-primary`,
+`text-muted`, `border-line`, shadcn's own names too), so components in
+`src/components/ui/` read like shadcn's while drawing Umbra. Button, Input,
+Textarea, Switch, Checkbox and the menus live there; Input, Textarea, Switch
+and Checkbox reuse Umbra's own component stylesheets. Umbra's components keep
+Umbra's spacing scale on their root, since the compatibility tokens reuse the
+`--space-*` names with different values.
+
+A feature's own stylesheet is scoped under its root class with CSS nesting
+(`.vault { … }`), so screens loaded into the same window cannot collide.
 
 `src/styles/tokens/` retains the token compatibility layer during migration:
 
@@ -37,10 +49,10 @@ tokens only where existing Relay screens still depend on them.
 self-hosted Geist files from the subtree, so it renders with the network down
 without contacting a third party.
 
-**Icons are vendored, not loaded from unpkg.** Same reason. The glyphs in use
-are committed under `src/assets/icons/` from `lucide-static@0.544.0` (ISC).
-`scripts/sync-icons.mjs` refreshes them; it needs network access and is not
-part of the build.
+**Icons are bundled, not loaded from a CDN.** Same reason. Glyphs come from
+`lucide-react` (ISC) through an explicit name map in `src/shared/icon.tsx`:
+names arrive as strings from the core and from settings, an unknown name draws
+a circle, and only mapped glyphs ship in the bundle.
 
 **No logo.** Umbra deliberately invents no mark, and neither does Relay. The
 wordmark is "Relay" in Geist Semibold at `-0.045em`. The window icon is a

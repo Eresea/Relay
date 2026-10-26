@@ -7,19 +7,17 @@ import { defineConfig } from 'vitest/config';
 const here = (path: string) => fileURLToPath(new URL(path, import.meta.url));
 
 /**
- * The React interface. One bundle serves every surface; the window's
+ * Relay's interface. One bundle serves every surface; the window's
  * `?surface=` query picks which one renders (see src/core/surface.ts).
- *
- * Port 1421 while the Angular interface still owns 1420 during the migration.
+ * Tauri's dev build expects the server on 1420 (src-tauri/tauri.conf.json).
  */
 export default defineConfig({
-  root: here('.'),
   plugins: [react(), tailwindcss()],
   resolve: { alias: { '@': here('./src') } },
   clearScreen: false,
-  server: { port: 1421, strictPort: true },
+  server: { port: 1420, strictPort: true },
   build: {
-    outDir: here('../dist/ui'),
+    outDir: 'dist',
     emptyOutDir: true,
     // WebView2 on Windows and the Android System WebView are both evergreen Chromium.
     target: 'chrome120',

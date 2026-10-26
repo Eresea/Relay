@@ -3,9 +3,8 @@ node_modules/
 .pnp/
 .pnp.js
 
-# angular build output
+# build output
 dist/
-.angular/
 *.tsbuildinfo
 
 # rust / tauri

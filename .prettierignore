@@ -1,5 +1,4 @@
 dist/
-.angular/
 src-tauri/target/
 src-tauri/gen/
 package-lock.json
@@ -8,3 +7,4 @@ package-lock.json
 .Jules/
 packages/nexus-client-rs/
 packages/umbra/
+docs/design/prototype/

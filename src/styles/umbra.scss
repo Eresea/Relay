@@ -2,5 +2,5 @@
 
 // Umbra's canonical tokens and baseline, in the `umbra` cascade layer (see layers.css).
 @layer umbra {
-  @include meta.load-css('../../../packages/umbra/src/styles/umbra/umbra');
+  @include meta.load-css('../../packages/umbra/src/styles/umbra/umbra');
 }

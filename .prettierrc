@@ -3,13 +3,5 @@
   "singleQuote": true,
   "trailingComma": "all",
   "semi": true,
-  "arrowParens": "always",
-  "overrides": [
-    {
-      "files": "src/**/*.html",
-      "options": {
-        "parser": "angular"
-      }
-    }
-  ]
+  "arrowParens": "always"
 }
