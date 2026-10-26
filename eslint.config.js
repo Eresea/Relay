@@ -76,4 +76,12 @@ export default tseslint.config(
       'react-hooks/exhaustive-deps': 'error',
     },
   },
+  {
+    // Tests read mocks off a class-typed bridge and stub jsdom gaps with no-ops.
+    files: ['ui/src/**/*.spec.{ts,tsx}', 'ui/src/test/**/*.ts'],
+    rules: {
+      '@typescript-eslint/unbound-method': 'off',
+      '@typescript-eslint/no-empty-function': 'off',
+    },
+  },
 );
