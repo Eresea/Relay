@@ -11,6 +11,9 @@ import { renderMarkdown } from '@/shared/markdown';
 
 import './claude.css';
 
+/** "$0.43", or "under $0.01" rather than a misleading "$0.00". Mirrors claude::format_usd. */
+export const formatUsd = (usd: number) => (usd < 0.01 ? 'under $0.01' : `$${usd.toFixed(2)}`);
+
 const message = (cause: unknown, fallback: string) =>
   cause instanceof Error ? cause.message : typeof cause === 'string' ? cause : fallback;
 
@@ -26,6 +29,8 @@ class ClaudeState {
   readonly reply = signal('');
   readonly sending = signal(false);
   readonly sendError = signal<string | null>(null);
+  /** What the turn just finished from this tab cost, once known. */
+  readonly lastTurn = signal<string | null>(null);
   /** The turn in flight: a job, which reports through notifications. */
   private pending: { readonly jobId: string; readonly sessionId: string } | null = null;
 
@@ -70,6 +75,7 @@ class ClaudeState {
     if (!session || !prompt || this.sending()) return;
     this.sending.set(true);
     this.sendError.set(null);
+    this.lastTurn.set(null);
     try {
       const jobId = await this.tauri.claudeAsk(prompt, session.cwd, session.id);
       if (!jobId) throw new Error('Claude Code is not available here.');
@@ -83,10 +89,16 @@ class ClaudeState {
 
   private async finish(ok: boolean): Promise<void> {
     const sessionId = this.pending?.sessionId;
+    const before = this.session()?.spend?.usd ?? 0;
     this.pending = null;
     this.sending.set(false);
     if (!ok) this.sendError.set('Claude could not finish this turn. Today says why.');
     if (sessionId) await this.open(sessionId);
+    // The core adds each turn to the session's spend; the difference is this turn.
+    const after = this.session()?.spend?.usd;
+    if (ok && after !== undefined && after > before) {
+      this.lastTurn.set(`That turn cost ${formatUsd(after - before)}.`);
+    }
     void this.loadSessions();
   }
 }
@@ -145,6 +157,7 @@ export default function Claude({
               <span className="session-title">{item.title}</span>
               <span className="session-meta">
                 {folderName(item.cwd) || 'No folder'} · {ago(item.updatedAt * 1000)}
+                {item.spend && ` · ${formatUsd(item.spend.usd)}`}
               </span>
             </button>
           ))}
@@ -164,6 +177,13 @@ export default function Claude({
                   <Icon name="folder" size={14} />
                   {session.cwd}
                 </p>
+                {session.spend && (
+                  <p className="session-meta">
+                    Spent from Relay: {formatUsd(session.spend.usd)} over {session.spend.turns}{' '}
+                    {session.spend.turns === 1 ? 'turn' : 'turns'}. Turns run elsewhere are not
+                    counted.
+                  </p>
+                )}
               </header>
               <div className="messages">
                 {session.messages.map((m, index) => (
@@ -197,6 +217,7 @@ export default function Claude({
                 <div className="compose-foot">
                   <span className="hint">
                     {s.sendError() ??
+                      s.lastTurn() ??
                       (s.sending()
                         ? 'Claude is working. Its questions appear in the activity stack.'
                         : 'Edits and commands wait for your Allow in the activity stack.')}

@@ -72,6 +72,7 @@ pub fn ask_claude<S: EventSink>(
     prompt: String,
     working_directory: String,
     session_id: Option<String>,
+    on_spend: impl FnOnce(&str, f64) + Send + 'static,
 ) -> JobId {
     jobs::spawn(sink, registry, "claude", move |ctx| async move {
         let title = format!("Claude · {}", clip(&prompt, 60));
@@ -89,10 +90,18 @@ pub fn ask_claude<S: EventSink>(
         };
         match claude::run(prompt, working_directory, session_id, &mut card).await {
             Ok(run) => {
+                let answer = clip(&first_line(&run.response), 150);
+                let detail = match run.cost_usd {
+                    Some(usd) => {
+                        on_spend(&run.session_id, usd);
+                        format!("{answer} · {}", claude::format_usd(usd))
+                    }
+                    None => answer,
+                };
                 ctx.report_notification(
                     NotificationStatus::Done,
                     title,
-                    Some(clip(&first_line(&run.response), 160)),
+                    Some(detail),
                     None,
                     NotificationOptions {
                         notification_id: ctx.id().to_string(),

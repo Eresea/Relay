@@ -14,20 +14,25 @@
 //! working folder, plain text — and skips everything else.
 
 use std::{
+    collections::HashMap,
     fs::File,
     future::Future,
     io::{BufRead, BufReader},
     path::{Path, PathBuf},
     process::Stdio,
+    sync::Mutex,
     time::{Duration, UNIX_EPOCH},
 };
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use tokio::{
     io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader as AsyncBufReader},
     process::Command,
 };
+
+use tauri::AppHandle;
+use tauri_plugin_store::StoreExt;
 
 use crate::error::{Error, Result};
 
@@ -67,6 +72,56 @@ pub struct ClaudeSessionSummary {
     pub cwd: String,
     /// Seconds since the epoch, from the transcript's modification time.
     pub updated_at: u64,
+    /// What Relay's own turns in this session cost; None if it ran none.
+    pub spend: Option<Spend>,
+}
+
+/// What a session's turns run from Relay have cost. Claude Code's
+/// transcripts do not record cost, so turns run elsewhere are not counted.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Spend {
+    pub usd: f64,
+    pub turns: u32,
+}
+
+/// "$0.43", or "under $0.01" rather than a misleading "$0.00".
+pub fn format_usd(usd: f64) -> String {
+    if usd < 0.01 {
+        "under $0.01".to_owned()
+    } else {
+        format!("${usd:.2}")
+    }
+}
+
+const SPEND_KEY: &str = "claude.spend";
+
+fn add_spend(ledger: &mut HashMap<String, Spend>, session_id: &str, usd: f64) {
+    let spend = ledger.entry(session_id.to_owned()).or_default();
+    spend.usd += usd;
+    spend.turns += 1;
+}
+
+/// Every session's spend from Relay, from the settings store.
+pub fn spend_ledger(app: &AppHandle) -> HashMap<String, Spend> {
+    app.store("settings.json")
+        .ok()
+        .and_then(|store| store.get(SPEND_KEY))
+        .and_then(|value| serde_json::from_value(value).ok())
+        .unwrap_or_default()
+}
+
+/// Adds one finished turn's cost to its session.
+pub fn record_spend(app: &AppHandle, session_id: &str, usd: f64) {
+    // Two turns can finish at once; the read-modify-write must not interleave.
+    static LEDGER: Mutex<()> = Mutex::new(());
+    let _guard = LEDGER.lock().unwrap();
+    let mut ledger = spend_ledger(app);
+    add_spend(&mut ledger, session_id, usd);
+    match app.store("settings.json") {
+        Ok(store) => store.set(SPEND_KEY, json!(ledger)),
+        Err(error) => log::warn!("could not record a Claude turn's cost: {error}"),
+    }
 }
 
 #[derive(Debug, Serialize, PartialEq)]
@@ -416,6 +471,7 @@ fn summarize(path: &Path) -> Option<ClaudeSessionSummary> {
         title: title?,
         cwd: cwd.unwrap_or_default(),
         updated_at: modified_secs(path),
+        spend: None,
     })
 }
 
@@ -568,6 +624,19 @@ mod tests {
         let value: Value = serde_json::from_str(&line).unwrap();
         assert_eq!(value["message"]["content"], "say \"hi\"\n& del *");
         assert!(!line.contains('\n'));
+    }
+
+    #[test]
+    fn spend_adds_up_per_session_and_reads_honestly() {
+        let mut ledger = HashMap::new();
+        add_spend(&mut ledger, "a", 0.25);
+        add_spend(&mut ledger, "a", 0.18);
+        add_spend(&mut ledger, "b", 0.004);
+        assert_eq!(ledger["a"].turns, 2);
+        assert_eq!(format_usd(ledger["a"].usd), "$0.43");
+        assert_eq!(format_usd(ledger["b"].usd), "under $0.01");
+        let json = serde_json::to_value(ledger["b"]).unwrap();
+        assert_eq!(json, json!({ "usd": 0.004, "turns": 1 }));
     }
 
     #[test]

@@ -5,13 +5,19 @@ import type { AppEvent } from '@/core/events';
 import type { ClaudeSession } from '@/core/tauri';
 import { provideBridge } from '@/test/bridge';
 
-import Claude from './claude';
+import Claude, { formatUsd } from './claude';
 
-const session = (id: string, title: string, replies: string[] = []): ClaudeSession => ({
+const session = (
+  id: string,
+  title: string,
+  replies: string[] = [],
+  spend: ClaudeSession['spend'] = null,
+): ClaudeSession => ({
   id,
   title,
   cwd: '/home/nils/leaf',
   updatedAt: Math.floor(Date.now() / 1000),
+  spend,
   messages: [
     { role: 'user', text: title, timestamp: null },
     ...replies.map((text) => ({ role: 'assistant' as const, text, timestamp: null })),
@@ -34,7 +40,12 @@ it('lists sessions, opens the requested one and resumes it as a job', async () =
       ]),
     claudeReadSession: vi.fn((id: string) =>
       Promise.resolve(
-        session(id, 'Why is the probe failing?', answered ? ['The **token** expired.'] : []),
+        answered
+          ? session(id, 'Why is the probe failing?', ['The **token** expired.'], {
+              usd: 0.43,
+              turns: 1,
+            })
+          : session(id, 'Why is the probe failing?'),
       ),
     ),
     claudeAsk: vi.fn().mockResolvedValue('job-1'),
@@ -63,6 +74,14 @@ it('lists sessions, opens the requested one and resumes it as a job', async () =
   act(() => emit({ type: 'notificationDone', jobId: 'job-1', ok: true }));
   const conversation = within(screen.getByRole('article', { name: 'Conversation' }));
   expect((await conversation.findByText('token')).tagName).toBe('STRONG');
+  // What the turn cost, and what Relay's turns in this session cost in all.
+  expect(screen.getByText('That turn cost $0.43.')).toBeTruthy();
+  expect(conversation.getByText(/Spent from Relay: \$0\.43 over 1 turn\./)).toBeTruthy();
+});
+
+it('says "under $0.01" rather than rounding a cost down to nothing', () => {
+  expect(formatUsd(0.004)).toBe('under $0.01');
+  expect(formatUsd(0.4335)).toBe('$0.43');
 });
 
 it('opens relay://claude links in the Claude tab instead of the browser', async () => {

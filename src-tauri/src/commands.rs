@@ -1895,6 +1895,7 @@ pub fn claude_ask(
     working_directory: String,
     session_id: Option<String>,
 ) -> JobId {
+    let ledger = app.clone();
     crate::omnibar::ask_claude(
         app,
         jobs.inner().clone(),
@@ -1902,23 +1903,39 @@ pub fn claude_ask(
         prompt,
         working_directory,
         session_id,
+        move |session_id, usd| crate::claude::record_spend(&ledger, session_id, usd),
     )
 }
 
 #[cfg(desktop)]
 #[tauri::command]
-pub async fn claude_list_sessions() -> Result<Vec<crate::claude::ClaudeSessionSummary>> {
-    tauri::async_runtime::spawn_blocking(crate::claude::list_sessions)
+pub async fn claude_list_sessions(
+    app: AppHandle,
+) -> Result<Vec<crate::claude::ClaudeSessionSummary>> {
+    let mut sessions = tauri::async_runtime::spawn_blocking(crate::claude::list_sessions)
         .await
-        .map_err(|error| std::io::Error::other(error.to_string()).into())
+        .map_err(|error| std::io::Error::other(error.to_string()))?;
+    let ledger = crate::claude::spend_ledger(&app);
+    for session in &mut sessions {
+        session.spend = ledger.get(&session.id).copied();
+    }
+    Ok(sessions)
 }
 
 #[cfg(desktop)]
 #[tauri::command]
-pub async fn claude_read_session(session_id: String) -> Result<crate::claude::ClaudeSession> {
-    tauri::async_runtime::spawn_blocking(move || crate::claude::read_session(&session_id))
-        .await
-        .map_err(|error| std::io::Error::other(error.to_string()))?
+pub async fn claude_read_session(
+    app: AppHandle,
+    session_id: String,
+) -> Result<crate::claude::ClaudeSession> {
+    let mut session =
+        tauri::async_runtime::spawn_blocking(move || crate::claude::read_session(&session_id))
+            .await
+            .map_err(|error| std::io::Error::other(error.to_string()))??;
+    session.summary.spend = crate::claude::spend_ledger(&app)
+        .get(&session.summary.id)
+        .copied();
+    Ok(session)
 }
 
 /// Starts a workspace's `package.json` script in the background and returns

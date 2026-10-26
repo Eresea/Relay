@@ -1504,6 +1504,8 @@ export interface ClaudeSessionSummary {
   readonly cwd: string;
   /** Seconds since the epoch. */
   readonly updatedAt: number;
+  /** What Relay's own turns in this session cost; null if it ran none. */
+  readonly spend: { readonly usd: number; readonly turns: number } | null;
 }
 
 export interface ClaudeMessage {
