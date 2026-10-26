@@ -1,0 +1,205 @@
+.projects {
+  & {
+    display: block;
+    min-block-size: 100%;
+  }
+
+  .projects {
+    max-inline-size: 860px;
+    margin: 0 auto;
+    padding: var(--space-9) var(--space-8);
+  }
+
+  .page-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: var(--space-7);
+    padding-block-end: var(--space-7);
+    border-block-end: 1px solid var(--border-subtle);
+  }
+
+  h1,
+  .page-description,
+  .empty-title,
+  .empty-description,
+  .error,
+  .project-name,
+  .project-path,
+  .project-remote {
+    margin: 0;
+  }
+
+  h1 {
+    margin-block-start: var(--space-2);
+    font-size: var(--text-20);
+    font-weight: var(--weight-semibold);
+    letter-spacing: -0.04em;
+    color: var(--text-strong);
+  }
+
+  .page-description {
+    margin-block-start: var(--space-2);
+    font-size: var(--text-13);
+    color: var(--text-muted);
+  }
+
+  .page-header [data-slot='button'],
+  .project-actions [data-slot='button'] {
+    width: auto;
+    flex: none;
+  }
+
+  .empty-state {
+    display: grid;
+    justify-items: center;
+    padding: var(--space-10) var(--space-7);
+    text-align: center;
+    color: var(--text-subtle);
+  }
+
+  .empty-title {
+    margin-block-start: var(--space-4);
+    color: var(--text-body);
+    font-size: var(--text-13);
+    font-weight: var(--weight-medium);
+  }
+
+  .empty-description {
+    max-inline-size: 360px;
+    margin-block-start: var(--space-2);
+    font-size: var(--text-12);
+    line-height: 1.5;
+    color: var(--text-muted);
+  }
+
+  .error {
+    padding-block: var(--space-4);
+    color: var(--danger-ink);
+    font-size: var(--text-12);
+    background: var(--danger-tint);
+  }
+
+  .project-list {
+    border-block-end: 1px solid var(--border-subtle);
+  }
+
+  .project-row {
+    display: flex;
+    align-items: center;
+    gap: var(--space-5);
+    min-block-size: 72px;
+    padding-block: var(--space-5);
+    border-block-end: 1px solid var(--border-subtle);
+  }
+
+  .project-row:last-child {
+    border-block-end: 0;
+  }
+
+  .project-glyph {
+    display: grid;
+    place-items: center;
+    inline-size: 30px;
+    block-size: 30px;
+    flex: none;
+    color: var(--text-muted);
+    background: var(--bg-raised);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-sm);
+  }
+
+  .project-row:hover .project-glyph,
+  .project-row:focus-within .project-glyph {
+    color: var(--text-body);
+    border-color: var(--border-default);
+    background: var(--tint-hover);
+  }
+
+  .project-copy {
+    min-inline-size: 0;
+    flex: 1;
+  }
+
+  .project-name {
+    overflow: hidden;
+    color: var(--text-body);
+    font-size: var(--text-13);
+    font-weight: var(--weight-medium);
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .project-path,
+  .project-remote {
+    overflow: hidden;
+    margin-block-start: var(--space-1);
+    color: var(--text-muted);
+    font-family: var(--font-mono);
+    font-size: var(--text-11);
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .project-remote {
+    color: var(--text-subtle);
+  }
+
+  .project-signals {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-4);
+    margin: var(--space-2) 0 0;
+    color: var(--text-muted);
+    font-size: var(--text-11);
+  }
+
+  .project-signals span {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-2);
+  }
+
+  .status-dot {
+    inline-size: 6px;
+    block-size: 6px;
+    border-radius: 50%;
+  }
+
+  .status-dot.waiting {
+    background: var(--status-waiting);
+  }
+
+  .status-dot.failure {
+    background: var(--status-blocked);
+  }
+
+  .status-dot.pending {
+    background: var(--status-running);
+  }
+
+  .status-dot.success {
+    background: var(--status-done);
+  }
+
+  .project-actions {
+    display: inline-flex;
+    flex: none;
+    gap: var(--space-2);
+  }
+
+  @media (max-width: 620px) {
+    .projects {
+      padding-inline: var(--space-6);
+    }
+
+    .page-header {
+      align-items: stretch;
+      flex-direction: column;
+    }
+
+    .page-header [data-slot='button'] {
+      align-self: flex-start;
+    }
+  }
+}

@@ -14,6 +14,16 @@ FIXUPS = {
             1,
         ),
     ],
+    "codex": [
+        ("  private readonly sanitizer = inject(DomSanitizer);\n", "", 1),
+        (
+            "const safe = this.sanitizer.sanitize(SecurityContext.HTML, rendered) ?? '';",
+            "// Agent-written Markdown becomes HTML: sanitize before it reaches the DOM.\n"
+            "    const safe = DOMPurify.sanitize(rendered);",
+            1,
+        ),
+        ("import { marked } from 'marked';", "import DOMPurify from 'dompurify';\nimport { marked } from 'marked';", 1),
+    ],
     "vault": [
         ("  private readonly masterPasswordField =\n    viewChild<ElementRef<HTMLInputElement>>('masterPasswordField');\n", "", 1),
         (
@@ -28,7 +38,7 @@ FIXUPS = {
             1,
         ),
         (
-            "export function Vault() {\n  useSignals();\n  const s = useController(() => new VaultState());",
+            "export default function Vault() {\n  useSignals();\n  const s = useController(() => new VaultState());",
             "export default function Vault() {\n  useSignals();\n  const s = useController(() => new VaultState());\n"
             "  const filePicker = useRef<HTMLInputElement>(null);",
             1,

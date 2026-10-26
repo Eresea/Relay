@@ -511,7 +511,12 @@ class Emitter:
         key = self.tx.expr(node.track, inner)
         source = self.tx.expr(node.expr, locals_)
         array_param = ", $array" if "$array" in " ".join(consts) else ""
-        uses_index = array_param or re.search(r"\$index\b", body + key + " ".join(consts))
+        own_body = body
+        while ".map((" in own_body:  # a nested loop's $index is its own
+            start = own_body.index(".map((")
+            open_brace = own_body.index("=> {", start) + 3
+            own_body = own_body[:start] + own_body[matching(own_body, open_brace, "{", "}") + 1:]
+        uses_index = array_param or re.search(r"\$index\b", own_body + key + " ".join(consts))
         params = f"{node.item}, $index{array_param}" if uses_index else node.item
         mapped = (f"{source}.map(({params}) => {{ {' '.join(consts)} "
                   f"return (<Fragment key={{{key}}}>{body}</Fragment>); }})")
@@ -553,7 +558,7 @@ class Emitter:
                     prop, unit = prop.split(".")
                 elif prop.startswith("--") and "." in prop:
                     prop, unit = prop.rsplit(".", 1)
-                value_js = self.tx.expr(v, locals_)
+                value_js = re.sub(r"(?<![\w.])null(?![\w])", "undefined", self.tx.expr(v, locals_))
                 if unit:
                     unit = "%" if unit == "%" else unit
                     value_js = f"`${{{value_js}}}{unit}`"
@@ -597,17 +602,18 @@ class Emitter:
                     event, key = event.split(".", 1)
                 handler = self.tx.statements(v, locals_ | {"$event"})
                 if key:
-                    handler = f"{{ if ($event.key === '{KEYS.get(key, key)}') {{ {handler.strip('{} ')}; }} }}"
+                    *modifiers, last = key.split(".")
+                    flags = {"control": "ctrlKey", "ctrl": "ctrlKey", "shift": "shiftKey",
+                             "alt": "altKey", "meta": "metaKey"}
+                    checks = [f"$event.{flags[m]}" for m in modifiers if m in flags]
+                    checks.append(f"$event.key === '{KEYS.get(last, last)}'")
+                    handler = f"{{ if ({' && '.join(checks)}) {{ {handler.strip('{} ')}; }} }}"
                 if event == "ngSubmit":
                     handler = f"{{ $event.preventDefault(); {handler.strip('{} ')}; }}"
-                if is_component and event not in EVENTS:
-                    react = "on" + event[0].upper() + event[1:]
-                elif is_component and event in ("click",):
-                    react = "onClick"
-                elif is_component:
-                    react = "on" + event[0].upper() + event[1:]
-                else:
-                    react = EVENTS.get(event, "on" + event[0].upper() + event[1:])
+                # DOM events keep React's DOM names on components too (Input and
+                # Textarea pass them through); component outputs become onOutput.
+                react = EVENTS.get(event) if event in EVENTS and (not is_component or event != "input") \
+                    else "on" + event[0].upper() + event[1:]
                 arg = "$event" if "$event" in handler else ""
                 props.append(f"{react}={{({arg}) => {handler}}}")
             elif re.match(r"^[a-z][A-Za-z]*$", name) and value is None and name.startswith(("rl", "umbra")):
@@ -622,6 +628,8 @@ class Emitter:
                     props.append(f"tabIndex={{{v}}}")
                 elif name in BOOLEAN_ATTRS:
                     props.append(attr)
+                elif is_component and re.fullmatch(r"-?\d+(\.\d+)?", v):
+                    props.append(f"{attr}={{{v}}}")  # Angular coerced these; React props are typed
                 else:
                     props.append(f'{attr}="{v}"')
         if class_dyn or (class_expr and class_static):
@@ -721,12 +729,24 @@ def assemble(path: str, name: str, root: str, target: str) -> None:
     for use in sorted(uses):
         if use in IMPORTS:
             lines.append(IMPORTS[use])
-        elif use != "Fragment":
+        elif use != "Fragment" and not re.search(rf"\b{use}\b", header):
             lines.append(f"// TODO import {use}")
     lines.append("import { useController, useSignals } from '@/lib/signals';")
     body = port(source[source.index("export class "):])
     body = body.replace(f"export class {name} ", f"export class {name}State ", 1)
+    body = re.sub(rf"\b{name}\.(?=[A-Z_])", f"{name}State.", body)  # static members
+    header = re.sub(rf"\b{name}\.(?=[A-Z_])", f"{name}State.", header)
     body = re.sub(r"^(\s+)protected ", r"\1", body, flags=re.M)
+    # Outputs become callback fields the component refreshes from its props on
+    # every render: plain fields, not signals, so refreshing them re-renders nothing.
+    outputs = []
+    for match in list(re.finditer(r"readonly (\w+) = output(?:<([\s\S]*?)>)?\(\);", body)):
+        out_name, out_type = match.group(1), (match.group(2) or "void").strip()
+        handler = "on" + out_name[0].upper() + out_name[1:]
+        signature = "() => void" if out_type == "void" else f"(value: {out_type}) => void"
+        outputs.append((handler, signature))
+        body = body.replace(match.group(0), f"{handler}: {signature} = () => undefined;")
+        body = re.sub(rf"this\.{out_name}\.emit\(", f"this.{handler}(", body)
     # Angular's DestroyRef and constructor effects: released when the screen unmounts.
     body = body.replace(
         "private readonly destroyRef = inject(DestroyRef);", "readonly destroyRef = new DestroyRef();"
@@ -742,10 +762,54 @@ def assemble(path: str, name: str, root: str, target: str) -> None:
         header = re.sub(r"(import \{[^}]*?)\beffect,\s*", r"\1", header)
         header = re.sub(r",\s*effect\b(?=[^}]*\} from '@/lib/signals')", "", header)
         header = re.sub(r"import \{\s*effect\s*\} from '@/lib/signals';\n?", "", header)
-    css ="./" + target.replace("\\", "/").rsplit("/", 1)[-1].rsplit(".", 1)[0] + ".css"
+    # Angular's OnDestroy hook runs when the controller's screen unmounts.
+    body = re.sub(r"\s+implements OnDestroy\b", "", body)
+    if re.search(r"\n  ngOnDestroy\(\): void \{", body):
+        body = body.replace(
+            "\n  ngOnDestroy(): void {",
+            "\n  start(): () => void {\n    return () => this.ngOnDestroy();\n  }\n\n  ngOnDestroy(): void {",
+            1,
+        )
+    header = re.sub(r"(import \{[^}]*?)\bOnDestroy,\s*", r"\1", header)
+    # Inputs become signals: set from props as the controller is created, so the
+    # first render sees them, then kept in step by a layout effect.
+    inputs = []
+    pattern = r"readonly (\w+) = input(\.required)?(?:<([\s\S]*?)>)?\(([^()]*(?:\([^()]*\))?[^()]*)\);"
+    for match in list(re.finditer(pattern, body)):
+        in_name, required, in_type, default = match.group(1), bool(match.group(2)), match.group(3), match.group(4).strip()
+        if not in_type:
+            in_type = ("boolean" if default in ("true", "false") else
+                       "number" if re.fullmatch(r"-?\d+(\.\d+)?", default) else
+                       "string" if re.fullmatch(r"'.*'", default) else "unknown")
+        initial = "undefined as unknown as " + in_type if required or not default else default
+        body = body.replace(match.group(0), f"readonly {in_name} = signal<{in_type}>({initial});")
+        inputs.append((in_name, in_type, required))
+    if inputs and not re.search(r"import \{[^}]*\bsignal\b[^}]*\} from '@/lib/signals'", header):
+        lines.append("import { signal } from '@/lib/signals';")
+    css = "./" + target.replace("\\", "/").rsplit("/", 1)[-1].rsplit(".", 1)[0] + ".css"
+    react_names = (["Fragment"] if "Fragment" in uses else []) + (["useLayoutEffect"] if inputs else [])
+    lines = [l for l in lines if not l.startswith("import { Fragment } from 'react'")]
+    if react_names:
+        lines.insert(0, f"import {{ {', '.join(react_names)} }} from 'react';")
     out = "\n".join(lines) + "\n" + header.strip() + f"\n\nimport '{css}';\n\n" + body.rstrip() + "\n\n"
-    out += f"export function {name}() {{\n  useSignals();\n"
-    out += f"  const s = useController(() => new {name}State());\n"
+    export = "export default function" if "--default" in sys.argv else "export function"
+    prop_types = [f"{n}{'' if req else '?'}: {t}" for n, t, req in inputs]
+    prop_types += [f"{h}?: {sig}" for h, sig in outputs]
+    signature = f"props: {{ {'; '.join(prop_types)} }}" if prop_types else ""
+    out += f"{export} {name}({signature}) {{\n  useSignals();\n"
+    if inputs:
+        out += f"  const s = useController(() => {{\n    const state = new {name}State();\n"
+        for n, _, req in inputs:
+            out += (f"    state.{n}.set(props.{n});\n" if req else
+                    f"    if (props.{n} !== undefined) state.{n}.set(props.{n});\n")
+        out += "    return state;\n  });\n"
+        for n, _, req in inputs:
+            guard = "" if req else f"if (props.{n} !== undefined) "
+            out += f"  useLayoutEffect(() => {{\n    {guard}s.{n}.set(props.{n});\n  }}, [s, props.{n}]);\n"
+    else:
+        out += f"  const s = useController(() => new {name}State());\n"
+    for handler, _ in outputs:
+        out += f"  if (props.{handler}) s.{handler} = props.{handler};\n"
     out += f'  return (<div className="{root}">{jsx}</div>);\n}}\n'
     os.makedirs(os.path.dirname(target), exist_ok=True)
     with open(target, "w", encoding="utf-8", newline="\n") as f:
