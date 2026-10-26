@@ -486,6 +486,18 @@ pub async fn disconnect(
     Ok(())
 }
 
+/// Stops polling without disconnecting, for a module turned off: the
+/// session stays stored on disk, and [`resume`] picks it up again.
+pub fn pause(app: &AppHandle, registry: &JobRegistry) {
+    let gmail = app.state::<GmailState>();
+    let mut runtime = gmail.0.lock().unwrap();
+    if let Session::Connected(session) = &mut runtime.session {
+        if let Some(job_id) = session.poll_job_id.take() {
+            let _ = registry.cancel(&job_id);
+        }
+    }
+}
+
 /// Loads a previously connected session from disk at startup and, if one
 /// exists, resumes polling — a connector that stops the moment the window
 /// closes and the process is later relaunched would defeat the point of

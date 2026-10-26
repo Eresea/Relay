@@ -1,16 +1,14 @@
-import { expect, it, vi } from 'vitest';
+import { expect, it } from 'vitest';
 
 import { inject } from '@/lib/inject';
 import { provideBridge } from '@/test/bridge';
+import { fakeModuleCore } from '@/test/modules';
 
-import { BUILT_IN_MODULES, ModuleRegistry } from './modules';
+import { ModuleRegistry } from './modules';
 
-it('turns modules off and back on, but never a core one', async () => {
-  const bridge = provideBridge({
-    available: true,
-    getSetting: vi.fn().mockResolvedValue(['vault', 'not-a-module', 3]),
-    setSetting: vi.fn().mockResolvedValue(undefined),
-  });
+it('draws from the core and settles a change on what the core says', async () => {
+  const core = fakeModuleCore(['vault']);
+  provideBridge(core);
   const modules = inject(ModuleRegistry);
   await modules.load();
 
@@ -21,18 +19,12 @@ it('turns modules off and back on, but never a core one', async () => {
   expect(modules.commandEnabled('relay.vault.open')).toBe(false);
   expect(modules.commandEnabled('relay.theme.toggle')).toBe(true);
 
-  modules.setEnabled('settings', false);
+  await modules.setEnabled('vault', true);
+  expect(core.modulesSetEnabled).toHaveBeenCalledWith('vault', true);
+  expect(modules.isEnabled('vault')).toBe(true);
+
+  // The core refused: the registry goes back to what the core has.
+  core.modulesSetEnabled.mockRejectedValueOnce('Settings is part of Relay');
+  await expect(modules.setEnabled('settings', false)).rejects.toBe('Settings is part of Relay');
   expect(modules.isEnabled('settings')).toBe(true);
-
-  modules.setEnabled('vault', true);
-  modules.setEnabled('gmail', false);
-  expect(bridge.setSetting).toHaveBeenLastCalledWith('modules.off', ['not-a-module', 'gmail']);
-  expect(modules.enabled().map((m) => m.id)).not.toContain('gmail');
-});
-
-it('gives every built-in module a unique id and owns each command once', () => {
-  const ids = BUILT_IN_MODULES.map((m) => m.id);
-  expect(new Set(ids).size).toBe(ids.length);
-  const commands = BUILT_IN_MODULES.flatMap((m) => m.commands);
-  expect(new Set(commands).size).toBe(commands.length);
 });

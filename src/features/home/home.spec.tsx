@@ -6,6 +6,7 @@ import { ThemeService } from '@/core/theme';
 import { provide } from '@/lib/inject';
 import { signal } from '@/lib/signals';
 import { provideBridge } from '@/test/bridge';
+import { fakeModuleCore } from '@/test/modules';
 
 import Home from './home';
 
@@ -18,6 +19,7 @@ it('manages Nexus sign-in from the avatar below Settings and reports failures', 
     displayName: null,
   };
   const bridge = provideBridge({
+    ...fakeModuleCore(),
     available: true,
     getSetting: vi.fn().mockResolvedValue(false),
     isWindowMaximized: vi.fn().mockResolvedValue(false),
@@ -78,8 +80,8 @@ it('manages Nexus sign-in from the avatar below Settings and reports failures', 
   expect(container.querySelector('.account-menu')).toBeNull();
 });
 
-it('opens views as tabs and closes them like browser tabs', () => {
-  provideBridge({ available: false });
+it('opens views as tabs and closes them like browser tabs', async () => {
+  provideBridge({ ...fakeModuleCore(), available: false });
   provide(ThemeService, {
     theme: signal('dark'),
     toggle: () => undefined,
@@ -88,7 +90,7 @@ it('opens views as tabs and closes them like browser tabs', () => {
   const tabs = () => screen.getAllByRole('tab').map((tab) => tab.textContent);
   const selected = () => screen.getByRole('tab', { selected: true }).textContent;
 
-  fireEvent.click(screen.getByRole('button', { name: 'Vault' }));
+  fireEvent.click(await screen.findByRole('button', { name: 'Vault' }));
   fireEvent.click(screen.getByRole('button', { name: 'Runtime' }));
   expect(tabs()).toEqual(['Today', 'Vault', 'Runtime']);
   expect(selected()).toBe('Runtime');
@@ -111,8 +113,9 @@ it('opens views as tabs and closes them like browser tabs', () => {
   expect(selected()).toBe('Today');
 });
 
-it('builds the rail from the registry and drops a module turned off on the Modules screen', async () => {
-  provideBridge({ available: false });
+it('builds the rail from the core registry and drops a module turned off on the Modules screen', async () => {
+  const core = fakeModuleCore();
+  provideBridge({ ...core, available: false });
   provide(ThemeService, {
     theme: signal('dark'),
     toggle: () => undefined,
@@ -120,13 +123,16 @@ it('builds the rail from the registry and drops a module turned off on the Modul
   render(<Home />);
   const rail = () =>
     [...document.querySelectorAll('.rail-top .rail-item')].map((b) => b.getAttribute('aria-label'));
-  expect(rail()).toEqual(['Today', 'My work', 'Agents', 'Projects', 'Vault', 'Runtime']);
+  await waitFor(() =>
+    expect(rail()).toEqual(['Today', 'My work', 'Agents', 'Projects', 'Vault', 'Runtime']),
+  );
 
   fireEvent.click(screen.getByRole('button', { name: 'Vault' }));
   fireEvent.click(screen.getByRole('button', { name: 'Modules' }));
   fireEvent.click(await screen.findByRole('switch', { name: 'Vault on' }));
 
-  expect(rail()).not.toContain('Vault');
+  expect(core.modulesSetEnabled).toHaveBeenCalledWith('vault', false);
+  await waitFor(() => expect(rail()).not.toContain('Vault'));
   expect(screen.getAllByRole('tab').map((tab) => tab.textContent)).toEqual(['Today', 'Modules']);
   expect(screen.getByRole('switch', { name: 'Vault on' })).toHaveProperty('checked', false);
 });

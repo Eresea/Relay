@@ -55,4 +55,5 @@ export type AppEvent =
   | ({ readonly type: 'notification' } & NotificationPayload)
   | { readonly type: 'notificationDone'; readonly jobId: string; readonly ok: boolean }
   | { readonly type: 'attentionToggleRequested' }
+  | { readonly type: 'modulesChanged' }
   | ({ readonly type: 'updateChanged' } & UpdateSnapshot);

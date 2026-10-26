@@ -45,7 +45,6 @@ export function bootstrap(): void {
   if (isOverlaySurface(surface)) document.documentElement.classList.add('overlay-window');
 
   registerDefaultCommands();
-  void inject(ModuleRegistry).load();
 
   if (surface === 'mobile') {
     void setupMobileNotifications().then(subscribeToEvents);
@@ -75,6 +74,7 @@ async function subscribeToEvents(): Promise<void> {
   const tauri = inject(TauriBridge);
   const notifications = inject(NotificationCenter);
   const updates = inject(UpdateCenter);
+  const modules = inject(ModuleRegistry);
   try {
     notifications.restore(await tauri.notificationsList());
     if (surface !== 'mobile') updates.restore(await tauri.updateStatus());
@@ -84,6 +84,7 @@ async function subscribeToEvents(): Promise<void> {
   await tauri.onEvent((event) => {
     notifications.handle(event);
     if (surface !== 'mobile') updates.handle(event);
+    if (event.type === 'modulesChanged') void modules.load();
   });
 }
 

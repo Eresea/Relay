@@ -1,6 +1,7 @@
 import type { LazyStore } from '@tauri-apps/plugin-store';
 
 import type { AppEvent, NotificationRecord, UpdateSnapshot } from './events';
+import type { ModuleInfo } from './modules';
 
 /**
  * The boundary between the Angular app and the Rust core.
@@ -121,6 +122,16 @@ export class TauriBridge {
     if (!this.available) return () => {};
     const { listen } = await import('@tauri-apps/api/event');
     return listen<AppEvent>('relay://event', (message) => handler(message.payload));
+  }
+
+  /** Every module the core knows, with whether it is on. */
+  async modulesList(): Promise<readonly ModuleInfo[]> {
+    return (await this.invoke<ModuleInfo[]>('modules_list')) ?? [];
+  }
+
+  /** Turns a module on or off; the core stops or resumes its background work. */
+  async modulesSetEnabled(id: string, enabled: boolean): Promise<void> {
+    await this.invoke('modules_set_enabled', { id, enabled });
   }
 
   async notificationsList(): Promise<readonly NotificationRecord[]> {

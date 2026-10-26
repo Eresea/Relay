@@ -160,6 +160,7 @@ export class OmnibarState {
       }
     });
     void this.loadWorkspaces();
+    void this.modules.load();
     return () => {
       disposed = true;
       unlisten?.();

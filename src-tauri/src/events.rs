@@ -147,6 +147,10 @@ pub enum AppEvent {
     /// to the pill. Only the HUD webview knows which it is showing.
     AttentionToggleRequested,
 
+    /// A module was turned on or off. Every window re-reads the registry, so
+    /// the rail, Today and the palette all follow.
+    ModulesChanged,
+
     /// Persistent update state for the main window's status strip.
     UpdateChanged {
         #[serde(flatten)]
@@ -315,6 +319,12 @@ mod tests {
     fn open_github_requested_is_a_bare_tag() {
         let json = serde_json::to_string(&AppEvent::OpenGithubRequested).unwrap();
         assert_eq!(json, r#"{"type":"openGithubRequested"}"#);
+    }
+
+    #[test]
+    fn modules_changed_is_a_bare_tag() {
+        let json = serde_json::to_string(&AppEvent::ModulesChanged).unwrap();
+        assert_eq!(json, r#"{"type":"modulesChanged"}"#);
     }
 
     #[test]

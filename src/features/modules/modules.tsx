@@ -42,11 +42,12 @@ export default function Modules({ onOpen }: { onOpen: (id: string) => void }) {
   const selectedId = useLocalSignal('today');
 
   const q = query().trim().toLowerCase();
-  const shown = registry.all.filter((m) =>
-    `${m.name} ${m.summary} ${m.description}`.toLowerCase().includes(q),
-  );
+  const shown = registry
+    .all()
+    .filter((m) => `${m.name} ${m.summary} ${m.description}`.toLowerCase().includes(q));
   const on = registry.enabled().length;
-  const selected = registry.get(selectedId()) ?? registry.all[0];
+  const selected = registry.get(selectedId()) ?? registry.all()[0];
+  if (!selected) return <p className="page-loading" aria-busy="true" />;
 
   const toggle = (m: ModuleManifest) =>
     m.core ? (
@@ -55,7 +56,9 @@ export default function Modules({ onOpen }: { onOpen: (id: string) => void }) {
       <Switch
         aria-label={`${m.name} on`}
         checked={registry.isEnabled(m.id)}
-        onCheckedChange={(checked) => registry.setEnabled(m.id, checked)}
+        onCheckedChange={(checked) =>
+          void registry.setEnabled(m.id, checked).catch(() => undefined)
+        }
       />
     );
 
@@ -64,7 +67,7 @@ export default function Modules({ onOpen }: { onOpen: (id: string) => void }) {
       <header className="panehead">
         <h1 id="modules-title">Modules</h1>
         <span className="count">
-          {on} on · {registry.all.length - on} off
+          {on} on · {registry.all().length - on} off
         </span>
         <label className="search">
           <Icon name="search" size={14} />

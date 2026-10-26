@@ -11,6 +11,24 @@ pub enum Error {
     #[error("no window labelled `{0}`")]
     MissingWindow(&'static str),
 
+    #[error("{0} is turned off in Modules")]
+    ModuleOff(&'static str),
+
+    #[error("{module} did not declare that it may {permission}")]
+    ModulePermission {
+        module: &'static str,
+        permission: crate::modules::Permission,
+    },
+
+    #[error("no module `{0}`")]
+    UnknownModule(String),
+
+    #[error("{0} is part of Relay and cannot be turned off")]
+    CoreModule(&'static str),
+
+    #[error("could not write settings: {0}")]
+    Settings(String),
+
     #[error("no job `{0}`")]
     UnknownJob(JobId),
 

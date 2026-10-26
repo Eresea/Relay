@@ -3,6 +3,7 @@ import { useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Switch } from '@/components/ui/switch';
+import { ModuleRegistry } from '@/core/modules';
 import { TauriBridge } from '@/core/tauri';
 import { ThemeService } from '@/core/theme';
 import { Github } from '@/features/github/github';
@@ -62,11 +63,12 @@ class SettingsState {
   }
 }
 
-const TABS: readonly { id: SettingsTab; label: string }[] = [
+/** Connector tabs belong to their module and leave with it when it is off. */
+const TABS: readonly { id: SettingsTab; label: string; module?: string }[] = [
   { id: 'general', label: 'General' },
-  { id: 'github', label: 'GitHub' },
-  { id: 'gmail', label: 'Gmail' },
-  { id: 'linear', label: 'Linear' },
+  { id: 'github', label: 'GitHub', module: 'github' },
+  { id: 'gmail', label: 'Gmail', module: 'gmail' },
+  { id: 'linear', label: 'Linear', module: 'linear' },
 ];
 
 /**
@@ -81,12 +83,17 @@ export default function Settings({ initialTab = 'general' }: { initialTab?: Sett
   useSignals();
   const s = useController(() => new SettingsState());
   useEffect(() => s.tab.set(initialTab), [s, initialTab]);
-  const tab = s.tab();
+  const modules = inject(ModuleRegistry);
+  const on = (id: SettingsTab) => {
+    const module = TABS.find((t) => t.id === id)?.module;
+    return !module || modules.isEnabled(module);
+  };
+  const tab = on(s.tab()) ? s.tab() : 'general';
 
   return (
     <div className="settings">
       <nav className="tabs">
-        {TABS.map((t) => (
+        {TABS.filter((t) => on(t.id)).map((t) => (
           <button
             key={t.id}
             type="button"
@@ -146,15 +153,21 @@ export default function Settings({ initialTab = 'general' }: { initialTab?: Sett
         </section>
       </div>
 
-      <div hidden={tab !== 'github'}>
-        <Github />
-      </div>
-      <div hidden={tab !== 'gmail'}>
-        <Gmail />
-      </div>
-      <div hidden={tab !== 'linear'}>
-        <LinearSettings />
-      </div>
+      {on('github') && (
+        <div hidden={tab !== 'github'}>
+          <Github />
+        </div>
+      )}
+      {on('gmail') && (
+        <div hidden={tab !== 'gmail'}>
+          <Gmail />
+        </div>
+      )}
+      {on('linear') && (
+        <div hidden={tab !== 'linear'}>
+          <LinearSettings />
+        </div>
+      )}
     </div>
   );
 }

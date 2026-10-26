@@ -13,6 +13,7 @@ mod linear;
 #[cfg(any(mobile, test))]
 #[allow(dead_code)]
 mod mobile_updates;
+mod modules;
 mod nexus_auth;
 mod nexus_revoke;
 pub mod nexus_sync;
@@ -40,6 +41,22 @@ use gmail::GmailState;
 use jobs::JobRegistry;
 use linear::LinearState;
 use vault::VaultState;
+
+/// Every IPC call passes the module registry first: a command owned by a
+/// module that is off, or that exercises a permission its module never
+/// declared, is refused before it runs (see `modules::check_invoke`).
+fn gated(
+    handler: impl Fn(tauri::ipc::Invoke) -> bool + Send + Sync + 'static,
+) -> impl Fn(tauri::ipc::Invoke) -> bool + Send + Sync + 'static {
+    move |invoke| {
+        let webview = invoke.message.webview();
+        if let Err(error) = modules::check_invoke(webview.app_handle(), invoke.message.command()) {
+            invoke.resolver.reject(error);
+            return true;
+        }
+        handler(invoke)
+    }
+}
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -101,7 +118,9 @@ pub fn run() {
             .manage(updates::UpdateManager::default())
             .manage(codex::CodexState::default())
             .plugin(tauri_plugin_updater::Builder::new().build())
-            .invoke_handler(tauri::generate_handler![
+            .invoke_handler(gated(tauri::generate_handler![
+                modules::modules_list,
+                modules::modules_set_enabled,
                 commands::core_commands,
                 commands::run_core_command,
                 commands::hud_layout,
@@ -240,12 +259,14 @@ pub fn run() {
                 commands::update_check,
                 commands::update_download,
                 commands::update_install,
-            ]);
+            ]));
     }
 
     #[cfg(not(desktop))]
     {
-        builder = builder.invoke_handler(tauri::generate_handler![
+        builder = builder.invoke_handler(gated(tauri::generate_handler![
+            modules::modules_list,
+            modules::modules_set_enabled,
             commands::core_commands,
             commands::run_core_command,
             commands::cancel_job,
@@ -366,7 +387,7 @@ pub fn run() {
             commands::scan_workspaces,
             commands::open_terminal,
             commands::project_action,
-        ]);
+        ]));
     }
 
     #[cfg(desktop)]
@@ -472,7 +493,11 @@ pub fn run() {
             // revoked grant, an unreachable keychain) is not fatal to Relay.
             let resume_handle = app.handle().clone();
             let resume_registry = app.state::<JobRegistry>().inner().clone();
+            let mail_on = modules::is_enabled(app.handle(), "gmail");
             tauri::async_runtime::spawn(async move {
+                if !mail_on {
+                    return;
+                }
                 if let Err(error) = gmail::resume(
                     resume_handle,
                     resume_registry,

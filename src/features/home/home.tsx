@@ -61,11 +61,11 @@ export class HomeState {
   readonly maximized = signal(false);
 
   /** Modules with a surface on the rail's top, in registry order. */
-  readonly rail = computed(() =>
-    this.modules.enabled().filter((m) => m.surface && m.surface.rail !== false),
-  );
+  readonly rail = computed(() => this.modules.enabled().filter((m) => m.surface?.rail));
   /** Open tabs whose module is on: turning a module off closes its tab. */
-  readonly openTabs = computed(() => this.tabs().filter((id) => this.modules.isEnabled(id)));
+  readonly openTabs = computed(() =>
+    this.tabs().filter((id) => id === 'today' || this.modules.isEnabled(id)),
+  );
   readonly current = computed(() => (this.modules.isEnabled(this.view()) ? this.view() : 'today'));
 
   readonly running = computed(() => this.center.items().filter((n) => n.status === 'running'));
@@ -75,6 +75,7 @@ export class HomeState {
 
   /** Window and event listeners; returns their disposer. */
   start(): () => void {
+    void this.modules.load();
     void this.tauri
       .getSetting<boolean>(INSPECTOR_SETTING_KEY, this.inspector())
       .then((stored) => this.inspector.set(stored));
@@ -194,7 +195,10 @@ export default function Home() {
   useEffect(() => s.start(), [s]);
 
   const view = s.current();
-  const surface = (id: string) => s.modules.get(id)?.surface ?? { label: id, icon: 'circle' };
+  // Today is pinned before the registry has loaded, so it needs a face of its own.
+  const surface = (id: string) =>
+    s.modules.get(id)?.surface ??
+    (id === 'today' ? { label: 'Today', icon: 'house' } : { label: id, icon: 'circle' });
   const hue = (id: string) => moduleHueVar(s.modules.get(id)?.hue ?? 'relay');
   const status = s.account.status();
   const running = s.running().length;

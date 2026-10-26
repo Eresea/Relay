@@ -114,9 +114,24 @@ pub fn init(app: &AppHandle) -> Result<()> {
     Ok(())
 }
 
+/// The inbox stream only carries GitHub events, so it runs while GitHub is on.
 fn start_events(app: &AppHandle, client: &NexusClient) {
+    if !crate::modules::is_enabled(app, "github") {
+        return;
+    }
     let handle = github::events::start(app, client);
     *app.state::<NexusEvents>().0.lock().unwrap() = Some(handle);
+}
+
+/// Starts or stops the inbox stream when GitHub is turned on or off.
+pub fn set_events(app: &AppHandle, on: bool) {
+    if !on {
+        app.state::<NexusEvents>().0.lock().unwrap().take();
+        return;
+    }
+    if let Ok(client) = signed_in_client(app) {
+        start_events(app, &client);
+    }
 }
 
 /// Sessions written before the SDK carry no `connections` scope and Nexus

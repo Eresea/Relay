@@ -32,8 +32,14 @@ class TodayState {
   private readonly selectedId = signal<string | null>(null);
 
   readonly today = computed(() =>
-    buildToday(this.center.items(), this.center.history(), this.filter(), (source) =>
-      this.modules.isEnabled(SOURCES[source].module),
+    buildToday(
+      this.center.items(),
+      this.center.history(),
+      this.filter(),
+      (source) =>
+        // Hide only what is known to be off, so Today is not blank while the
+        // registry loads.
+        this.modules.get(SOURCES[source].module)?.enabled !== false,
     ),
   );
   /** The picked item, or the first that most deserves a look. */
