@@ -8,7 +8,10 @@ export type NotificationStatus = 'running' | 'waiting' | 'blocked' | 'done';
 
 export type NotificationAction =
   | { readonly id: 'open'; readonly label: string; readonly url: string }
-  | { readonly id: 'cancel'; readonly label: string };
+  | { readonly id: 'cancel'; readonly label: string }
+  /** Answers a job's question (src-tauri/src/approvals.rs). */
+  | { readonly id: 'allow'; readonly label: string; readonly request: string }
+  | { readonly id: 'deny'; readonly label: string; readonly request: string };
 
 export interface NotificationPayload {
   readonly notificationId: string;

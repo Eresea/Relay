@@ -1,7 +1,8 @@
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { expect, it, vi } from 'vitest';
 
-import { TauriBridge, type ClaudeSession } from '@/core/tauri';
+import type { AppEvent } from '@/core/events';
+import type { ClaudeSession } from '@/core/tauri';
 import { provideBridge } from '@/test/bridge';
 
 import Claude from './claude';
@@ -17,9 +18,14 @@ const session = (id: string, title: string, replies: string[] = []): ClaudeSessi
   ],
 });
 
-it('lists sessions, opens the requested one and resumes it in its own folder', async () => {
+it('lists sessions, opens the requested one and resumes it as a job', async () => {
+  let emit: (event: AppEvent) => void = () => undefined;
   let answered = false;
   const bridge = provideBridge({
+    onEvent: vi.fn((handler: typeof emit) => {
+      emit = handler;
+      return Promise.resolve(() => undefined);
+    }),
     claudeListSessions: vi
       .fn()
       .mockResolvedValue([
@@ -31,10 +37,7 @@ it('lists sessions, opens the requested one and resumes it in its own folder', a
         session(id, 'Why is the probe failing?', answered ? ['The **token** expired.'] : []),
       ),
     ),
-    claudeSend: vi.fn(() => {
-      answered = true;
-      return Promise.resolve({ sessionId: 'a1', response: 'The token expired.', costUsd: 0.01 });
-    }),
+    claudeAsk: vi.fn().mockResolvedValue('job-1'),
   });
   const handled = vi.fn();
   render(<Claude openSessionId="a1" onSessionHandled={handled} />);
@@ -48,11 +51,16 @@ it('lists sessions, opens the requested one and resumes it in its own folder', a
     target: { value: 'And how do I fix it?' },
   });
   fireEvent.click(screen.getByRole('button', { name: 'Send' }));
-
   await waitFor(() =>
-    expect(bridge.claudeSend).toHaveBeenCalledWith('And how do I fix it?', '/home/nils/leaf', 'a1'),
+    expect(bridge.claudeAsk).toHaveBeenCalledWith('And how do I fix it?', '/home/nils/leaf', 'a1'),
   );
-  // The answer is rendered as Markdown once the transcript is re-read.
+  expect(screen.getByText(/questions appear in the activity stack/)).toBeTruthy();
+
+  // Another job finishing changes nothing; this turn's job re-reads the transcript.
+  answered = true;
+  act(() => emit({ type: 'notificationDone', jobId: 'other', ok: true }));
+  expect(bridge.claudeReadSession).toHaveBeenCalledTimes(1);
+  act(() => emit({ type: 'notificationDone', jobId: 'job-1', ok: true }));
   const conversation = within(screen.getByRole('article', { name: 'Conversation' }));
   expect((await conversation.findByText('token')).tagName).toBe('STRONG');
 });
@@ -64,5 +72,14 @@ it('opens relay://claude links in the Claude tab instead of the browser', async 
     id: 'open_claude',
     args: { sessionId: '24f45911-f12e-4bfe-a250-7a2b7f9389bd' },
   });
-  expect(bridge).toBeInstanceOf(TauriBridge);
+});
+
+it('answers a permission request from its Allow or Deny action', async () => {
+  const bridge = provideBridge({ approvalAnswer: vi.fn().mockResolvedValue(undefined) });
+  await bridge.runNotificationAction({ id: 'allow', label: 'Allow', request: 'approval-1' }, 'j');
+  await bridge.runNotificationAction({ id: 'deny', label: 'Deny', request: 'approval-2' }, 'j');
+  expect(bridge.approvalAnswer.mock.calls).toEqual([
+    ['approval-1', true],
+    ['approval-2', false],
+  ]);
 });

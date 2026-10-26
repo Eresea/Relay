@@ -167,8 +167,23 @@ pub enum AppEvent {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "id", rename_all = "camelCase")]
 pub enum NotificationAction {
-    Open { label: String, url: String },
-    Cancel { label: String },
+    Open {
+        label: String,
+        url: String,
+    },
+    Cancel {
+        label: String,
+    },
+    /// Answers an open question (see `approvals.rs`) with yes.
+    Allow {
+        label: String,
+        request: String,
+    },
+    /// Answers an open question with no.
+    Deny {
+        label: String,
+        request: String,
+    },
 }
 
 pub const INFO_AUTO_DISMISS_MS: u64 = 8_000;
@@ -253,7 +268,7 @@ fn show_mobile_notification(app: &tauri::AppHandle, event: &AppEvent) {
     }
     if let Some(url) = actions.iter().find_map(|action| match action {
         NotificationAction::Open { url, .. } => Some(url),
-        NotificationAction::Cancel { .. } => None,
+        _ => None,
     }) {
         builder = builder.extra("openUrl", url);
     }
@@ -300,6 +315,19 @@ mod tests {
         assert_eq!(
             json,
             r#"{"type":"notification","notificationId":"job-1","jobId":"job-1","hueSource":"relay-demo","title":"Doing the thing","status":"running","progress":45}"#
+        );
+    }
+
+    #[test]
+    fn approval_actions_carry_their_request() {
+        let json = serde_json::to_string(&NotificationAction::Allow {
+            label: "Allow".into(),
+            request: "approval-1".into(),
+        })
+        .unwrap();
+        assert_eq!(
+            json,
+            r#"{"id":"allow","label":"Allow","request":"approval-1"}"#
         );
     }
 

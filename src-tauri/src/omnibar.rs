@@ -5,10 +5,12 @@
 //! run as jobs instead: the Omnibar closes at once, and progress, the answer
 //! or the failure arrive through the attention pill and stack.
 
+use std::future::Future;
 use std::path::Path;
 use std::time::{Duration, Instant};
 
-use crate::claude;
+use crate::approvals::Approvals;
+use crate::claude::{self, PermissionRequest};
 use crate::codex;
 use crate::error::{Error, Result};
 use crate::events::{EventSink, NotificationAction, NotificationStatus};
@@ -57,12 +59,19 @@ pub fn ask_codex<S: EventSink>(
     })
 }
 
-/// Sends `prompt` to Claude Code in `working_directory` as a new session.
+/// How long a permission request waits for you before it counts as declined.
+const APPROVAL_TIMEOUT: Duration = Duration::from_secs(10 * 60);
+
+/// Sends `prompt` to Claude Code in `working_directory`, as a new session or
+/// resuming `session_id`. Each tool it asks to use turns the job's card into
+/// a question with Allow and Deny.
 pub fn ask_claude<S: EventSink>(
     sink: S,
     registry: JobRegistry,
+    approvals: Approvals,
     prompt: String,
     working_directory: String,
+    session_id: Option<String>,
 ) -> JobId {
     jobs::spawn(sink, registry, "claude", move |ctx| async move {
         let title = format!("Claude · {}", clip(&prompt, 60));
@@ -73,7 +82,12 @@ pub fn ask_claude<S: EventSink>(
             Some(format!("Working in {place}")),
             None,
         );
-        match claude::send(prompt, working_directory, None).await {
+        let mut card = ClaudeCard {
+            ctx: &ctx,
+            approvals,
+            title: title.clone(),
+        };
+        match claude::run(prompt, working_directory, session_id, &mut card).await {
             Ok(run) => {
                 ctx.report_notification(
                     NotificationStatus::Done,
@@ -95,6 +109,71 @@ pub fn ask_claude<S: EventSink>(
             Err(error) => fail(&ctx, title, error),
         }
     })
+}
+
+/// A Claude turn's notification card: what Claude is doing, and its questions.
+struct ClaudeCard<'a, S: EventSink> {
+    ctx: &'a JobContext<S>,
+    approvals: Approvals,
+    title: String,
+}
+
+impl<S: EventSink> claude::Host for ClaudeCard<'_, S> {
+    fn progress(&mut self, tool: &str) {
+        self.ctx.report(
+            NotificationStatus::Running,
+            self.title.clone(),
+            Some(format!("Using {tool}")),
+            None,
+        );
+    }
+
+    fn approve(&mut self, request: PermissionRequest) -> impl Future<Output = bool> + Send {
+        let (id, answer) = self.approvals.ask();
+        self.ctx.report_notification(
+            NotificationStatus::Waiting,
+            self.title.clone(),
+            Some(request.summary.clone()),
+            None,
+            NotificationOptions {
+                notification_id: self.ctx.id().to_string(),
+                auto_dismiss_ms: None,
+                actions: vec![
+                    NotificationAction::Allow {
+                        label: "Allow".to_owned(),
+                        request: id.clone(),
+                    },
+                    NotificationAction::Deny {
+                        label: "Deny".to_owned(),
+                        request: id.clone(),
+                    },
+                ],
+            },
+        );
+        let approvals = self.approvals.clone();
+        let ctx = self.ctx;
+        let title = self.title.clone();
+        // ponytail: cancelling the job does not end a pending question; it
+        // times out instead. Race `answer` with the job's cancel flag if that
+        // ever matters.
+        async move {
+            let allow = match tokio::time::timeout(APPROVAL_TIMEOUT, answer).await {
+                Ok(Ok(allow)) => allow,
+                _ => {
+                    approvals.forget(&id);
+                    false
+                }
+            };
+            let verdict = if allow { "Allowed" } else { "Declined" };
+            ctx.report(
+                NotificationStatus::Running,
+                title,
+                Some(format!("{verdict}: {}", request.summary)),
+                None,
+            );
+            allow
+        }
+    }
 }
 
 /// Runs a `package.json` script in a local workspace.

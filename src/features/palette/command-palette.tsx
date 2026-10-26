@@ -373,9 +373,11 @@ export class OmnibarState {
           tone: CLAUDE_TONE,
           sub: `Claude · ${w.name}`,
           verb: 'Ask',
-          note: 'Starts a new Claude Code session in the background. It reads the project but changes nothing; the answer arrives in the activity pill.',
+          note: 'Starts a new Claude Code session in the background. It reads freely; each edit or command waits for your Allow in the activity stack.',
           facts,
-          run: () => this.tauri.claudeAsk(prompt, w.path),
+          run: async () => {
+            await this.tauri.claudeAsk(prompt, w.path);
+          },
         };
         return [...(on('codex') ? [codex] : []), ...(on('claude') ? [claude] : [])];
       });

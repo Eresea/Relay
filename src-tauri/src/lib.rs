@@ -2,6 +2,8 @@
 #![allow(clippy::too_many_arguments)]
 
 #[cfg(desktop)]
+mod approvals;
+#[cfg(desktop)]
 mod claude;
 #[cfg(desktop)]
 mod codex;
@@ -119,10 +121,12 @@ pub fn run() {
         builder = builder
             .manage(updates::UpdateManager::default())
             .manage(codex::CodexState::default())
+            .manage(approvals::Approvals::default())
             .plugin(tauri_plugin_updater::Builder::new().build())
             .invoke_handler(gated(tauri::generate_handler![
                 modules::modules_list,
                 modules::modules_set_enabled,
+                approvals::approval_answer,
                 commands::core_commands,
                 commands::run_core_command,
                 commands::hud_layout,
@@ -258,7 +262,6 @@ pub fn run() {
                 commands::codex_read_thread,
                 commands::codex_older_turns,
                 commands::claude_ask,
-                commands::claude_send,
                 commands::claude_list_sessions,
                 commands::claude_read_session,
                 commands::update_status,

@@ -26,9 +26,18 @@ class ClaudeState {
   readonly reply = signal('');
   readonly sending = signal(false);
   readonly sendError = signal<string | null>(null);
+  /** The turn in flight: a job, which reports through notifications. */
+  private pending: { readonly jobId: string; readonly sessionId: string } | null = null;
 
-  start(): void {
+  /** Loads sessions and listens for the in-flight turn to finish; returns the disposer. */
+  start(): () => void {
     void this.loadSessions();
+    const stop = this.tauri.onEvent((event) => {
+      if (event.type === 'notificationDone' && event.jobId === this.pending?.jobId) {
+        void this.finish(event.ok);
+      }
+    });
+    return () => void stop.then((unlisten) => unlisten());
   }
 
   async loadSessions(): Promise<void> {
@@ -62,15 +71,23 @@ class ClaudeState {
     this.sending.set(true);
     this.sendError.set(null);
     try {
-      await this.tauri.claudeSend(prompt, session.cwd, session.id);
+      const jobId = await this.tauri.claudeAsk(prompt, session.cwd, session.id);
+      if (!jobId) throw new Error('Claude Code is not available here.');
+      this.pending = { jobId, sessionId: session.id };
       this.reply.set('');
-      await this.open(session.id);
-      void this.loadSessions();
     } catch (cause) {
-      this.sendError.set(message(cause, 'Claude Code could not answer.'));
-    } finally {
+      this.sendError.set(message(cause, 'Claude Code could not start.'));
       this.sending.set(false);
     }
+  }
+
+  private async finish(ok: boolean): Promise<void> {
+    const sessionId = this.pending?.sessionId;
+    this.pending = null;
+    this.sending.set(false);
+    if (!ok) this.sendError.set('Claude could not finish this turn. Today says why.');
+    if (sessionId) await this.open(sessionId);
+    void this.loadSessions();
   }
 }
 
@@ -181,8 +198,8 @@ export default function Claude({
                   <span className="hint">
                     {s.sendError() ??
                       (s.sending()
-                        ? 'Claude is working…'
-                        : 'Runs headless in this folder: Claude reads, but changes nothing.')}
+                        ? 'Claude is working. Its questions appear in the activity stack.'
+                        : 'Edits and commands wait for your Allow in the activity stack.')}
                   </span>
                   <Button size="sm" type="submit" disabled={s.sending() || !s.reply().trim()}>
                     Send

@@ -1882,28 +1882,27 @@ pub fn codex_ask(
     crate::omnibar::ask_codex(app, jobs.inner().clone(), prompt, working_directory)
 }
 
-/// Starts a Claude Code session in the background and returns its job id at
-/// once. Progress and the answer arrive as notifications.
+/// Starts a Claude Code turn in the background, new or resuming
+/// `session_id`, and returns its job id at once. Progress, permission
+/// requests and the answer arrive as notifications.
 #[cfg(desktop)]
 #[tauri::command]
 pub fn claude_ask(
     app: AppHandle,
     jobs: tauri::State<JobRegistry>,
-    prompt: String,
-    working_directory: String,
-) -> JobId {
-    crate::omnibar::ask_claude(app, jobs.inner().clone(), prompt, working_directory)
-}
-
-/// One turn, awaited: the Claude tab's reply box.
-#[cfg(desktop)]
-#[tauri::command]
-pub async fn claude_send(
+    approvals: tauri::State<crate::approvals::Approvals>,
     prompt: String,
     working_directory: String,
     session_id: Option<String>,
-) -> Result<crate::claude::ClaudeRun> {
-    crate::claude::send(prompt, working_directory, session_id).await
+) -> JobId {
+    crate::omnibar::ask_claude(
+        app,
+        jobs.inner().clone(),
+        approvals.inner().clone(),
+        prompt,
+        working_directory,
+        session_id,
+    )
 }
 
 #[cfg(desktop)]

@@ -1,9 +1,12 @@
-//! Claude Code, driven headless.
+//! Claude Code, driven headless, asking you before it acts.
 //!
-//! A turn is one `claude -p --output-format json` run in a workspace, the
-//! prompt written to its stdin so no shell ever parses it, and `--resume`
-//! continuing a session. Headless Claude Code declines any tool that needs
-//! approval, so from Relay it can read a workspace but not change it.
+//! A turn is one `claude -p` run in a workspace speaking stream-json: the
+//! prompt goes in as a JSON message on stdin, so no shell ever parses it, and
+//! `--resume` continues a session. With `--permission-prompt-tool stdio`,
+//! every tool Claude Code would otherwise have to ask about — an edit, a
+//! command — arrives here as a `can_use_tool` control request; the [`Host`]
+//! asks you (the attention stack's Allow and Deny) and the answer goes back
+//! on stdin. This is the control channel the Claude Agent SDKs use.
 //!
 //! Sessions are read from Claude Code's own transcripts
 //! (`~/.claude/projects/<folder>/<session>.jsonl`). That format is internal
@@ -12,6 +15,7 @@
 
 use std::{
     fs::File,
+    future::Future,
     io::{BufRead, BufReader},
     path::{Path, PathBuf},
     process::Stdio,
@@ -19,12 +23,16 @@ use std::{
 };
 
 use serde::Serialize;
-use serde_json::Value;
-use tokio::{io::AsyncWriteExt, process::Command};
+use serde_json::{json, Value};
+use tokio::{
+    io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader as AsyncBufReader},
+    process::Command,
+};
 
 use crate::error::{Error, Result};
 
-const TURN_TIMEOUT: Duration = Duration::from_secs(15 * 60);
+/// Includes the time spent waiting on you.
+const TURN_TIMEOUT: Duration = Duration::from_secs(60 * 60);
 const MAX_PROMPT_LENGTH: usize = 64_000;
 const SESSION_LIMIT: usize = 50;
 
@@ -34,6 +42,21 @@ pub struct ClaudeRun {
     pub session_id: String,
     pub response: String,
     pub cost_usd: Option<f64>,
+}
+
+/// A tool Claude Code wants to use, in words you can decide on.
+#[derive(Debug, PartialEq)]
+pub struct PermissionRequest {
+    pub tool: String,
+    /// "Run `npm test`", "Edit src/app.tsx".
+    pub summary: String,
+}
+
+/// Whoever runs the turn: shows what Claude is doing and answers its
+/// permission requests.
+pub trait Host: Send {
+    fn progress(&mut self, tool: &str);
+    fn approve(&mut self, request: PermissionRequest) -> impl Future<Output = bool> + Send;
 }
 
 #[derive(Debug, Serialize, PartialEq)]
@@ -98,11 +121,135 @@ fn valid_session_id(id: &str) -> bool {
     !id.is_empty() && id.len() <= 64 && id.chars().all(|c| c.is_ascii_hexdigit() || c == '-')
 }
 
-/// Runs one turn in `working_directory`, new or resuming `session_id`.
-pub async fn send(
+/// One line of Claude Code's stream-json output, as far as Relay cares.
+#[derive(Debug, PartialEq)]
+enum Event {
+    Permission {
+        request_id: String,
+        tool: String,
+        input: Value,
+    },
+    /// The assistant started using a tool.
+    Tool(String),
+    Done(std::result::Result<ClaudeRun, String>),
+    Other,
+}
+
+fn read_event(line: &str) -> Event {
+    let Ok(value) = serde_json::from_str::<Value>(line) else {
+        return Event::Other;
+    };
+    match value.get("type").and_then(Value::as_str) {
+        Some("control_request")
+            if value.pointer("/request/subtype").and_then(Value::as_str)
+                == Some("can_use_tool") =>
+        {
+            Event::Permission {
+                request_id: value
+                    .get("request_id")
+                    .and_then(Value::as_str)
+                    .unwrap_or_default()
+                    .to_owned(),
+                tool: value
+                    .pointer("/request/tool_name")
+                    .and_then(Value::as_str)
+                    .unwrap_or("a tool")
+                    .to_owned(),
+                input: value
+                    .pointer("/request/input")
+                    .cloned()
+                    .unwrap_or(Value::Null),
+            }
+        }
+        Some("assistant") => value
+            .pointer("/message/content")
+            .and_then(Value::as_array)
+            .and_then(|blocks| {
+                blocks
+                    .iter()
+                    .find(|b| b.get("type").and_then(Value::as_str) == Some("tool_use"))
+            })
+            .and_then(|block| block.get("name").and_then(Value::as_str))
+            .map_or(Event::Other, |name| Event::Tool(name.to_owned())),
+        Some("result") => Event::Done(read_result(&value)),
+        _ => Event::Other,
+    }
+}
+
+fn read_result(value: &Value) -> std::result::Result<ClaudeRun, String> {
+    let text = value.get("result").and_then(Value::as_str).unwrap_or("");
+    if value.get("is_error").and_then(Value::as_bool) == Some(true) {
+        return Err(if text.is_empty() {
+            "Claude Code could not finish the turn".to_owned()
+        } else {
+            text.to_owned()
+        });
+    }
+    let session_id = value
+        .get("session_id")
+        .and_then(Value::as_str)
+        .ok_or("Claude Code returned no session")?;
+    Ok(ClaudeRun {
+        session_id: session_id.to_owned(),
+        response: text.to_owned(),
+        cost_usd: value.get("total_cost_usd").and_then(Value::as_f64),
+    })
+}
+
+fn clip(text: &str, max: usize) -> String {
+    let text = text.split_whitespace().collect::<Vec<_>>().join(" ");
+    if text.chars().count() <= max {
+        return text;
+    }
+    format!(
+        "{}…",
+        text.chars().take(max - 1).collect::<String>().trim_end()
+    )
+}
+
+/// What a tool request would do, in a line short enough for a card.
+fn summarize_request(tool: &str, input: &Value) -> String {
+    let field = |name: &str| input.get(name).and_then(Value::as_str);
+    match (tool, field("command"), field("file_path"), field("url")) {
+        ("Bash" | "PowerShell", Some(command), _, _) => format!("Run `{}`", clip(command, 140)),
+        ("Write", _, Some(path), _) => format!("Write {path}"),
+        ("Edit" | "MultiEdit" | "NotebookEdit", _, Some(path), _) => format!("Edit {path}"),
+        (_, _, _, Some(url)) => format!("{tool} {}", clip(url, 140)),
+        _ => format!("Use {tool} · {}", clip(&input.to_string(), 120)),
+    }
+}
+
+/// The answer to a `can_use_tool` request, as the control protocol expects it.
+fn permission_reply(request_id: &str, allow: bool, input: &Value) -> String {
+    let decision = if allow {
+        json!({ "behavior": "allow", "updatedInput": input })
+    } else {
+        json!({ "behavior": "deny", "message": "Declined in Relay." })
+    };
+    json!({
+        "type": "control_response",
+        "response": { "subtype": "success", "request_id": request_id, "response": decision },
+    })
+    .to_string()
+}
+
+fn user_message(prompt: &str) -> String {
+    json!({
+        "type": "user",
+        "message": { "role": "user", "content": prompt },
+        "parent_tool_use_id": null,
+        "session_id": "",
+    })
+    .to_string()
+}
+
+/// Runs one turn in `working_directory`, new or resuming `session_id`,
+/// routing every permission request through `host`.
+pub async fn run(
     prompt: String,
     working_directory: String,
     session_id: Option<String>,
+    host: &mut impl Host,
 ) -> Result<ClaudeRun> {
     let prompt = prompt.trim().to_owned();
     if prompt.is_empty() {
@@ -116,7 +263,16 @@ pub async fn send(
         return Err(claude_error(format!("{working_directory} is not a folder")));
     }
     let mut command = Command::new(claude_executable());
-    command.args(["-p", "--output-format", "json"]);
+    command.args([
+        "-p",
+        "--input-format",
+        "stream-json",
+        "--output-format",
+        "stream-json",
+        "--verbose",
+        "--permission-prompt-tool",
+        "stdio",
+    ]);
     if let Some(id) = session_id.as_deref() {
         if !valid_session_id(id) {
             return Err(claude_error("That is not a Claude Code session id"));
@@ -135,47 +291,61 @@ pub async fn send(
                 "Could not start Claude Code. Install it (npm install -g @anthropic-ai/claude-code) and sign in once in a terminal: {error}"
             ))
         })?;
-    let mut stdin = child
-        .stdin
-        .take()
-        .ok_or_else(|| claude_error("Claude Code input is unavailable"))?;
-    stdin.write_all(prompt.as_bytes()).await?;
-    drop(stdin);
+    let (Some(mut stdin), Some(stdout), Some(mut stderr)) =
+        (child.stdin.take(), child.stdout.take(), child.stderr.take())
+    else {
+        return Err(claude_error("Claude Code's pipes are unavailable"));
+    };
+    // Drained alongside, or a chatty CLI would block on a full pipe.
+    let errors = tokio::spawn(async move {
+        let mut text = String::new();
+        let _ = stderr.read_to_string(&mut text).await;
+        text
+    });
 
-    let output = tokio::time::timeout(TURN_TIMEOUT, child.wait_with_output())
-        .await
-        .map_err(|_| claude_error("Claude Code took longer than 15 minutes"))??;
-    parse_result(&output.stdout).map_err(|error| {
-        // No result at all: the CLI failed before a turn began; stderr says why.
-        let stderr = String::from_utf8_lossy(&output.stderr);
-        match stderr.lines().find(|line| !line.trim().is_empty()) {
-            Some(line) if output.stdout.trim_ascii().is_empty() => claude_error(line.trim()),
-            _ => error,
+    stdin
+        .write_all(format!("{}\n", user_message(&prompt)).as_bytes())
+        .await?;
+    let mut lines = AsyncBufReader::new(stdout).lines();
+    let turn = async {
+        while let Some(line) = lines.next_line().await? {
+            match read_event(&line) {
+                Event::Permission {
+                    request_id,
+                    tool,
+                    input,
+                } => {
+                    let summary = summarize_request(&tool, &input);
+                    let allow = host.approve(PermissionRequest { tool, summary }).await;
+                    let reply = permission_reply(&request_id, allow, &input);
+                    stdin.write_all(format!("{reply}\n").as_bytes()).await?;
+                }
+                Event::Tool(name) => host.progress(&name),
+                Event::Done(result) => return Ok(Some(result)),
+                Event::Other => {}
+            }
         }
-    })
-}
+        Ok::<_, Error>(None)
+    };
+    let outcome = tokio::time::timeout(TURN_TIMEOUT, turn)
+        .await
+        .map_err(|_| claude_error("Claude Code took longer than an hour"))??;
+    // The turn is over: closing stdin lets the CLI exit.
+    drop(stdin);
+    let _ = tokio::time::timeout(Duration::from_secs(5), child.wait()).await;
 
-/// Reads the single result object `--output-format json` prints.
-fn parse_result(stdout: &[u8]) -> Result<ClaudeRun> {
-    let value: Value = serde_json::from_slice(stdout)
-        .map_err(|_| claude_error("Claude Code returned no result"))?;
-    let text = value.get("result").and_then(Value::as_str).unwrap_or("");
-    if value.get("is_error").and_then(Value::as_bool) == Some(true) {
-        return Err(claude_error(if text.is_empty() {
-            "Claude Code could not finish the turn"
-        } else {
-            text
-        }));
+    match outcome {
+        Some(result) => result.map_err(claude_error),
+        // No result at all: the CLI failed before a turn began; stderr says why.
+        None => {
+            let stderr = errors.await.unwrap_or_default();
+            let why = stderr
+                .lines()
+                .find(|line| !line.trim().is_empty())
+                .unwrap_or("Claude Code stopped without an answer");
+            Err(claude_error(why.trim()))
+        }
     }
-    let session_id = value
-        .get("session_id")
-        .and_then(Value::as_str)
-        .ok_or_else(|| claude_error("Claude Code returned no session"))?;
-    Ok(ClaudeRun {
-        session_id: session_id.to_owned(),
-        response: text.to_owned(),
-        cost_usd: value.get("total_cost_usd").and_then(Value::as_f64),
-    })
 }
 
 /// The text a user or assistant record carries, or None for tool traffic,
@@ -320,26 +490,84 @@ mod tests {
 
     #[test]
     fn a_result_carries_the_answer_session_and_cost() {
-        let run = parse_result(
-            br#"{"type":"result","subtype":"success","is_error":false,"result":"Hi","session_id":"0f3a-9c","total_cost_usd":0.012}"#,
-        )
-        .unwrap();
+        let event = read_event(
+            r#"{"type":"result","subtype":"success","is_error":false,"result":"Hi","session_id":"0f3a-9c","total_cost_usd":0.012}"#,
+        );
         assert_eq!(
-            run,
-            ClaudeRun {
+            event,
+            Event::Done(Ok(ClaudeRun {
                 session_id: "0f3a-9c".into(),
                 response: "Hi".into(),
                 cost_usd: Some(0.012),
-            }
+            }))
         );
     }
 
     #[test]
     fn an_error_result_says_why() {
-        let error =
-            parse_result(br#"{"is_error":true,"result":"Credit balance is too low"}"#).unwrap_err();
-        assert_eq!(error.to_string(), "Credit balance is too low");
-        assert!(parse_result(b"not json").is_err());
+        assert_eq!(
+            read_event(r#"{"type":"result","is_error":true,"result":"Credit balance is too low"}"#),
+            Event::Done(Err("Credit balance is too low".into()))
+        );
+        assert_eq!(read_event("not json"), Event::Other);
+    }
+
+    #[test]
+    fn a_permission_request_is_read_and_answered_in_the_sdk_shape() {
+        let event = read_event(
+            r#"{"type":"control_request","request_id":"r7","request":{"subtype":"can_use_tool","tool_name":"Bash","input":{"command":"npm test"}}}"#,
+        );
+        let Event::Permission {
+            request_id,
+            tool,
+            input,
+        } = event
+        else {
+            panic!("expected a permission request, got {event:?}");
+        };
+        assert_eq!((request_id.as_str(), tool.as_str()), ("r7", "Bash"));
+        assert_eq!(summarize_request(&tool, &input), "Run `npm test`");
+
+        let allow: Value = serde_json::from_str(&permission_reply("r7", true, &input)).unwrap();
+        assert_eq!(allow["type"], "control_response");
+        assert_eq!(allow["response"]["request_id"], "r7");
+        assert_eq!(allow["response"]["response"]["behavior"], "allow");
+        assert_eq!(allow["response"]["response"]["updatedInput"], input);
+        let deny: Value = serde_json::from_str(&permission_reply("r7", false, &input)).unwrap();
+        assert_eq!(deny["response"]["response"]["behavior"], "deny");
+    }
+
+    #[test]
+    fn requests_read_as_what_they_would_do() {
+        let input = |json: &str| serde_json::from_str::<Value>(json).unwrap();
+        assert_eq!(
+            summarize_request("Edit", &input(r#"{"file_path":"src/app.tsx"}"#)),
+            "Edit src/app.tsx"
+        );
+        assert_eq!(
+            summarize_request("WebFetch", &input(r#"{"url":"https://example.com"}"#)),
+            "WebFetch https://example.com"
+        );
+        assert!(summarize_request("mcp__x__y", &input(r#"{"a":1}"#)).starts_with("Use mcp__x__y"));
+        // Other traffic is not mistaken for a request.
+        assert_eq!(
+            read_event(r#"{"type":"control_response","response":{"subtype":"success"}}"#),
+            Event::Other
+        );
+        assert_eq!(
+            read_event(
+                r#"{"type":"assistant","message":{"content":[{"type":"text","text":"x"},{"type":"tool_use","name":"Read"}]}}"#
+            ),
+            Event::Tool("Read".into())
+        );
+    }
+
+    #[test]
+    fn the_prompt_travels_as_json_not_as_a_command_line() {
+        let line = user_message("say \"hi\"\n& del *");
+        let value: Value = serde_json::from_str(&line).unwrap();
+        assert_eq!(value["message"]["content"], "say \"hi\"\n& del *");
+        assert!(!line.contains('\n'));
     }
 
     #[test]

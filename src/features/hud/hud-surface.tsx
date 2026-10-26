@@ -102,8 +102,7 @@ export class HudState {
 
   runAction(action: NotificationAction, n: NotificationPayload): void {
     this.dismiss(n.notificationId);
-    if (action.id === 'open') void this.tauri.openUrl(action.url);
-    if (action.id === 'cancel') void this.tauri.cancelJob(n.jobId);
+    void this.tauri.runNotificationAction(action, n.jobId);
   }
 
   markQuietRead(): void {

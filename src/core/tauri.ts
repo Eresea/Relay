@@ -1,6 +1,6 @@
 import type { LazyStore } from '@tauri-apps/plugin-store';
 
-import type { AppEvent, NotificationRecord, UpdateSnapshot } from './events';
+import type { AppEvent, NotificationAction, NotificationRecord, UpdateSnapshot } from './events';
 import type { ModuleInfo } from './modules';
 
 /**
@@ -216,24 +216,31 @@ export class TauriBridge {
     return result;
   }
 
-  /** Starts a Claude Code session as a background job; the answer arrives as a notification. */
-  async claudeAsk(prompt: string, workingDirectory: string): Promise<void> {
-    await this.invoke('claude_ask', { prompt, workingDirectory });
-  }
-
-  /** One Claude Code turn, awaited; resumes `sessionId` when given. */
-  async claudeSend(
+  /**
+   * Starts a Claude Code turn as a background job, new or resuming
+   * `sessionId`, and returns the job id. Permission requests and the answer
+   * arrive as notifications.
+   */
+  async claudeAsk(
     prompt: string,
     workingDirectory: string,
-    sessionId: string | null,
-  ): Promise<ClaudeRun> {
-    const result = await this.invoke<ClaudeRun>('claude_send', {
-      prompt,
-      workingDirectory,
-      sessionId,
-    });
-    if (!result) throw new Error('Claude Code returned no result.');
-    return result;
+    sessionId: string | null = null,
+  ): Promise<string | null> {
+    return this.invoke<string>('claude_ask', { prompt, workingDirectory, sessionId });
+  }
+
+  /** Answers a job's question: Allow or Deny on a notification card. */
+  async approvalAnswer(request: string, allow: boolean): Promise<void> {
+    await this.invoke('approval_answer', { request, allow });
+  }
+
+  /** Runs a notification's action, from whichever surface showed it. */
+  async runNotificationAction(action: NotificationAction, jobId: string): Promise<void> {
+    if (action.id === 'open') await this.openUrl(action.url);
+    if (action.id === 'cancel') await this.cancelJob(jobId);
+    if (action.id === 'allow' || action.id === 'deny') {
+      await this.approvalAnswer(action.request, action.id === 'allow');
+    }
   }
 
   async claudeListSessions(): Promise<readonly ClaudeSessionSummary[]> {
@@ -1491,12 +1498,6 @@ export type CoreCommand =
   | { readonly id: 'quit' };
 
 /** Mirrors src-tauri/src/claude.rs. */
-export interface ClaudeRun {
-  readonly sessionId: string;
-  readonly response: string;
-  readonly costUsd: number | null;
-}
-
 export interface ClaudeSessionSummary {
   readonly id: string;
   readonly title: string;

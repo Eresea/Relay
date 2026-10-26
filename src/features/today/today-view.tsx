@@ -65,8 +65,7 @@ class TodayState {
 
   runAction(action: NotificationAction, item: TodayItem): void {
     this.markRead([item.id]);
-    if (action.id === 'open') void this.tauri.openUrl(action.url);
-    if (action.id === 'cancel') void this.tauri.cancelJob(item.jobId);
+    void this.tauri.runNotificationAction(action, item.jobId);
   }
 
   dismiss(item: TodayItem): void {
@@ -248,7 +247,7 @@ export default function Today() {
                   <Button
                     key={action.id}
                     size="sm"
-                    variant={action.id === 'open' ? 'default' : 'outline'}
+                    variant={action.id === 'open' || action.id === 'allow' ? 'default' : 'outline'}
                     onClick={() => s.runAction(action, selected)}
                   >
                     {action.label}

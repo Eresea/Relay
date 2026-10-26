@@ -20,6 +20,9 @@ pub enum Error {
         permission: crate::modules::Permission,
     },
 
+    #[error("that question was already answered or timed out")]
+    UnknownApproval(String),
+
     #[error("no module `{0}`")]
     UnknownModule(String),
 
