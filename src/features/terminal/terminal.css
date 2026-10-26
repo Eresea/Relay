@@ -1,0 +1,106 @@
+.terminal {
+  & {
+    display: flex;
+    flex-direction: column;
+    block-size: 100%;
+    min-block-size: 0;
+    background: var(--bg-app);
+  }
+
+  .terminal-bar {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    flex: none;
+    block-size: var(--titlebar-height);
+    padding-inline: var(--space-4);
+    border-block-end: 1px solid var(--border-subtle);
+  }
+
+  .sessions {
+    display: flex;
+    align-items: center;
+    gap: var(--space-1);
+    min-inline-size: 0;
+    overflow-x: auto;
+  }
+
+  .session {
+    display: flex;
+    align-items: center;
+    flex: none;
+    block-size: var(--control-sm);
+    padding-inline: var(--space-1);
+    border-radius: var(--radius-sm);
+    color: var(--text-subtle);
+    font-size: var(--text-12);
+  }
+
+  .session:hover {
+    color: var(--text-body);
+    background: var(--tint-hover);
+  }
+
+  .session.on {
+    color: var(--text-strong);
+    background: var(--tint-active);
+  }
+
+  .session.exited .session-open {
+    text-decoration: line-through;
+    text-decoration-color: var(--text-subtle);
+  }
+
+  .session-open {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+    padding-inline: var(--space-3);
+    block-size: 100%;
+    white-space: nowrap;
+  }
+
+  .session-close,
+  .new {
+    display: grid;
+    place-items: center;
+    inline-size: 22px;
+    block-size: 22px;
+    border-radius: var(--radius-sm);
+    color: var(--text-subtle);
+  }
+
+  .session-close:hover,
+  .new:hover {
+    color: var(--text-body);
+    background: var(--tint-hover);
+  }
+
+  .open-in {
+    margin-inline-start: auto;
+    block-size: 26px;
+    padding-inline: var(--space-3);
+    border: 1px solid var(--border-default);
+    border-radius: var(--radius-sm);
+    background: var(--bg-app);
+    color: var(--text-body);
+    font-size: var(--text-12);
+  }
+
+  /* xterm measures its parent; padding lives here, outside its grid. */
+  .surface {
+    flex: 1;
+    min-block-size: 0;
+    padding: var(--space-3) var(--space-4);
+  }
+
+  .terminal-host {
+    block-size: 100%;
+  }
+
+  .empty {
+    padding: var(--space-7) var(--space-6);
+    font-size: var(--text-12);
+    color: var(--text-subtle);
+  }
+}

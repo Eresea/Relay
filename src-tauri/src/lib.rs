@@ -31,6 +31,8 @@ mod runtime;
 #[cfg(desktop)]
 mod shortcuts;
 #[cfg(desktop)]
+mod terminal;
+#[cfg(desktop)]
 mod tray;
 #[cfg(desktop)]
 mod updates;
@@ -122,6 +124,7 @@ pub fn run() {
         builder = builder
             .manage(updates::UpdateManager::default())
             .manage(codex::CodexState::default())
+            .manage(terminal::Terminals::default())
             .manage(approvals::Approvals::default())
             .plugin(tauri_plugin_updater::Builder::new().build())
             .invoke_handler(gated(tauri::generate_handler![
@@ -268,6 +271,10 @@ pub fn run() {
                 commands::codex_read_thread,
                 commands::codex_older_turns,
                 commands::claude_ask,
+                terminal::terminal_open,
+                terminal::terminal_write,
+                terminal::terminal_resize,
+                terminal::terminal_close,
                 commands::claude_list_sessions,
                 commands::claude_read_session,
                 commands::update_status,

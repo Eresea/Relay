@@ -50,6 +50,14 @@ export function registerDefaultCommands(): () => void {
       run: () => tauri.runCoreCommand({ id: 'open_agents' }),
     },
     {
+      id: 'relay.terminal.open',
+      title: 'Open terminal',
+      group: 'Relay',
+      icon: 'terminal',
+      keywords: ['terminal', 'shell', 'powershell', 'console', 'command line', 'pty'],
+      run: () => tauri.runCoreCommand({ id: 'open_terminal' }),
+    },
+    {
       id: 'relay.theme.toggle',
       title: 'Toggle theme',
       group: 'Appearance',

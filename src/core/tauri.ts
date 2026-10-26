@@ -567,6 +567,35 @@ export class TauriBridge {
     await this.invoke('vault_passkey_remove');
   }
 
+  /**
+   * Starts a shell in `cwd` (home when null) in a pseudo-terminal sized
+   * `cols` × `rows`. Its output, and last its exit, arrive at `onOutput`.
+   */
+  async terminalOpen(
+    cwd: string | null,
+    cols: number,
+    rows: number,
+    onOutput: (output: TerminalOutput) => void,
+  ): Promise<TerminalInfo | null> {
+    if (!this.available) return null;
+    const { Channel } = await import('@tauri-apps/api/core');
+    const channel = new Channel<TerminalOutput>();
+    channel.onmessage = onOutput;
+    return this.invoke<TerminalInfo>('terminal_open', { cwd, cols, rows, onOutput: channel });
+  }
+
+  async terminalWrite(id: number, data: string): Promise<void> {
+    await this.invoke('terminal_write', { id, data });
+  }
+
+  async terminalResize(id: number, cols: number, rows: number): Promise<void> {
+    await this.invoke('terminal_resize', { id, cols, rows });
+  }
+
+  async terminalClose(id: number): Promise<void> {
+    await this.invoke('terminal_close', { id });
+  }
+
   /** Writes an encrypted copy of the vault to disk and returns the path. */
   async vaultExport(): Promise<string> {
     return (await this.invoke<string>('vault_export')) ?? '';
@@ -1534,6 +1563,7 @@ export type CoreCommand =
   | { readonly id: 'open_github' }
   | { readonly id: 'open_linear' }
   | { readonly id: 'open_runtime' }
+  | { readonly id: 'open_terminal' }
   | { readonly id: 'open_agents' }
   | { readonly id: 'open_agent_thread'; readonly args: { readonly threadId: string } }
   | { readonly id: 'open_claude'; readonly args: { readonly sessionId: string | null } }
@@ -1715,6 +1745,18 @@ export interface CodexRun {
   readonly threadId: string;
   readonly response: string;
 }
+
+/** Mirrors src-tauri/src/terminal.rs. */
+export type TerminalOutput =
+  | { readonly kind: 'data'; readonly data: string }
+  | { readonly kind: 'exit'; readonly code: number | null };
+
+export interface TerminalInfo {
+  readonly id: number;
+  readonly shell: string;
+  readonly cwd: string;
+}
+
 /** Mirrors src-tauri/src/vault_passkey.rs. */
 export interface VaultPasskeyStatus {
   /** Windows Hello is set up on this device. */

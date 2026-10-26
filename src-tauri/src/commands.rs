@@ -87,6 +87,7 @@ pub enum CoreCommand {
     OpenGithub,
     OpenLinear,
     OpenRuntime,
+    OpenTerminal,
     OpenAgents,
     OpenAgentThread(OpenAgentThreadArgs),
     OpenClaude(OpenClaudeArgs),
@@ -134,6 +135,11 @@ pub fn run_core_command(app: AppHandle, command: CoreCommand) -> Result<()> {
         CoreCommand::OpenLinear => {
             overlay::show_main(&app)?;
             app.emit(AppEvent::OpenLinearRequested);
+            Ok(())
+        }
+        CoreCommand::OpenTerminal => {
+            overlay::show_main(&app)?;
+            app.emit(AppEvent::OpenTerminalRequested);
             Ok(())
         }
         CoreCommand::OpenRuntime => {
@@ -235,6 +241,7 @@ pub fn vault_lock(vault: tauri::State<VaultState>) -> Result<()> {
 pub fn generate_password(options: PasswordOptions) -> Result<String> {
     vault::generate_password(&options)
 }
+
 #[tauri::command]
 pub fn vault_passkey_status(app: AppHandle) -> Result<crate::vault_passkey::PasskeyStatus> {
     crate::vault_passkey::status(&app, &crate::vault_passkey::VAULT_HELLO)

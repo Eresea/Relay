@@ -26,6 +26,7 @@ const Agents = lazy(() => import('@/features/agents/agents'));
 const Linear = lazy(() => import('@/features/linear/linear'));
 const Vault = lazy(() => import('@/features/vault/vault'));
 const Runtime = lazy(() => import('@/features/runtime/runtime'));
+const Terminal = lazy(() => import('@/features/terminal/terminal'));
 const Projects = lazy(() => import('@/features/projects/projects'));
 const Modules = lazy(() => import('@/features/modules/modules'));
 
@@ -97,6 +98,7 @@ export class HomeState {
         if (event.type === 'openSettingsRequested') this.openSettings();
         if (event.type === 'openVaultRequested') this.open('vault');
         if (event.type === 'openRuntimeRequested') this.open('runtime');
+        if (event.type === 'openTerminalRequested') this.open('terminal');
         if (event.type === 'openAgentsRequested') this.open('agents');
         if (event.type === 'openAgentThreadRequested') this.openThread(event.threadId);
         if (event.type === 'openClaudeRequested') {
@@ -453,6 +455,8 @@ export default function Home() {
               />
             ) : view === 'vault' ? (
               <Vault />
+            ) : view === 'terminal' ? (
+              <Terminal />
             ) : view === 'runtime' ? (
               <Runtime />
             ) : (

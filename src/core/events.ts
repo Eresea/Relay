@@ -53,6 +53,7 @@ export type AppEvent =
   | { readonly type: 'openGithubRequested' }
   | { readonly type: 'openLinearRequested' }
   | { readonly type: 'openRuntimeRequested' }
+  | { readonly type: 'openTerminalRequested' }
   | { readonly type: 'openAgentsRequested' }
   | { readonly type: 'openAgentThreadRequested'; readonly threadId: string }
   | { readonly type: 'openClaudeRequested'; readonly sessionId: string | null }

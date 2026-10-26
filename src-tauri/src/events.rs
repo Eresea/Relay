@@ -99,6 +99,9 @@ pub enum AppEvent {
     /// The "Runtime" command was run from another surface.
     OpenRuntimeRequested,
 
+    /// The "Open terminal" command was run from another surface.
+    OpenTerminalRequested,
+
     /// The "Agent threads" command was run from another surface.
     OpenAgentsRequested,
 
@@ -362,6 +365,12 @@ mod tests {
         })
         .unwrap();
         assert_eq!(json, r#"{"type":"openClaudeRequested","sessionId":"0f3a"}"#);
+    }
+
+    #[test]
+    fn open_terminal_requested_is_a_bare_tag() {
+        let json = serde_json::to_string(&AppEvent::OpenTerminalRequested).unwrap();
+        assert_eq!(json, r#"{"type":"openTerminalRequested"}"#);
     }
 
     #[test]
