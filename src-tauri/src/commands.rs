@@ -280,7 +280,6 @@ pub async fn vault_passkey_remove(app: AppHandle) -> Result<()> {
     with_hello(move || crate::vault_passkey::remove(&app, &crate::vault_passkey::VAULT_HELLO)).await
 }
 
-
 /// Adds a new entry to the unlocked vault and persists it immediately.
 #[tauri::command]
 pub fn vault_add_entry(

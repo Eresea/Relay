@@ -1767,7 +1767,6 @@ export interface VaultPasskeyStatus {
   readonly current: boolean;
 }
 
-
 export interface CodexThreadSummary {
   readonly id: string;
   readonly name: string | null;
