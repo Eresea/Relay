@@ -22,6 +22,49 @@ pub struct MailNotification {
     pub message_id: String,
     pub from: String,
     pub subject: String,
+    pub snippet: String,
+}
+
+/// Longest preview a notification carries: enough to know what a mail is
+/// about, short enough for a card.
+const PREVIEW_CHARS: usize = 200;
+
+impl MailNotification {
+    /// Who sent it, as a person reads it: `Luca Ferri` from
+    /// `"Luca Ferri" <luca@example.com>`, the address when there is no name.
+    pub fn sender(&self) -> String {
+        let from = self.from.trim();
+        match from.rsplit_once('<') {
+            Some((name, address)) => {
+                let name = name.trim().trim_matches('"').trim();
+                if name.is_empty() {
+                    address.trim_end_matches('>').trim().to_owned()
+                } else {
+                    name.to_owned()
+                }
+            }
+            None => from.to_owned(),
+        }
+    }
+
+    /// The subject, and under it the start of the message.
+    pub fn detail(&self) -> String {
+        let subject = if self.subject.trim().is_empty() {
+            "(no subject)"
+        } else {
+            self.subject.trim()
+        };
+        if self.snippet.is_empty() {
+            return subject.to_owned();
+        }
+        let preview: String = self.snippet.chars().take(PREVIEW_CHARS).collect();
+        let ellipsis = if self.snippet.chars().count() > PREVIEW_CHARS {
+            "…"
+        } else {
+            ""
+        };
+        format!("{subject}\n{}{ellipsis}", preview.trim_end())
+    }
 }
 
 impl From<&MessageMeta> for MailNotification {
@@ -30,6 +73,7 @@ impl From<&MessageMeta> for MailNotification {
             message_id: message.id.clone(),
             from: message.from.clone(),
             subject: message.subject.clone(),
+            snippet: message.snippet.clone(),
         }
     }
 }
@@ -129,6 +173,7 @@ mod tests {
             label_ids: label_ids.iter().map(|s| s.to_string()).collect(),
             from: from.into(),
             subject: subject.into(),
+            snippet: String::new(),
         }
     }
 
@@ -322,5 +367,52 @@ mod tests {
 
         assert_eq!(notifications.len(), 1);
         assert_eq!(notifications[0].subject, "Build failed");
+    }
+
+    #[test]
+    fn a_notification_previews_the_message_under_its_subject() {
+        let mut mail = MailNotification {
+            message_id: "m".into(),
+            from: "Luca Ferri".into(),
+            subject: "Updater keys".into(),
+            snippet: "Can we rotate the signing key before Monday?".into(),
+        };
+        assert_eq!(
+            mail.detail(),
+            "Updater keys
+Can we rotate the signing key before Monday?"
+        );
+
+        mail.snippet = "a".repeat(PREVIEW_CHARS + 20);
+        assert!(mail.detail().ends_with('…'));
+        assert_eq!(
+            mail.detail().lines().nth(1).unwrap().chars().count(),
+            PREVIEW_CHARS + 1
+        );
+
+        // A connection made before previews existed has no snippet.
+        mail.snippet.clear();
+        mail.subject = "  ".into();
+        assert_eq!(mail.detail(), "(no subject)");
+    }
+
+    #[test]
+    fn the_sender_reads_as_a_name() {
+        let from = |from: &str| MailNotification {
+            message_id: "m".into(),
+            from: from.into(),
+            subject: String::new(),
+            snippet: String::new(),
+        };
+        assert_eq!(
+            from("\"Luca Ferri\" <luca@example.com>").sender(),
+            "Luca Ferri"
+        );
+        assert_eq!(from("Luca Ferri <luca@example.com>").sender(), "Luca Ferri");
+        assert_eq!(
+            from("<noreply@example.com>").sender(),
+            "noreply@example.com"
+        );
+        assert_eq!(from("noreply@example.com").sender(), "noreply@example.com");
     }
 }

@@ -180,7 +180,7 @@ mod tests {
         assert!(url.contains("state=state-abc"));
         assert!(url.contains("code_challenge_method=S256"));
         assert!(url.contains(&format!("code_challenge={}", pkce.challenge)));
-        assert!(url.contains("gmail.metadata"));
+        assert!(url.contains("gmail.readonly"));
     }
 
     #[test]

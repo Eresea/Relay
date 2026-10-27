@@ -349,11 +349,13 @@ way `jobs/` is, because it has four fairly separate jobs of its own:
 - `api.rs` — the Gmail/OAuth HTTP surface behind a `GoogleApi` trait, real
   (`HttpGoogleApi`, `reqwest`) and fake implementations, the same seam
   `jobs.rs` uses `EventSink`/`FakeSink` for. The connector requests
-  `gmail.metadata` — not the broader `gmail.readonly` — which is enough to
-  read headers and labels for every method it calls (including
-  `history.list`) while making a message body or attachment impossible to
-  fetch even by a bug: the least-privilege scope that can still show a real
-  sender and subject.
+  `gmail.readonly`. It started on `gmail.metadata`, which reads headers and
+  labels but withholds even Gmail's snippet, so a notification could only
+  show a sender and subject; previews need the snippet. It still asks for
+  no more than headers, labels and that snippet (`format=metadata`), never a
+  body or attachment, and read-only cannot send, change or delete mail.
+  Connections made under `gmail.metadata` keep working without previews
+  until they are reconnected.
 - `poll.rs` — turns a stored `historyId` plus one `history.list` call into
   the small list of messages worth notifying about. The first poll after
   connecting has no `historyId` yet, so it only establishes a baseline
@@ -370,7 +372,8 @@ way `jobs/` is, because it has four fairly separate jobs of its own:
 
 The polling job itself is one of `jobs::spawn`'s first real callers: a loop
 that checkpoints, polls, reports each match as `AppEvent::Notification`
-(sender in the title, subject in the detail, never a body), sleeps, and
+(sender's name in the title, subject and snippet in the detail, never a
+body), sleeps, and
 repeats — cancelled the same cooperative way any other job is, on
 disconnect.
 

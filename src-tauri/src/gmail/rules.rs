@@ -93,6 +93,7 @@ mod tests {
             label_ids: label_ids.iter().map(|s| s.to_string()).collect(),
             from: from.into(),
             subject: subject.into(),
+            snippet: String::new(),
         }
     }
 

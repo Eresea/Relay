@@ -7,10 +7,11 @@
 //!   Pub/Sub subscription and a publicly reachable HTTPS endpoint, neither of
 //!   which a local desktop app has. Polling on an interval through the
 //!   existing `jobs` pipeline is the only option available here.
-//! - **Not a full mailbox reader.** The connector only ever asks for message
-//!   headers and Gmail labels (`gmail.metadata` scope — see `api::SCOPE`),
-//!   never a body or attachment, and only ever shows sender + subject in a
-//!   notification.
+//! - **Not a full mailbox reader.** It reads with `gmail.readonly` (see
+//!   `api::SCOPE`) but only ever asks for headers, labels and Gmail's short
+//!   snippet of each new message, never a body or attachment, and shows the
+//!   sender, the subject and that snippet in a notification. Read-only: it
+//!   cannot send, change or delete mail.
 //! - **Not gated behind a master password.** Unlike the password vault, this
 //!   has to keep working with no window open and nobody around to unlock it.
 //!   See `secret.rs` for how the refresh token is still encrypted at rest
@@ -663,8 +664,8 @@ async fn poll_cycle<S: EventSink>(
     for notification in &notifications {
         sink.report_notification(
             NotificationStatus::Done,
-            notification.from.clone(),
-            Some(notification.subject.clone()),
+            notification.sender(),
+            Some(notification.detail()),
             None,
             NotificationOptions {
                 notification_id: format!("gmail:{}", notification.message_id),

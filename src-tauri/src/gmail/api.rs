@@ -19,12 +19,12 @@ const TOKEN_ENDPOINT: &str = "https://oauth2.googleapis.com/token";
 const REVOKE_ENDPOINT: &str = "https://oauth2.googleapis.com/revoke";
 const GMAIL_API_BASE: &str = "https://gmail.googleapis.com/gmail/v1";
 
-/// The least-privileged scope that still lets the connector do its job: read
-/// message headers and labels to decide whether a new message is important
-/// and to show its sender/subject, without ever being able to fetch a body
-/// or attachment. See docs/ARCHITECTURE.md's Gmail connector section for why
-/// this was chosen over the broader `gmail.readonly`.
-pub const SCOPE: &str = "https://www.googleapis.com/auth/gmail.metadata";
+/// Read-only mail access: headers and labels to decide whether a new message
+/// is important, and the message's snippet to preview it. `gmail.metadata`
+/// would forbid the snippet, so a notification could only ever show a sender
+/// and subject. Read-only still cannot send, change or delete anything. See
+/// docs/ARCHITECTURE.md's Gmail connector section.
+pub const SCOPE: &str = "https://www.googleapis.com/auth/gmail.readonly";
 
 pub struct ExchangeCodeParams<'a> {
     pub client_id: &'a str,
@@ -69,6 +69,51 @@ pub struct MessageMeta {
     pub label_ids: Vec<String>,
     pub from: String,
     pub subject: String,
+    /// Gmail's own short preview of the text, decoded; empty if it sent none.
+    pub snippet: String,
+}
+
+/// Gmail escapes its snippets as HTML (`&#39;`, `&amp;`); a notification
+/// is plain text, so they are decoded here and nowhere else.
+pub fn decode_snippet(raw: &str) -> String {
+    let mut out = String::with_capacity(raw.len());
+    let mut rest = raw;
+    while let Some(start) = rest.find('&') {
+        out.push_str(&rest[..start]);
+        let after = &rest[start..];
+        let Some(end) = after.find(';').filter(|&end| end <= 10) else {
+            out.push('&');
+            rest = &after[1..];
+            continue;
+        };
+        let entity = &after[1..end];
+        let decoded = match entity {
+            "amp" => Some('&'),
+            "lt" => Some('<'),
+            "gt" => Some('>'),
+            "quot" => Some('"'),
+            "apos" => Some('\''),
+            "nbsp" => Some(' '),
+            _ => entity
+                .strip_prefix("#x")
+                .or_else(|| entity.strip_prefix("#X"))
+                .and_then(|hex| u32::from_str_radix(hex, 16).ok())
+                .or_else(|| entity.strip_prefix('#').and_then(|dec| dec.parse().ok()))
+                .and_then(char::from_u32),
+        };
+        match decoded {
+            Some(c) => {
+                out.push(c);
+                rest = &after[end + 1..];
+            }
+            None => {
+                out.push('&');
+                rest = &after[1..];
+            }
+        }
+    }
+    out.push_str(rest);
+    out.split_whitespace().collect::<Vec<_>>().join(" ")
 }
 
 #[async_trait]
@@ -248,6 +293,9 @@ impl GoogleApi for HttpGoogleApi {
             label_ids: Vec<String>,
             #[serde(default)]
             payload: WirePayload,
+            /// Present with `gmail.readonly`; withheld under `gmail.metadata`.
+            #[serde(default)]
+            snippet: String,
         }
         #[derive(Deserialize, Default)]
         struct WirePayload {
@@ -286,6 +334,7 @@ impl GoogleApi for HttpGoogleApi {
             label_ids: wire.label_ids,
             from: header("From"),
             subject: header("Subject"),
+            snippet: decode_snippet(&wire.snippet),
         })
     }
 }
@@ -438,5 +487,24 @@ mod token_error_tests {
             token_error(reqwest::StatusCode::BAD_GATEWAY, "not json"),
             Error::GmailApi(_)
         ));
+    }
+}
+
+#[cfg(test)]
+mod snippet_tests {
+    use super::decode_snippet;
+
+    #[test]
+    fn gmail_snippets_read_as_plain_text() {
+        assert_eq!(
+            decode_snippet("Can&#39;t make it &amp; won&#x27;t &lt;sorry&gt; &quot;Luca&quot;"),
+            "Can't make it & won't <sorry> \"Luca\""
+        );
+        // Not an entity, or one Relay does not know: left as it was.
+        assert_eq!(
+            decode_snippet("R&D; AT&T &bogus; 5 & 6"),
+            "R&D; AT&T &bogus; 5 & 6"
+        );
+        assert_eq!(decode_snippet("  two\u{a0}&nbsp;spaces  \n"), "two spaces");
     }
 }

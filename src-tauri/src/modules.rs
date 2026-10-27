@@ -265,7 +265,7 @@ pub static BUILT_IN: &[Manifest] = &[
         id: "gmail",
         name: "Mail",
         summary: "Gmail",
-        description: "New mail in your Gmail inbox, reported to Today and the attention stack.",
+        description: "New mail in your Gmail inbox, with a preview, reported to Today and the attention stack. Read-only: it cannot send, change or delete mail.",
         icon: "mail",
         hue: "mail",
         kind: "native",
@@ -275,7 +275,7 @@ pub static BUILT_IN: &[Manifest] = &[
         commands: &[],
         items: true,
         signals: true,
-        needs: &[need(Mail, "read your inbox"), need(Network, "gmail.googleapis.com")],
+        needs: &[need(Mail, "read your inbox, read-only"), need(Network, "gmail.googleapis.com")],
         invokes: &[("gmail_", Mail)],
     },
     Manifest {
