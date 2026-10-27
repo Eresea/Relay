@@ -9,6 +9,14 @@
         "dev"
       ],
       "port": 1420
+    },
+    {
+      "name": "web",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": [
+        "start"
+      ],
+      "port": 1420
     }
   ]
 }
