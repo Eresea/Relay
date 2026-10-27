@@ -17,6 +17,7 @@ import { inject } from '@/lib/inject';
 import { computed, signal, useSignals } from '@/lib/signals';
 import { cn, vars } from '@/lib/utils';
 import { Icon } from '@/shared/icon';
+import { keycaps } from '@/features/settings/shortcuts';
 import { Kbd } from '@/shared/kbd';
 import { loadChoices } from '@/features/agents/chat';
 
@@ -68,6 +69,8 @@ export class OmnibarState {
   readonly query = signal('');
   readonly activeIndex = signal(0);
   readonly recentIds = signal<readonly string[]>([]);
+  /** The attention shortcut as keycaps, as Settings has it bound. */
+  readonly attentionKeys = signal<readonly string[]>(['Ctrl', 'Alt', 'Space']);
   readonly running = signal(false);
   readonly runError = signal(false);
   readonly loadingThreads = signal(false);
@@ -131,6 +134,13 @@ export class OmnibarState {
   start(): () => void {
     let unlisten: (() => void) | null = null;
     let disposed = false;
+    void this.tauri
+      .shortcutsList()
+      .then((list) => {
+        const attention = list.find((shortcut) => shortcut.action === 'attention');
+        if (attention) this.attentionKeys.set(keycaps(attention.accelerator));
+      })
+      .catch(() => undefined);
     void this.tauri
       .onWindowFocusChanged((focused) => {
         if (focused) {
@@ -816,7 +826,7 @@ export default function CommandPalette() {
         )}
         <span className="spacer" />
         <span>Activity</span>
-        <Kbd keys={['Ctrl', 'Alt', 'Space']} />
+        <Kbd keys={omni.attentionKeys()} />
         <span>Close</span>
         <Kbd keys={['Esc']} />
       </div>

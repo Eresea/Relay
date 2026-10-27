@@ -93,9 +93,11 @@
     border-inline-end: 1px solid var(--border-subtle);
   }
 
+  /* One row; more sources scroll sideways rather than push the list down. */
   .filters {
     display: flex;
-    flex-wrap: wrap;
+    overflow-x: auto;
+    scrollbar-width: none;
     gap: var(--space-2);
     flex: none;
     padding: var(--space-5) var(--space-6);
