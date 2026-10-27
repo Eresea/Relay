@@ -454,8 +454,18 @@ pub fn run() {
                 tauri::WindowEvent::Moved(position) if window.label() == overlay::HUD => {
                     overlay::hud_moved(window.app_handle(), *position);
                 }
+                // Pinned web apps are windows laid over the main window's
+                // tabs: they move with it and leave with it.
+                tauri::WindowEvent::Moved(_) | tauri::WindowEvent::Resized(_)
+                    if window.label() == overlay::MAIN =>
+                {
+                    webapps::follow_main(window.app_handle());
+                }
                 tauri::WindowEvent::CloseRequested { api, .. } => {
                     api.prevent_close();
+                    if window.label() == overlay::MAIN {
+                        webapps::hide_all(window.app_handle());
+                    }
                     let _ = window.hide();
                 }
                 _ => {}

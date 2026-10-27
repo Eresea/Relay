@@ -1,20 +1,25 @@
 //! Pinned web apps: any URL as a module of its own, with a Deck tab.
 //!
-//! Each app runs in a child webview of the main window, placed over the
-//! rectangle its tab leaves for it. Every app gets its own data directory, so
-//! its cookies and logins are its own, apart from Relay and from every other
-//! app. A webview exists only while its tab is open: closing the tab destroys
-//! it, so an app you are not using costs no memory.
+//! Each app runs in a borderless window of its own, owned by the main window
+//! and laid exactly over the rectangle its tab leaves for it; when the main
+//! window moves, resizes or hides, the app follows. Not a child webview of
+//! the main window: that needs Tauri's `unstable` feature, which turns every
+//! window's webview into a child webview and leaves the transparent overlay
+//! windows blank on Windows. Every app gets its own data directory, so its
+//! cookies and logins are its own, apart from Relay and from every other app.
+//! A window exists only while its tab is open: closing the tab destroys it,
+//! so an app you are not using costs no memory.
 //!
 //! A pinned page is someone else's code. It holds no Tauri capability (none
 //! lists a remote URL), and the IPC gate in `lib.rs` refuses every call from
 //! a `webapp-` webview besides, so a page can never drive the core.
 
+use std::collections::HashMap;
 use std::path::PathBuf;
+use std::sync::{Mutex, PoisonError};
 
 use serde::{Deserialize, Serialize};
-use tauri::webview::WebviewBuilder;
-use tauri::{AppHandle, LogicalPosition, LogicalSize, Manager, WebviewUrl};
+use tauri::{AppHandle, Manager, PhysicalPosition, PhysicalSize, WebviewUrl, WebviewWindow};
 use tauri_plugin_store::StoreExt;
 
 use crate::error::{Error, Result};
@@ -156,17 +161,69 @@ pub fn unpin(app: &AppHandle, id: &str) -> Result<()> {
     Ok(())
 }
 
-/// Places the app's webview over `x, y, width, height` (CSS pixels of the
-/// main window), creating it the first time. Desktop only: child webviews
-/// are a desktop feature of Tauri.
+/// Where each showing app sits, in CSS pixels of the main window's content.
+/// The main window can move without the page noticing, so the core keeps the
+/// last rectangle and re-places the app from it (`follow_main`).
+static PLACED: Mutex<Option<HashMap<String, Rect>>> = Mutex::new(None);
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+struct Rect {
+    x: f64,
+    y: f64,
+    width: f64,
+    height: f64,
+}
+
+fn placed<T>(work: impl FnOnce(&mut HashMap<String, Rect>) -> T) -> T {
+    let mut guard = PLACED.lock().unwrap_or_else(PoisonError::into_inner);
+    work(guard.get_or_insert_with(HashMap::new))
+}
+
+/// `rect`, in CSS pixels of the main window's content, on the screen.
+fn screen_bounds(
+    main: &WebviewWindow,
+    rect: Rect,
+) -> Result<(PhysicalPosition<i32>, PhysicalSize<u32>)> {
+    let origin = main.inner_position()?;
+    let scale = main.scale_factor()?;
+    let position = PhysicalPosition::new(
+        origin.x + (rect.x * scale).round() as i32,
+        origin.y + (rect.y * scale).round() as i32,
+    );
+    let size = PhysicalSize::new(
+        (rect.width * scale).round().max(1.0) as u32,
+        (rect.height * scale).round().max(1.0) as u32,
+    );
+    Ok((position, size))
+}
+
+fn main_window(app: &AppHandle) -> Result<WebviewWindow> {
+    app.get_webview_window(crate::overlay::MAIN)
+        .ok_or(Error::MissingWindow(crate::overlay::MAIN))
+}
+
+fn place(window: &WebviewWindow, main: &WebviewWindow, rect: Rect) -> Result<()> {
+    let (position, size) = screen_bounds(main, rect)?;
+    window.set_position(position)?;
+    window.set_size(size)?;
+    Ok(())
+}
+
+/// Lays the app over `x, y, width, height` (CSS pixels of the main window's
+/// content), creating its window the first time.
 #[cfg(desktop)]
 pub fn show(app: &AppHandle, id: &str, x: f64, y: f64, width: f64, height: f64) -> Result<()> {
-    let position = LogicalPosition::new(x, y);
-    let size = LogicalSize::new(width.max(1.0), height.max(1.0));
-    if let Some(webview) = app.get_webview(&label(id)) {
-        webview.set_position(position)?;
-        webview.set_size(size)?;
-        webview.show()?;
+    let rect = Rect {
+        x,
+        y,
+        width,
+        height,
+    };
+    let main = main_window(app)?;
+    if let Some(window) = app.get_webview_window(&label(id)) {
+        place(&window, &main, rect)?;
+        window.show()?;
+        placed(|all| all.insert(id.to_owned(), rect));
         return Ok(());
     }
     let pinned = get(app, id)?;
@@ -174,27 +231,60 @@ pub fn show(app: &AppHandle, id: &str, x: f64, y: f64, width: f64, height: f64) 
         return Err(Error::ModuleOff("this web app"));
     }
     let url = normalize_url(&pinned.url)?;
-    let window = app
-        .get_window(crate::overlay::MAIN)
-        .ok_or(Error::MissingWindow(crate::overlay::MAIN))?;
-    let builder = WebviewBuilder::new(label(id), WebviewUrl::External(url))
-        .data_directory(data_dir(app, id)?);
-    window.add_child(builder, position, size)?;
+    let window = tauri::WebviewWindowBuilder::new(app, label(id), WebviewUrl::External(url))
+        .title(&pinned.name)
+        .data_directory(data_dir(app, id)?)
+        .decorations(false)
+        .shadow(false)
+        .resizable(false)
+        .skip_taskbar(true)
+        .visible(false)
+        // Owned by the main window: always above it, minimised with it.
+        .parent(&main)?
+        .build()?;
+    place(&window, &main, rect)?;
+    window.show()?;
+    placed(|all| all.insert(id.to_owned(), rect));
     Ok(())
+}
+
+/// Re-places every showing app after the main window moved or resized.
+pub fn follow_main(app: &AppHandle) {
+    let Ok(main) = main_window(app) else { return };
+    let showing: Vec<(String, Rect)> =
+        placed(|all| all.iter().map(|(id, rect)| (id.clone(), *rect)).collect());
+    for (id, rect) in showing {
+        if let Some(window) = app.get_webview_window(&label(&id)) {
+            let _ = place(&window, &main, rect);
+        }
+    }
+}
+
+/// Takes every app off screen with the main window; their tabs bring them back.
+pub fn hide_all(app: &AppHandle) {
+    let showing: Vec<String> = placed(|all| all.drain().map(|(id, _)| id).collect());
+    for id in showing {
+        if let Some(window) = app.get_webview_window(&label(&id)) {
+            let _ = window.hide();
+        }
+    }
 }
 
 /// Takes the app off screen while another tab is showing; it keeps running.
 pub fn hide(app: &AppHandle, id: &str) -> Result<()> {
-    if let Some(webview) = app.get_webview(&label(id)) {
-        webview.hide()?;
+    placed(|all| all.remove(id));
+    if let Some(window) = app.get_webview_window(&label(id)) {
+        window.hide()?;
     }
     Ok(())
 }
 
-/// Destroys the app's webview, freeing its memory. Its session stays on disk.
+/// Destroys the app's window, freeing its memory. Its session stays on disk.
+/// `destroy`, not `close`: every close request is turned into a hide.
 pub fn close(app: &AppHandle, id: &str) -> Result<()> {
-    if let Some(webview) = app.get_webview(&label(id)) {
-        webview.close()?;
+    placed(|all| all.remove(id));
+    if let Some(window) = app.get_webview_window(&label(id)) {
+        window.destroy()?;
     }
     Ok(())
 }
