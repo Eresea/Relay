@@ -38,6 +38,7 @@ mod tray;
 mod updates;
 mod vault;
 mod vault_passkey;
+mod webapps;
 mod workspaces;
 
 use tauri::Manager;
@@ -57,6 +58,11 @@ fn gated(
 ) -> impl Fn(tauri::ipc::Invoke) -> bool + Send + Sync + 'static {
     move |invoke| {
         let webview = invoke.message.webview();
+        // A pinned web app is someone else's page: it never reaches the core.
+        if webview.label().starts_with(webapps::LABEL_PREFIX) {
+            invoke.resolver.reject("Pinned web apps cannot call Relay");
+            return true;
+        }
         if let Err(error) = modules::check_invoke(webview.app_handle(), invoke.message.command()) {
             invoke.resolver.reject(error);
             return true;
@@ -271,6 +277,12 @@ pub fn run() {
                 commands::codex_read_thread,
                 commands::codex_older_turns,
                 commands::claude_ask,
+                webapps::webapps_list,
+                webapps::webapps_pin,
+                webapps::webapps_unpin,
+                webapps::webapps_show,
+                webapps::webapps_hide,
+                webapps::webapps_close,
                 shortcuts::shortcuts_list,
                 shortcuts::shortcuts_set,
                 shortcuts::shortcuts_reset,

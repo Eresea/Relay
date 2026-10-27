@@ -6,6 +6,8 @@ import { ModuleRegistry, PERMISSIONS, type ModuleManifest, type Permission } fro
 import { inject } from '@/lib/inject';
 import { useLocalSignal, useSignals } from '@/lib/signals';
 import { cn, vars } from '@/lib/utils';
+import { TauriBridge } from '@/core/tauri';
+import { PinWebApp } from '@/features/webapps/pin-web-app';
 import { Icon } from '@/shared/icon';
 
 import './modules.css';
@@ -38,6 +40,7 @@ export default function Modules({ onOpen }: { onOpen: (id: string) => void }) {
   useSignals();
   const registry = inject(ModuleRegistry);
   const commands = inject(CommandRegistry);
+  const tauri = inject(TauriBridge);
   const query = useLocalSignal('');
   const selectedId = useLocalSignal('today');
 
@@ -145,6 +148,7 @@ export default function Modules({ onOpen }: { onOpen: (id: string) => void }) {
             })}
             {shown.length === 0 && <p className="intro">No module matches “{query()}”.</p>}
           </div>
+          <PinWebApp onPinned={(id) => selectedId.set(id)} />
         </div>
 
         <aside className="module-detail" aria-label={`${selected.name} details`}>
@@ -219,6 +223,20 @@ export default function Modules({ onOpen }: { onOpen: (id: string) => void }) {
               >
                 Open {selected.surface.label}
               </Button>
+              {selected.source === 'pinned' && (
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={() =>
+                    void tauri
+                      .webAppsUnpin(selected.id.slice('web-'.length))
+                      .then(() => registry.load())
+                      .then(() => selectedId.set('today'))
+                  }
+                >
+                  Unpin and forget its sign-in
+                </Button>
+              )}
             </section>
           )}
         </aside>

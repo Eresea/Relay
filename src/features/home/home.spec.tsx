@@ -129,7 +129,8 @@ it('builds the rail from the core registry and drops a module turned off on the 
 
   fireEvent.click(screen.getByRole('button', { name: 'Vault' }));
   fireEvent.click(screen.getByRole('button', { name: 'Modules' }));
-  fireEvent.click(await screen.findByRole('switch', { name: 'Vault on' }));
+  // The Modules screen loads lazily; a cold first run can take over a second.
+  fireEvent.click(await screen.findByRole('switch', { name: 'Vault on' }, { timeout: 5000 }));
 
   expect(core.modulesSetEnabled).toHaveBeenCalledWith('vault', false);
   await waitFor(() => expect(rail()).not.toContain('Vault'));

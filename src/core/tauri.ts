@@ -597,6 +597,37 @@ export class TauriBridge {
     await this.invoke('terminal_close', { id });
   }
 
+  async webAppsList(): Promise<readonly WebApp[]> {
+    return (await this.invoke<WebApp[]>('webapps_list')) ?? [];
+  }
+
+  /** Pins `url` as a module of its own; a bare host gets https://. */
+  async webAppsPin(name: string, url: string): Promise<WebApp | null> {
+    return this.invoke<WebApp>('webapps_pin', { name, url });
+  }
+
+  /** Unpins an app and forgets its session. */
+  async webAppsUnpin(id: string): Promise<void> {
+    await this.invoke('webapps_unpin', { id });
+  }
+
+  /** Places the app's webview over a rectangle of the main window, in CSS pixels. */
+  async webAppsShow(
+    id: string,
+    rect: { x: number; y: number; width: number; height: number },
+  ): Promise<void> {
+    await this.invoke('webapps_show', { id, ...rect });
+  }
+
+  async webAppsHide(id: string): Promise<void> {
+    await this.invoke('webapps_hide', { id });
+  }
+
+  /** Destroys the app's webview to free its memory; its session stays. */
+  async webAppsClose(id: string): Promise<void> {
+    await this.invoke('webapps_close', { id });
+  }
+
   /** Relay's global shortcuts, each with its combination and whether it works. */
   async shortcutsList(): Promise<readonly ShortcutInfo[]> {
     return (await this.invoke<ShortcutInfo[]>('shortcuts_list')) ?? [];
@@ -1759,6 +1790,13 @@ export interface WorkspaceSummary {
 export interface CodexRun {
   readonly threadId: string;
   readonly response: string;
+}
+
+/** Mirrors src-tauri/src/webapps.rs. */
+export interface WebApp {
+  readonly id: string;
+  readonly name: string;
+  readonly url: string;
 }
 
 /** Mirrors src-tauri/src/shortcuts.rs. */

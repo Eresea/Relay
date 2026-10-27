@@ -34,7 +34,8 @@ export interface ModuleManifest {
   readonly icon: string;
   readonly hue: ModuleHue;
   readonly kind: 'native' | 'web' | 'mcp' | 'cli';
-  readonly source: 'built-in';
+  /** Built into Relay, or a web app you pinned. */
+  readonly source: 'built-in' | 'pinned';
   /** Part of the shell itself: always on. */
   readonly core: boolean;
   /** Opens as a Deck tab; `rail: false` keeps it to its own button. */
@@ -48,6 +49,8 @@ export interface ModuleManifest {
   readonly items: boolean;
   readonly signals: boolean;
   readonly needs: readonly Need[];
+  /** A pinned web app's address. */
+  readonly url?: string;
 }
 
 export interface ModuleInfo extends ModuleManifest {

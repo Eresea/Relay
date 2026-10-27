@@ -278,4 +278,43 @@
     flex-direction: row;
     border-block-end: 0;
   }
+
+  .pin-web-app {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-3);
+    padding-block-start: var(--space-4);
+    border-block-start: 1px solid var(--border-subtle);
+  }
+
+  .pin-fields {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-3);
+  }
+
+  .pin-input {
+    flex: 1 1 160px;
+    block-size: var(--control-sm);
+    padding-inline: var(--space-4);
+    border: 1px solid var(--border-default);
+    border-radius: var(--radius-sm);
+    background: var(--bg-app);
+    font-size: var(--text-12);
+    color: var(--text-body);
+    outline: none;
+  }
+
+  .pin-input:focus {
+    border-color: var(--border-focus);
+  }
+
+  .pin-input.url {
+    flex-basis: 260px;
+  }
+
+  .pin-error {
+    font-size: var(--text-12);
+    color: var(--status-blocked);
+  }
 }

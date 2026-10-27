@@ -396,8 +396,20 @@ fn off(app: &AppHandle) -> HashSet<String> {
         .unwrap_or_default()
 }
 
+/// Pinned web apps, each a module of its own (see `webapps.rs`).
+fn pinned(app: &AppHandle) -> Vec<crate::webapps::WebApp> {
+    crate::webapps::list(app)
+}
+
+fn is_pinned(app: &AppHandle, id: &str) -> bool {
+    pinned(app).iter().any(|web| web.module_id() == id)
+}
+
 pub fn is_enabled(app: &AppHandle, id: &str) -> bool {
-    get(id).is_some_and(|m| m.core || !off(app).contains(id))
+    match get(id) {
+        Some(module) => module.core || !off(app).contains(id),
+        None => is_pinned(app, id) && !off(app).contains(id),
+    }
 }
 
 /// The gate every IPC call passes through; see [`check`].
@@ -413,23 +425,47 @@ pub struct ModuleInfo {
     enabled: bool,
 }
 
-pub fn list(app: &AppHandle) -> Vec<ModuleInfo> {
+/// Built-in modules, then pinned web apps, in the manifest's wire shape.
+pub fn list(app: &AppHandle) -> Vec<serde_json::Value> {
     let off = off(app);
-    BUILT_IN
-        .iter()
-        .map(|manifest| ModuleInfo {
+    let built_in = BUILT_IN.iter().map(|manifest| {
+        serde_json::json!(ModuleInfo {
             manifest,
             enabled: manifest.core || !off.contains(manifest.id),
         })
-        .collect()
+    });
+    let web = pinned(app).into_iter().map(|web| {
+        let id = web.module_id();
+        serde_json::json!({
+            "id": id,
+            "name": web.name,
+            "summary": format!("Pinned web app · {}", web.host()),
+            "description": format!("{} in a tab of its own, signed in apart from everything else.", web.url),
+            "icon": "globe",
+            "hue": "relay",
+            "kind": "web",
+            "source": "pinned",
+            "core": false,
+            "surface": { "label": web.name, "icon": "globe", "rail": true },
+            "commands": [],
+            "items": false,
+            "signals": false,
+            "needs": [{ "permission": "network", "scope": web.host() }],
+            "enabled": !off.contains(&id),
+            "url": web.url,
+        })
+    });
+    built_in.chain(web).collect()
 }
 
 /// Turns a module on or off, stops or resumes its background work, and tells
 /// every window so each redraws its rail, Today and palette.
 pub fn set_enabled(app: &AppHandle, id: &str, enabled: bool) -> Result<()> {
-    let module = get(id).ok_or_else(|| Error::UnknownModule(id.to_owned()))?;
-    if module.core {
-        return Err(Error::CoreModule(module.name));
+    match get(id) {
+        Some(module) if module.core => return Err(Error::CoreModule(module.name)),
+        Some(_) => {}
+        None if is_pinned(app, id) => {}
+        None => return Err(Error::UnknownModule(id.to_owned())),
     }
     let mut off = off(app);
     let changed = if enabled {
@@ -453,6 +489,10 @@ pub fn set_enabled(app: &AppHandle, id: &str, enabled: bool) -> Result<()> {
 
 /// Background work belongs to its module: an off module polls nothing.
 fn apply_background(app: &AppHandle, id: &str, enabled: bool) {
+    if let (false, Some(web)) = (enabled, id.strip_prefix(crate::webapps::MODULE_PREFIX)) {
+        let _ = crate::webapps::close(app, web);
+        return;
+    }
     match id {
         "gmail" => {
             let registry = app.state::<crate::jobs::JobRegistry>().inner().clone();
@@ -480,7 +520,7 @@ fn apply_background(app: &AppHandle, id: &str, enabled: bool) {
 }
 
 #[tauri::command]
-pub fn modules_list(app: AppHandle) -> Vec<ModuleInfo> {
+pub fn modules_list(app: AppHandle) -> Vec<serde_json::Value> {
     list(&app)
 }
 

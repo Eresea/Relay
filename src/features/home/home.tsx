@@ -27,10 +27,13 @@ const Linear = lazy(() => import('@/features/linear/linear'));
 const Vault = lazy(() => import('@/features/vault/vault'));
 const Runtime = lazy(() => import('@/features/runtime/runtime'));
 const Terminal = lazy(() => import('@/features/terminal/terminal'));
+const WebAppView = lazy(() => import('@/features/webapps/web-app-view'));
 const Projects = lazy(() => import('@/features/projects/projects'));
 const Modules = lazy(() => import('@/features/modules/modules'));
 
 const INSPECTOR_SETTING_KEY = 'deck.inspector';
+/** Module ids of pinned web apps; mirrors webapps::MODULE_PREFIX. */
+const WEB = 'web-';
 
 /** A Deck view is a module's surface, named by the module's id. */
 type HomeView = string;
@@ -130,6 +133,9 @@ export class HomeState {
 
   close(view: HomeView): void {
     if (view === 'today') return;
+    // A pinned app's webview is destroyed with its tab, so it costs no memory.
+    if (this.modules.get(view)?.kind === 'web')
+      void this.tauri.webAppsClose(view.slice(WEB.length));
     const tabs = this.openTabs();
     const at = tabs.indexOf(view);
     this.tabs.update((all) => all.filter((tab) => tab !== view));
@@ -455,6 +461,12 @@ export default function Home() {
               />
             ) : view === 'vault' ? (
               <Vault />
+            ) : s.modules.get(view)?.kind === 'web' ? (
+              <WebAppView
+                key={view}
+                id={view.slice(WEB.length)}
+                name={s.modules.get(view)?.name ?? 'Web app'}
+              />
             ) : view === 'terminal' ? (
               <Terminal />
             ) : view === 'runtime' ? (

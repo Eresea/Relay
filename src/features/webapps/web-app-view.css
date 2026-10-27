@@ -1,0 +1,21 @@
+.web-app {
+  & {
+    display: flex;
+    block-size: 100%;
+    min-block-size: 0;
+  }
+
+  /* The native webview covers this exactly; what is here shows only while it loads or fails. */
+  .web-app-frame {
+    display: grid;
+    place-items: center;
+    flex: 1;
+    min-inline-size: 0;
+    background: var(--bg-app);
+  }
+
+  .web-app-note {
+    font-size: var(--text-12);
+    color: var(--text-subtle);
+  }
+}
