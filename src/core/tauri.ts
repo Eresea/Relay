@@ -39,12 +39,26 @@ export class TauriBridge {
   }
 
   /**
-   * Sizes the attention overlay to its content and anchors it: the pill
-   * top-centre, the stack bottom-right. Shows the window if it is hidden.
-   * Sizes are CSS pixels; the core converts for the monitor's scale.
+   * Sizes the attention overlay to its content and hangs it from its anchor,
+   * so the pill and the stack share a position. Shows the window if it is
+   * hidden. Sizes are CSS pixels; the core converts for the monitor's scale.
    */
-  async hudLayout(mode: HudMode, width: number, height: number): Promise<void> {
-    await this.invoke('hud_layout', { mode, width, height });
+  async hudLayout(width: number, height: number): Promise<HudSide | null> {
+    return this.invoke<HudSide>('hud_layout', { width, height });
+  }
+
+  /** Lets the attention overlay be dragged to a new position, or pins it. */
+  async hudUnlock(unlocked: boolean): Promise<void> {
+    await this.invoke('hud_unlock', { unlocked });
+  }
+
+  /** Starts dragging the attention overlay with the pointer, if unlocked. */
+  async hudDrag(): Promise<void> {
+    await this.invoke('hud_drag');
+  }
+
+  async togglePalette(): Promise<void> {
+    await this.invoke('toggle_palette');
   }
 
   /** A pull-based check alongside the push-based `notificationDone` event. */
@@ -513,36 +527,6 @@ export class TauriBridge {
     await this.invoke('vault_unlock', { masterPassword });
   }
 
-  /** Drops the decrypted entries from memory. The file on disk is untouched. */
-  async vaultLock(): Promise<void> {
-    await this.invoke('vault_lock');
-  }
-
-  /** Generates a password from the given character-class options. */
-  async generatePassword(options: PasswordOptions): Promise<string> {
-    return (await this.invoke<string>('generate_password', { options })) ?? '';
-  }
-
-  /** Adds a new entry to the unlocked vault and persists it immediately. */
-  async vaultAddEntry(entry: NewVaultEntry): Promise<VaultEntrySummary | null> {
-    return this.invoke<VaultEntrySummary>('vault_add_entry', { entry });
-  }
-
-  /** Lists every entry in the unlocked vault, without passwords. */
-  async vaultListEntries(): Promise<readonly VaultEntrySummary[]> {
-    return (await this.invoke<VaultEntrySummary[]>('vault_list_entries')) ?? [];
-  }
-
-  /** Reveals one entry's password by id. */
-  async vaultRevealPassword(id: string): Promise<string> {
-    return (await this.invoke<string>('vault_reveal_password', { id })) ?? '';
-  }
-
-  /** Removes an entry from the unlocked vault and persists the change. */
-  async vaultDeleteEntry(id: string): Promise<void> {
-    await this.invoke('vault_delete_entry', { id });
-  }
-
   /** Whether Windows Hello can, and is set up to, unlock the vault on this device. */
   async vaultPasskeyStatus(): Promise<VaultPasskeyStatus> {
     return (
@@ -640,6 +624,36 @@ export class TauriBridge {
 
   async shortcutsReset(action: ShortcutAction): Promise<ShortcutInfo | null> {
     return this.invoke<ShortcutInfo>('shortcuts_reset', { action });
+  }
+
+  /** Drops the decrypted entries from memory. The file on disk is untouched. */
+  async vaultLock(): Promise<void> {
+    await this.invoke('vault_lock');
+  }
+
+  /** Generates a password from the given character-class options. */
+  async generatePassword(options: PasswordOptions): Promise<string> {
+    return (await this.invoke<string>('generate_password', { options })) ?? '';
+  }
+
+  /** Adds a new entry to the unlocked vault and persists it immediately. */
+  async vaultAddEntry(entry: NewVaultEntry): Promise<VaultEntrySummary | null> {
+    return this.invoke<VaultEntrySummary>('vault_add_entry', { entry });
+  }
+
+  /** Lists every entry in the unlocked vault, without passwords. */
+  async vaultListEntries(): Promise<readonly VaultEntrySummary[]> {
+    return (await this.invoke<VaultEntrySummary[]>('vault_list_entries')) ?? [];
+  }
+
+  /** Reveals one entry's password by id. */
+  async vaultRevealPassword(id: string): Promise<string> {
+    return (await this.invoke<string>('vault_reveal_password', { id })) ?? '';
+  }
+
+  /** Removes an entry from the unlocked vault and persists the change. */
+  async vaultDeleteEntry(id: string): Promise<void> {
+    await this.invoke('vault_delete_entry', { id });
   }
 
   /** Writes an encrypted copy of the vault to disk and returns the path. */
@@ -1597,8 +1611,8 @@ export class TauriBridge {
   }
 }
 
-/** Mirrors src-tauri/src/overlay.rs's `HudMode`. */
-export type HudMode = 'pill' | 'stack';
+/** Mirrors src-tauri/src/overlay.rs's `HudSide`: which way the overlay grows from its node. */
+export type HudSide = 'left' | 'right';
 
 /** Mirrors src-tauri/src/commands.rs's `CoreCommand`. */
 export type CoreCommand =
@@ -1742,6 +1756,47 @@ export interface VaultStatus {
   readonly unlocked: boolean;
 }
 
+/** Mirrors src-tauri/src/webapps.rs. */
+export interface WebApp {
+  readonly id: string;
+  readonly name: string;
+  readonly url: string;
+}
+
+/** Mirrors src-tauri/src/shortcuts.rs. */
+export type ShortcutAction = 'palette' | 'attention';
+
+export interface ShortcutInfo {
+  readonly action: ShortcutAction;
+  readonly label: string;
+  /** A combination like `Ctrl+Alt+Space`, keys named as `KeyboardEvent.code`. */
+  readonly accelerator: string;
+  readonly default: string;
+  readonly status: 'active' | 'taken' | 'invalid';
+  readonly message: string | null;
+}
+
+/** Mirrors src-tauri/src/terminal.rs. */
+export type TerminalOutput =
+  | { readonly kind: 'data'; readonly data: string }
+  | { readonly kind: 'exit'; readonly code: number | null };
+
+export interface TerminalInfo {
+  readonly id: number;
+  readonly shell: string;
+  readonly cwd: string;
+}
+
+/** Mirrors src-tauri/src/vault_passkey.rs. */
+export interface VaultPasskeyStatus {
+  /** Windows Hello is set up on this device. */
+  readonly available: boolean;
+  /** Hello unlock was set up for a vault here. */
+  readonly enrolled: boolean;
+  /** It still matches the vault's current key. */
+  readonly current: boolean;
+}
+
 export interface VaultSyncRevision {
   readonly revisionId: string;
   readonly ciphertext: string;
@@ -1790,47 +1845,6 @@ export interface WorkspaceSummary {
 export interface CodexRun {
   readonly threadId: string;
   readonly response: string;
-}
-
-/** Mirrors src-tauri/src/webapps.rs. */
-export interface WebApp {
-  readonly id: string;
-  readonly name: string;
-  readonly url: string;
-}
-
-/** Mirrors src-tauri/src/shortcuts.rs. */
-export type ShortcutAction = 'palette' | 'attention';
-
-export interface ShortcutInfo {
-  readonly action: ShortcutAction;
-  readonly label: string;
-  /** A combination like `Ctrl+Alt+Space`, keys named as `KeyboardEvent.code`. */
-  readonly accelerator: string;
-  readonly default: string;
-  readonly status: 'active' | 'taken' | 'invalid';
-  readonly message: string | null;
-}
-
-/** Mirrors src-tauri/src/terminal.rs. */
-export type TerminalOutput =
-  | { readonly kind: 'data'; readonly data: string }
-  | { readonly kind: 'exit'; readonly code: number | null };
-
-export interface TerminalInfo {
-  readonly id: number;
-  readonly shell: string;
-  readonly cwd: string;
-}
-
-/** Mirrors src-tauri/src/vault_passkey.rs. */
-export interface VaultPasskeyStatus {
-  /** Windows Hello is set up on this device. */
-  readonly available: boolean;
-  /** Hello unlock was set up for a vault here. */
-  readonly enrolled: boolean;
-  /** It still matches the vault's current key. */
-  readonly current: boolean;
 }
 
 export interface CodexThreadSummary {

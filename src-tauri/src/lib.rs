@@ -140,6 +140,8 @@ pub fn run() {
                 commands::core_commands,
                 commands::run_core_command,
                 commands::hud_layout,
+                commands::hud_unlock,
+                commands::hud_drag,
                 commands::cancel_job,
                 commands::is_job_running,
                 commands::dismiss_palette,
@@ -147,12 +149,12 @@ pub fn run() {
                 commands::vault_status,
                 commands::vault_create,
                 commands::vault_unlock,
-                commands::vault_lock,
-                commands::generate_password,
                 commands::vault_passkey_status,
                 commands::vault_passkey_enroll,
                 commands::vault_passkey_unlock,
                 commands::vault_passkey_remove,
+                commands::vault_lock,
+                commands::generate_password,
                 commands::vault_add_entry,
                 commands::vault_list_entries,
                 commands::vault_reveal_password,
@@ -313,13 +315,13 @@ pub fn run() {
             commands::vault_status,
             commands::vault_create,
             commands::vault_unlock,
-            commands::vault_lock,
-            commands::generate_password,
-            commands::vault_add_entry,
             commands::vault_passkey_status,
             commands::vault_passkey_enroll,
             commands::vault_passkey_unlock,
             commands::vault_passkey_remove,
+            commands::vault_lock,
+            commands::generate_password,
+            commands::vault_add_entry,
             commands::vault_list_entries,
             commands::vault_reveal_password,
             commands::vault_delete_entry,
@@ -449,6 +451,9 @@ pub fn run() {
                 tauri::WindowEvent::Focused(false) if window.label() == overlay::PALETTE => {
                     let _ = window.hide();
                 }
+                tauri::WindowEvent::Moved(position) if window.label() == overlay::HUD => {
+                    overlay::hud_moved(window.app_handle(), *position);
+                }
                 tauri::WindowEvent::CloseRequested { api, .. } => {
                     api.prevent_close();
                     let _ = window.hide();
@@ -507,8 +512,10 @@ pub fn run() {
             // emitted.
             #[cfg(desktop)]
             {
-                if let Err(error) = overlay::hide_hud(app.handle()) {
-                    log::warn!("could not hide the HUD at startup: {error}");
+                // The HUD stays up as a small indicator; it only needs a known
+                // starting state, and it shrinks to fit once its webview measures.
+                if let Err(error) = overlay::show_hud(app.handle()) {
+                    log::warn!("could not show the HUD at startup: {error}");
                 }
                 if let Err(error) = overlay::hide_palette(app.handle()) {
                     log::warn!("could not hide the palette at startup: {error}");

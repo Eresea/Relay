@@ -4,18 +4,20 @@ import { Button } from '@/components/ui/button';
 import { hueFor, hueVar } from '@/core/entity-hue';
 import type { NotificationAction, NotificationPayload } from '@/core/events';
 import { NotificationCenter } from '@/core/notification-center';
-import { TauriBridge, type HudMode } from '@/core/tauri';
+import { TauriBridge, type HudSide } from '@/core/tauri';
 import { inject } from '@/lib/inject';
 import { computed, effect, signal, untracked, useSignals } from '@/lib/signals';
 import { vars } from '@/lib/utils';
 import { Icon } from '@/shared/icon';
+import { InlineText } from '@/shared/inline-text';
 
 import { HudCard } from './hud-card';
 import './hud.css';
 
 const MAX_CARDS = 5;
 const MAX_SEGMENTS = 2;
-const STACK_ORDER = { running: 0, waiting: 1, blocked: 1, done: 2 } as const;
+/** What waits on you leads, then what is moving, then what just finished. */
+const STACK_ORDER = { waiting: 0, blocked: 0, running: 1, done: 2 } as const;
 
 const needsYou = (n: NotificationPayload) => n.status === 'waiting' || n.status === 'blocked';
 const plural = (count: number, word: string) => `${count} ${word}${count === 1 ? '' : 's'}`;
@@ -32,19 +34,23 @@ export class HudState {
   readonly items = this.center.items;
   readonly expanded = this.center.expanded;
   readonly quiet = this.center.quiet;
-  readonly measured = signal<{ mode: HudMode; width: number; height: number } | null>(null);
+  readonly measured = signal<{ width: number; height: number } | null>(null);
+  readonly unlocked = signal(false);
+  /** Which way the window grows from its node; the core decides from where the node sits. */
+  readonly side = signal<HudSide>('left');
 
   readonly waiting = computed(() => this.items().filter(needsYou));
   private readonly calm = computed(() => this.items().filter((n) => !needsYou(n)));
 
-  /** What is running comes first; with nothing else live, show what waits on you. */
+  /**
+   * The pill leads with what waits on you, since that is why to look at it,
+   * then fills with what is running.
+   */
   readonly segments = computed(() =>
-    (this.calm().length > 0 ? this.calm() : this.waiting()).slice(0, MAX_SEGMENTS),
+    [...this.waiting().slice(0, 1), ...this.calm()].slice(0, MAX_SEGMENTS),
   );
-  /** Live items the pill has no room for. Waiting items are counted by the badge instead. */
-  readonly hiddenCount = computed(() =>
-    this.calm().length > 0 ? this.calm().length - this.segments().length : 0,
-  );
+  /** Live items the pill has no room for. */
+  readonly hiddenCount = computed(() => this.items().length - this.segments().length);
 
   private readonly ordered = computed(() =>
     [...this.items()].sort((a, b) => STACK_ORDER[a.status] - STACK_ORDER[b.status]),
@@ -55,34 +61,34 @@ export class HudState {
   readonly quietFaces = computed(() => this.quiet().slice(0, 3));
   readonly quietLabel = computed(() => plural(this.quiet().length, 'quiet update'));
   readonly summary = computed(() => {
+    const waiting = this.waiting().length;
     const counts = [
+      [waiting, waiting === 1 ? 'needs you' : 'need you'],
       [this.items().filter((n) => n.status === 'running').length, 'running'],
-      [this.waiting().length, 'need you'],
       [this.items().filter((n) => n.status === 'done').length, 'done'],
     ] as const;
     const parts = counts.filter(([count]) => count > 0).map(([count, word]) => `${count} ${word}`);
     return parts.length > 0 ? parts.join(' · ') : 'Nothing running';
   });
 
-  private readonly visible = computed(() => this.expanded() || this.items().length > 0);
-
   /** Starts the window effects; returns their disposer. */
   start(): () => void {
-    // The core shows the window when a notification arrives, because it is the
-    // only side that knows one is about to exist. Everything after that — its
-    // size, its anchor, taking it off screen — follows what is drawn.
+    // The window never leaves: at rest it is a small indicator, so its size and
+    // anchor follow what is drawn.
     const layout = effect(() => {
-      if (!this.visible()) {
-        void this.tauri.runCoreCommand({ id: 'hide_hud' });
-        return;
-      }
       const size = this.measured();
-      if (size) void this.tauri.hudLayout(size.mode, size.width, size.height);
+      if (size) {
+        void this.tauri
+          .hudLayout(size.width, size.height)
+          .then((side) => side && this.side.set(side));
+      }
     });
     // Read state changes in whichever window you read in. Re-read the stored
-    // copy each time the overlay comes back, so the quiet count is true.
+    // copy whenever the overlay changes, so the quiet count is true.
     const sync = effect(() => {
-      if (this.visible()) untracked(() => void this.syncHistory());
+      this.expanded();
+      this.items();
+      untracked(() => void this.syncHistory());
     });
     return () => {
       layout();
@@ -109,6 +115,39 @@ export class HudState {
     this.markRead(this.quiet().map((record) => record.notificationId));
   }
 
+  /** Unlocked, the overlay follows a drag; locked, it holds its place. */
+  toggleLock(): void {
+    this.unlocked.update((unlocked) => !unlocked);
+    void this.tauri.hudUnlock(this.unlocked());
+  }
+
+  private pressedAt: { x: number; y: number } | null = null;
+
+  /**
+   * While unlocked, pressing and moving the overlay hands the pointer to the OS.
+   * A press that stays put is still a click, so the pill opens and the lock
+   * button stays reachable.
+   */
+  press(event: { button: number; clientX: number; clientY: number; target: EventTarget }): void {
+    const onButton =
+      event.target instanceof Element && event.target.closest('[data-slot="button"]');
+    this.pressedAt =
+      this.unlocked() && event.button === 0 && !onButton
+        ? { x: event.clientX, y: event.clientY }
+        : null;
+  }
+
+  drag(event: { clientX: number; clientY: number }): void {
+    const start = this.pressedAt;
+    if (!start || Math.hypot(event.clientX - start.x, event.clientY - start.y) < 4) return;
+    this.pressedAt = null;
+    void this.tauri.hudDrag();
+  }
+
+  release(): void {
+    this.pressedAt = null;
+  }
+
   openRelay(): void {
     this.center.toggleExpanded();
     void this.tauri.runCoreCommand({ id: 'open_main' });
@@ -126,8 +165,26 @@ export class HudState {
 }
 
 /**
- * The attention overlay. At rest it is a one-line pill: what is running, how
- * many quiet updates arrived, how many things wait on you. Clicking it, or the
+ * What a waiting item asks, with who is asking: "Claude · Run `npm test`".
+ * The asker is the title's lead ("Claude · add a health check…"); the ask
+ * is the detail, which producers keep short.
+ */
+function Request({ n }: { n: NotificationPayload }) {
+  if (!n.detail) return <>{n.title}</>;
+  const asker = n.title.includes(' · ') ? n.title.split(' · ')[0] : null;
+  return (
+    <>
+      {asker && <span className="asker">{asker} · </span>}
+      <InlineText text={n.detail} />
+    </>
+  );
+}
+
+/**
+ * The attention overlay. At rest, with nothing live, it is a small dot that
+ * opens into the summary on hover. With work live it is a one-line pill: what
+ * is running, how many quiet updates arrived, how many things wait on you.
+ * Clicking it, or the
  * attention shortcut, opens the stack: one card per live item, the ones that
  * need you carrying their actions.
  *
@@ -147,7 +204,6 @@ export default function HudSurface() {
     const observer = new ResizeObserver(() => {
       const { width, height } = element.getBoundingClientRect();
       hud.measured.set({
-        mode: hud.expanded() ? 'stack' : 'pill',
         width: Math.ceil(width),
         height: Math.ceil(height),
       });
@@ -158,47 +214,47 @@ export default function HudSurface() {
 
   const items = hud.items();
   const quiet = hud.quiet();
-  const waiting = hud.waiting();
 
   return (
-    <div className="hud-surface">
+    <div
+      className="hud-surface"
+      data-unlocked={hud.unlocked() || undefined}
+      data-side={hud.side()}
+      onMouseDown={(event) => hud.press(event)}
+      onMouseMove={(event) => hud.drag(event)}
+      onMouseUp={() => hud.release()}
+    >
       <div className="frame" ref={frame}>
         {hud.expanded() ? (
           <section className="stack" aria-label="Activity">
             <div className="summary u-glass u-chrome">
-              {quiet.length > 0 ? (
-                <>
-                  <span className="faces">
-                    {hud.quietFaces().map((record) => (
-                      <span
-                        key={record.notificationId}
-                        className="u-entity-tile face"
-                        style={vars({ '--entity-hue': tone(record.hueSource) })}
-                      >
-                        <Icon name={record.icon ?? 'inbox'} size={14} />
-                      </span>
-                    ))}
-                  </span>
-                  <span className="summary-text">{hud.quietLabel()}</span>
-                  <Button size="sm" variant="ghost" onClick={() => hud.markQuietRead()}>
-                    Mark read
-                  </Button>
-                </>
-              ) : (
-                <span className="summary-text">{hud.summary()}</span>
-              )}
+              <span className="summary-text">{hud.summary()}</span>
               <Button size="sm" variant="ghost" onClick={() => hud.openRelay()}>
                 Open Relay
               </Button>
               <Button
                 size="icon"
                 variant="ghost"
+                aria-label={hud.unlocked() ? 'Done moving' : 'Move the overlay'}
+                title={hud.unlocked() ? 'Done moving' : 'Move the overlay'}
+                aria-pressed={hud.unlocked()}
+                onClick={() => hud.toggleLock()}
+              >
+                <Icon name={hud.unlocked() ? 'check' : 'move'} size={14} />
+              </Button>
+              <Button
+                size="icon"
+                variant="ghost"
                 aria-label="Collapse"
+                title="Collapse"
                 onClick={() => hud.toggle()}
               >
                 <Icon name="minus" size={14} />
               </Button>
             </div>
+            {hud.unlocked() && (
+              <p className="moving u-glass u-chrome">Drag the overlay where you want it.</p>
+            )}
 
             {hud.cards().map((n) => (
               <HudCard
@@ -215,45 +271,70 @@ export default function HudSurface() {
               />
             ))}
             {hud.overflow() > 0 && <p className="more">{hud.overflow()} more in Relay</p>}
+            {quiet.length > 0 && (
+              <div className="quiet-row u-glass u-chrome">
+                <span className="faces">
+                  {hud.quietFaces().map((record) => (
+                    <span
+                      key={record.notificationId}
+                      className="u-entity-tile face"
+                      style={vars({ '--entity-hue': tone(record.hueSource) })}
+                    >
+                      <Icon name={record.icon ?? 'inbox'} size={14} />
+                    </span>
+                  ))}
+                </span>
+                <span className="summary-text">{hud.quietLabel()}</span>
+                <Button size="sm" variant="ghost" onClick={() => hud.markQuietRead()}>
+                  Mark read
+                </Button>
+                <Button size="sm" variant="ghost" onClick={() => hud.openRelay()}>
+                  See in Today
+                </Button>
+              </div>
+            )}
           </section>
         ) : (
-          items.length > 0 && (
-            <button
-              type="button"
-              className="pill u-glass u-chrome"
-              aria-label={`Activity: ${hud.summary()}. Show details`}
-              onClick={() => hud.toggle()}
-            >
-              {hud.segments().map((n) => {
-                const ring = n.status === 'running' && n.progress !== undefined;
-                return (
-                  <span key={n.notificationId} className="seg">
-                    {ring ? (
-                      <span
-                        className="ring"
-                        style={vars({
-                          '--entity-hue': tone(n.hueSource),
-                          '--progress': n.progress ?? 0,
-                        })}
-                      />
-                    ) : (
-                      <span className="dot" data-status={n.status} />
-                    )}
-                    <span className="seg-title">{n.title}</span>
-                    {ring && <span className="num">{n.progress}%</span>}
-                  </span>
-                );
-              })}
-              {hud.hiddenCount() > 0 && <span className="seg num">+{hud.hiddenCount()}</span>}
-              {quiet.length > 0 && (
-                <span className="seg quiet">
-                  <Icon name="inbox" size={14} />
-                  <span className="num">{quiet.length}</span>
+          <button
+            type="button"
+            className={`pill u-glass u-chrome${items.length === 0 ? ' idle' : ''}`}
+            aria-label={`Activity: ${hud.summary()}. Show details`}
+            onClick={() => hud.toggle()}
+          >
+            {items.length === 0 && (
+              <>
+                <span className="dot" data-status="idle" />
+                <span className="seg-title idle-label">{hud.summary()}</span>
+              </>
+            )}
+            {hud.segments().map((n) => {
+              const ring = n.status === 'running' && n.progress !== undefined;
+              return (
+                <span key={n.notificationId} className="seg" data-status={n.status}>
+                  {ring ? (
+                    <span
+                      className="ring"
+                      style={vars({
+                        '--entity-hue': tone(n.hueSource),
+                        '--progress': n.progress ?? 0,
+                      })}
+                    />
+                  ) : (
+                    <span className="dot" data-status={n.status} />
+                  )}
+                  <span className="seg-title">{needsYou(n) ? <Request n={n} /> : n.title}</span>
+                  {ring && <span className="num">{n.progress}%</span>}
                 </span>
-              )}
-              {waiting.length > 0 && <span className="badge">{waiting.length}</span>}
-            </button>
-          )
+              );
+            })}
+            {hud.hiddenCount() > 0 && <span className="seg num">+{hud.hiddenCount()}</span>}
+            {quiet.length > 0 && (
+              <span className="seg quiet">
+                <Icon name="inbox" size={14} />
+                <span className="num">{quiet.length}</span>
+              </span>
+            )}
+          </button>
         )}
       </div>
     </div>

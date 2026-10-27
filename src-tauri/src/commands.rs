@@ -108,8 +108,20 @@ pub struct OpenAgentThreadArgs {
 
 /// Sizes and anchors the attention overlay to what its webview drew.
 #[tauri::command]
-pub fn hud_layout(app: AppHandle, mode: overlay::HudMode, width: f64, height: f64) -> Result<()> {
-    overlay::layout_hud(&app, mode, width, height)
+pub fn hud_layout(app: AppHandle, width: f64, height: f64) -> Result<overlay::HudSide> {
+    overlay::layout_hud(&app, width, height)
+}
+
+/// Unlocks the attention overlay for dragging, or pins it where it is.
+#[tauri::command]
+pub fn hud_unlock(unlocked: bool) {
+    overlay::set_hud_unlocked(unlocked);
+}
+
+/// Starts dragging the attention overlay with the pointer, if it is unlocked.
+#[tauri::command]
+pub fn hud_drag(app: AppHandle) -> Result<()> {
+    overlay::drag_hud(&app)
 }
 
 #[tauri::command]
@@ -229,19 +241,6 @@ pub fn vault_unlock(
     vault::unlock(&app, &vault, &master_password)
 }
 
-/// Drops the decrypted entries from memory. The file on disk is untouched.
-#[tauri::command]
-pub fn vault_lock(vault: tauri::State<VaultState>) -> Result<()> {
-    vault::lock(&vault)
-}
-
-/// Generates a password from the given character-class options. Pure and
-/// stateless — does not touch the vault, so it works before one exists.
-#[tauri::command]
-pub fn generate_password(options: PasswordOptions) -> Result<String> {
-    vault::generate_password(&options)
-}
-
 #[tauri::command]
 pub fn vault_passkey_status(app: AppHandle) -> Result<crate::vault_passkey::PasskeyStatus> {
     crate::vault_passkey::status(&app, &crate::vault_passkey::VAULT_HELLO)
@@ -278,6 +277,19 @@ pub async fn vault_passkey_unlock(app: AppHandle) -> Result<()> {
 #[tauri::command]
 pub async fn vault_passkey_remove(app: AppHandle) -> Result<()> {
     with_hello(move || crate::vault_passkey::remove(&app, &crate::vault_passkey::VAULT_HELLO)).await
+}
+
+/// Drops the decrypted entries from memory. The file on disk is untouched.
+#[tauri::command]
+pub fn vault_lock(vault: tauri::State<VaultState>) -> Result<()> {
+    vault::lock(&vault)
+}
+
+/// Generates a password from the given character-class options. Pure and
+/// stateless — does not touch the vault, so it works before one exists.
+#[tauri::command]
+pub fn generate_password(options: PasswordOptions) -> Result<String> {
+    vault::generate_password(&options)
 }
 
 /// Adds a new entry to the unlocked vault and persists it immediately.

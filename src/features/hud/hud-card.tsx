@@ -3,6 +3,7 @@ import { hueVar, type EntityHue } from '@/core/entity-hue';
 import type { NotificationAction } from '@/core/events';
 import { vars } from '@/lib/utils';
 import { Icon } from '@/shared/icon';
+import { InlineText } from '@/shared/inline-text';
 
 export type HudStatus = 'running' | 'waiting' | 'blocked' | 'done' | 'idle';
 
@@ -54,7 +55,11 @@ export function HudCard({
 
       <div className="text">
         <p className="title">{title}</p>
-        {detail && <p className="detail">{detail}</p>}
+        {detail && (
+          <p className="detail">
+            <InlineText text={detail} />
+          </p>
+        )}
       </div>
 
       <div className="state">

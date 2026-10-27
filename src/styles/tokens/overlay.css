@@ -12,7 +12,7 @@
 :root {
   --glass-blur: 22px;
   --glass-saturate: 1.35;
-  --glass-opacity: 80%;
+  --glass-opacity: 94%;
 
   /* A cool ambient tint keeps glass from reading as flat grey. */
   --ambient-tint: #6b8cb8;
