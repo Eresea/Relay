@@ -94,6 +94,7 @@ pub fn decode_snippet(raw: &str) -> String {
             "quot" => Some('"'),
             "apos" => Some('\''),
             "nbsp" => Some(' '),
+            "zwnj" | "zwj" | "shy" => Some('\u{200b}'),
             _ => entity
                 .strip_prefix("#x")
                 .or_else(|| entity.strip_prefix("#X"))
@@ -113,7 +114,38 @@ pub fn decode_snippet(raw: &str) -> String {
         }
     }
     out.push_str(rest);
-    out.split_whitespace().collect::<Vec<_>>().join(" ")
+    out.split_whitespace()
+        .map(|word| {
+            word.chars()
+                .filter(|&c| !is_invisible(c))
+                .collect::<String>()
+        })
+        .filter(|word| !word.is_empty())
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
+/// Characters that take no room on screen. Newsletters pad their preview
+/// text with runs of them (`&zwnj;`, U+034F) so the mail client shows
+/// nothing after it; left in, they fill the whole preview with blanks.
+fn is_invisible(c: char) -> bool {
+    matches!(
+        c,
+        '\u{ad}'
+            | '\u{34f}'
+            | '\u{115f}'
+            | '\u{1160}'
+            | '\u{17b4}'
+            | '\u{17b5}'
+            | '\u{180e}'
+            | '\u{200b}'..='\u{200f}'
+            | '\u{202a}'..='\u{202e}'
+            | '\u{2060}'..='\u{2064}'
+            | '\u{2800}'
+            | '\u{3164}'
+            | '\u{feff}'
+            | '\u{ffa0}'
+    )
 }
 
 #[async_trait]
@@ -506,5 +538,10 @@ mod snippet_tests {
             "R&D; AT&T &bogus; 5 & 6"
         );
         assert_eq!(decode_snippet("  two\u{a0}&nbsp;spaces  \n"), "two spaces");
+        // A newsletter's padded preview text keeps only what can be seen.
+        assert_eq!(
+            decode_snippet("Sale ends\u{200c} soon \u{34f}&zwnj; \u{34f}&zwnj;&shy; \u{feff} Shop"),
+            "Sale ends soon Shop"
+        );
     }
 }
