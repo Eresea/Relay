@@ -81,4 +81,39 @@
   .number-input input {
     text-align: end;
   }
+
+  .shortcut-controls {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+    flex: none;
+  }
+
+  .shortcut-keys {
+    min-inline-size: 120px;
+    padding: var(--space-3) var(--space-4);
+    border: 1px solid var(--border-default);
+    border-radius: var(--radius-sm);
+    font-size: var(--text-12);
+    color: var(--text-muted);
+  }
+
+  .shortcut-keys:hover {
+    background: var(--tint-hover);
+  }
+
+  .shortcut-keys.recording {
+    border-color: var(--border-focus);
+    color: var(--text-strong);
+  }
+
+  /* Taken or invalid: the keycaps still show what was asked for. */
+  .shortcut-keys.broken {
+    border-color: var(--status-waiting);
+    opacity: 0.8;
+  }
+
+  .shortcut-problem {
+    color: var(--status-waiting);
+  }
 }

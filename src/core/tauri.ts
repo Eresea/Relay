@@ -175,6 +175,7 @@ export class TauriBridge {
   /** Opens a URL in the user's default browser. A no-op outside Tauri. */
   async openUrl(url: string): Promise<void> {
     // Relay's own links open a view in the main window rather than leave the app.
+    if (url.startsWith('relay://settings')) return this.runCoreCommand({ id: 'open_settings' });
     const claude = /^relay:\/\/claude\/([\w-]+)$/.exec(url);
     if (claude) return this.runCoreCommand({ id: 'open_claude', args: { sessionId: claude[1] } });
     const codex = /^relay:\/\/codex\/([\w-]+)$/.exec(url);
@@ -594,6 +595,20 @@ export class TauriBridge {
 
   async terminalClose(id: number): Promise<void> {
     await this.invoke('terminal_close', { id });
+  }
+
+  /** Relay's global shortcuts, each with its combination and whether it works. */
+  async shortcutsList(): Promise<readonly ShortcutInfo[]> {
+    return (await this.invoke<ShortcutInfo[]>('shortcuts_list')) ?? [];
+  }
+
+  /** Rebinds `action`; rejects with the reason when the combination is taken or invalid. */
+  async shortcutsSet(action: ShortcutAction, accelerator: string): Promise<ShortcutInfo | null> {
+    return this.invoke<ShortcutInfo>('shortcuts_set', { action, accelerator });
+  }
+
+  async shortcutsReset(action: ShortcutAction): Promise<ShortcutInfo | null> {
+    return this.invoke<ShortcutInfo>('shortcuts_reset', { action });
   }
 
   /** Writes an encrypted copy of the vault to disk and returns the path. */
@@ -1744,6 +1759,19 @@ export interface WorkspaceSummary {
 export interface CodexRun {
   readonly threadId: string;
   readonly response: string;
+}
+
+/** Mirrors src-tauri/src/shortcuts.rs. */
+export type ShortcutAction = 'palette' | 'attention';
+
+export interface ShortcutInfo {
+  readonly action: ShortcutAction;
+  readonly label: string;
+  /** A combination like `Ctrl+Alt+Space`, keys named as `KeyboardEvent.code`. */
+  readonly accelerator: string;
+  readonly default: string;
+  readonly status: 'active' | 'taken' | 'invalid';
+  readonly message: string | null;
 }
 
 /** Mirrors src-tauri/src/terminal.rs. */

@@ -13,6 +13,7 @@ import { inject } from '@/lib/inject';
 import { signal, useController, useSignals } from '@/lib/signals';
 import { cn } from '@/lib/utils';
 
+import { Shortcuts } from './shortcuts';
 import './settings.css';
 
 const HUD_TOP_OFFSET_KEY = 'hud.topOffset';
@@ -151,6 +152,8 @@ export default function Settings({ initialTab = 'general' }: { initialTab?: Sett
             />
           </div>
         </section>
+
+        <Shortcuts />
       </div>
 
       {on('github') && (

@@ -29,6 +29,9 @@ pub enum Error {
     #[error("{0} is part of Relay and cannot be turned off")]
     CoreModule(&'static str),
 
+    #[error("{0}")]
+    Shortcut(String),
+
     #[error("could not write settings: {0}")]
     Settings(String),
 
