@@ -1,0 +1,13 @@
+// Shared Deck chrome: titlebar with tabs, module rail, statusbar. Pages call shell({tab, rail, tabs}).
+function shell(o){
+  const tabs=(o.tabs||[]).map(t=>`<span class="tab ${t.on?'on':''}">${t.h?`<span class="tile" style="--h:var(${t.h})"><i class="ic" data-i="${t.i}"></i></span>`:`<i class="ic s14" data-i="${t.i}"></i>`}${t.l}<i class="ic s12 x" data-i="x"></i></span>`).join('');
+  const rail=[['home','Today'],['inbox','Inbox',' b'],['bot','Agents'],['terminal','Flow'],['folder','Files'],['mail','Mail'],['dot','Linear'],['pr','GitHub'],['lock','Vault'],['activity','Runtime']]
+    .map(([i,l,b])=>`<span class="it ${o.rail===l?'on':''}" title="${l}"><i class="ic s18" data-i="${i}"></i>${b?'<span class="b"></span>':''}</span>`).join('');
+  document.querySelector('.titlebar').innerHTML=`<span class="wordmark">Relay</span><span class="row gap4" style="margin-left:6px"><span class="kbd" style="height:16px;font-size:10px">Ctrl+Space</span></span>
+    <div class="tabs">${tabs}<span class="tab"><i class="ic s14" data-i="plus"></i></span></div>
+    <span class="row gap6" style="margin-left:auto;margin-right:8px;font-size:11px;color:var(--ink-3)"><span class="ring" style="width:12px;height:12px;border-radius:50%;background:conic-gradient(hsl(258 80% 70%) 0 62%,rgba(255,255,255,.12) 62% 100%);-webkit-mask:radial-gradient(circle,transparent 3.4px,#000 3.9px)"></span>2 running<span class="dot warn" style="margin-left:8px"></span>1 waiting</span>
+    <span class="row gap4" style="margin-right:4px"><span class="btn ghost sm"><i class="ic s14" data-i="split"></i></span><span class="btn ghost sm"><i class="ic s14" data-i="panelr"></i></span></span>
+    <div class="winctl"><span><i class="ic s14" data-i="minus"></i></span><span><i class="ic s14" data-i="square"></i></span><span><i class="ic s14" data-i="x"></i></span></div>`;
+  document.querySelector('.rail').innerHTML=rail+`<span class="sp"></span><span class="it" title="Modules"><i class="ic s18" data-i="blocks"></i></span><span class="it" title="Settings"><i class="ic s18" data-i="settings"></i></span><span class="avatar" style="margin-top:6px">N</span>`;
+  const sb=document.querySelector('.statusbar'); if(sb) sb.innerHTML=`<span class="row gap6"><span class="dot ok"></span>Nexus · nils</span><span class="row gap6"><i class="ic s12" data-i="branch"></i><span class="mono">github-token-cache</span></span><span class="row gap6"><i class="ic s12" data-i="cloud"></i>OpenCloud synced</span><span class="row gap6"><i class="ic s12" data-i="phone"></i>Pixel 9 · reachable</span><span style="margin-left:auto" class="row gap6"><span class="mono">v0.3.0-dev</span><span class="kbd" style="height:15px;font-size:10px">Ctrl+.</span>Attention</span>`;
+}

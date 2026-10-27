@@ -1,0 +1,100 @@
+<!doctype html><html data-theme="light"><head><meta charset="utf-8"><title>Relay · Deck · Today · light</title><link rel="stylesheet" href="proto.css">
+<style>
+.main{grid-template-columns:1fr 340px}
+.today{display:grid;grid-template-columns:420px 1fr;min-height:0}
+.triage{border-right:1px solid var(--line-0);display:flex;flex-direction:column;min-height:0}
+.filters{display:flex;gap:4px;padding:10px 14px;border-bottom:1px solid var(--line-0)}
+.ti{display:grid;grid-template-columns:auto 1fr auto;gap:2px 10px;padding:9px 14px;border-bottom:1px solid var(--line-0);align-items:center}
+.ti.on{background:var(--tint)} .ti .p{font-size:13px;color:var(--ink-0);font-weight:500} .ti .d{grid-column:2;font-size:11.5px;color:var(--ink-3)}
+.ti .meta{font-family:var(--mono);font-size:11px;color:var(--ink-4);align-self:start;padding-top:2px}
+.ti .d .src{color:var(--ink-2)}
+.detail{display:flex;flex-direction:column;min-height:0;overflow:hidden}
+.detail .hd{padding:18px 22px 14px;border-bottom:1px solid var(--line-0)}
+.detail h1{font-size:17px;font-weight:600;letter-spacing:-.02em;color:var(--ink-0)}
+.checks{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;padding:14px 22px}
+.chk{padding:10px 12px;display:flex;flex-direction:column;gap:4px} .chk .p{font-size:12px;color:var(--ink-1);font-weight:500}
+.thread{padding:4px 22px 16px;display:flex;flex-direction:column;gap:14px}
+.msg{display:grid;grid-template-columns:22px 1fr;gap:10px}
+.msg .who{font-size:12px;color:var(--ink-0);font-weight:500} .msg .when{font-size:11px;color:var(--ink-4);margin-left:6px;font-family:var(--mono)}
+.msg p{font-size:12.5px;color:var(--ink-1);margin-top:3px;max-width:62ch}
+.compose{margin-top:auto;padding:12px 22px 16px;border-top:1px solid var(--line-0);display:flex;gap:8px;align-items:center}
+.compose .field{flex:1;height:32px}
+.agenda .item{height:30px;padding:0 0}
+.agenda .time{width:44px;font-family:var(--mono);font-size:11px;color:var(--ink-3)}
+</style></head><body>
+<div class="win" style="position:relative">
+  <div class="label">08 · LIGHT · the same Deck, every token mirrored</div>
+  <header class="titlebar"></header>
+  <div class="body">
+    <nav class="rail"></nav>
+    <div class="col" style="min-height:0">
+    <div class="main grow">
+      <div class="pane">
+        <div class="panehead"><h2>Today</h2><span class="subtle sm">Saturday 25 October</span><span style="margin-left:auto" class="row gap4"><span class="chip on">Needs you · 4</span><span class="chip">All · 23</span></span></div>
+        <div class="today">
+          <div class="triage">
+            <div class="filters"><span class="chip on">All</span><span class="chip"><span class="tile sm" style="--h:var(--h-agent);width:12px;height:12px;border-radius:3px"></span>Agents</span><span class="chip"><span class="tile sm" style="--h:var(--h-git);width:12px;height:12px;border-radius:3px"></span>Code</span><span class="chip"><span class="tile sm" style="--h:var(--h-mail);width:12px;height:12px;border-radius:3px"></span>Mail</span><span class="chip"><span class="tile sm" style="--h:var(--h-linear);width:12px;height:12px;border-radius:3px"></span>Linear</span><i class="ic s14" data-i="filter" style="margin-left:auto;color:var(--ink-4)"></i></div>
+            <div class="group"><span class="cap">Needs you</span></div>
+            <div class="ti"><span class="tile" style="--h:var(--h-agent)"><i class="ic s14" data-i="bot"></i></span><span class="p ell">Codex wants to run cargo test</span><span class="meta">now</span><span class="d"><span class="src">Agent · vault sync tests</span> · 137 tests · about 40 s</span></div>
+            <div class="ti on"><span class="tile" style="--h:var(--h-git)"><i class="ic s14" data-i="pr"></i></span><span class="p ell">#37 feat(relay): module registry and permissions</span><span class="meta">14m</span><span class="d"><span class="src">GitHub · review requested</span> · 2 of 3 checks passed</span></div>
+            <div class="ti"><span class="tile" style="--h:var(--h-mail)"><i class="ic s14" data-i="mail"></i></span><span class="p ell">Tauri Updater signature rotation for release channels</span><span class="meta">09:14</span><span class="d"><span class="src">Luca Ferri</span> · asks for a decision by Monday</span></div>
+            <div class="ti"><span class="tile" style="--h:var(--h-linear)"><i class="ic s14" data-i="dot"></i></span><span class="p ell">REL-48 Publish 0.3.0 after Windows CI verifies #25</span><span class="meta">2d</span><span class="d"><span class="src">Linear · assigned to you</span> · due in cycle 14</span></div>
+            <div class="group"><span class="cap">Happening</span></div>
+            <div class="ti"><span class="tile" style="--h:var(--h-flow)"><i class="ic s14" data-i="terminal"></i></span><span class="p ell">app:build · Relay</span><span class="meta">3m 40s</span><span class="d"><span class="src">Flow</span> · bundling nsis</span><div class="track" style="--h:var(--h-flow);grid-column:2/-1;margin-top:6px"><b style="width:71%"></b></div></div>
+            <div class="ti"><span class="tile" style="--h:var(--h-agent)"><i class="ic s14" data-i="bot"></i></span><span class="p ell">Codex · vault sync tests</span><span class="meta">12m</span><span class="d"><span class="src">Agent</span> · step 3 of 5 · writing conflict test</span><div class="track" style="--h:var(--h-agent);grid-column:2/-1;margin-top:6px"><b style="width:62%"></b></div></div>
+            <div class="group"><span class="cap">Quiet</span></div>
+            <div class="ti"><span class="tile" style="--h:var(--h-git)"><i class="ic s14" data-i="commit"></i></span><span class="p ell muted">#36 merged into main</span><span class="meta">1h</span><span class="d"><span class="src">GitHub</span> · fix(relay): report failed jobs</span></div>
+            <div class="ti"><span class="tile" style="--h:var(--h-mail)"><i class="ic s14" data-i="mail"></i></span><span class="p ell muted">Your Play Console app signing key is ready</span><span class="meta">2h</span><span class="d"><span class="src">Google Play</span> · no action</span></div>
+            <div class="ti"><span class="tile" style="--h:var(--h-runtime)"><i class="ic s14" data-i="activity"></i></span><span class="p ell muted">Leaf probe recovered</span><span class="meta">4h</span><span class="d"><span class="src">Runtime</span> · down for 6 min</span></div>
+          </div>
+          <div class="detail">
+            <div class="hd">
+              <div class="row gap6 xs subtle" style="margin-bottom:8px"><span class="tile sm" style="--h:var(--h-git)"><i class="ic" data-i="pr"></i></span>GitHub · Eresea/Relay · <span class="mono">#37</span> · opened by Codex 14 m ago</div>
+              <h1>feat(relay): module registry and permissions</h1>
+              <div class="row gap6" style="margin-top:10px"><span class="chip"><span class="dot warn"></span>Review requested</span><span class="chip mono">+412 −38</span><span class="chip mono"><i class="ic s12" data-i="branch"></i>modules → main</span><span class="chip">Linked · REL-51</span></div>
+            </div>
+            <div class="checks">
+              <div class="card chk"><span class="row gap6"><span class="dot ok"></span><span class="p">lint · format</span></span><span class="xs subtle mono">48 s</span></div>
+              <div class="card chk"><span class="row gap6"><span class="dot ok"></span><span class="p">cargo test</span></span><span class="xs subtle mono">141 passed · 2m 10s</span></div>
+              <div class="card chk"><span class="row gap6"><span class="dot run"></span><span class="p">windows · nsis</span></span><span class="xs subtle mono">building · 3m 40s</span></div>
+            </div>
+            <div class="thread">
+              <div class="msg"><span class="tile sm" style="--h:var(--h-agent);width:22px;height:22px"><i class="ic" data-i="bot"></i></span><div><span class="who">Codex</span><span class="when">14m</span><p>Adds a <span class="mono">ModuleManifest</span> type and the registry that every module registers with at startup. Permissions are declared, not requested at runtime. Nothing in the palette or the attention stack changed.</p></div></div>
+              <div class="msg"><span class="avatar">N</span><div><span class="who">You</span><span class="when">6m</span><p>Why does Vault need <span class="mono">network</span>? Sync should go through Nexus, not the module.</p></div></div>
+              <div class="msg"><span class="tile sm" style="--h:var(--h-agent);width:22px;height:22px"><i class="ic" data-i="bot"></i></span><div><span class="who">Codex</span><span class="when">2m</span><p>It does not. The manifest copied the Mail template. Removed in <span class="mono">a3f91c0</span>; the Windows build is re-running.</p></div></div>
+            </div>
+            <div class="compose"><span class="field"><i class="ic s14" data-i="message"></i>Reply, or ask the agent to change something</span><span class="btn">Request changes</span><span class="btn primary">Approve</span></div>
+          </div>
+        </div>
+      </div>
+      <aside class="inspector">
+        <div class="sect"><span class="cap">Agenda</span>
+          <div class="list agenda">
+            <div class="item"><span class="time">10:00</span><span class="dot ok"></span><span class="t">Nexus staging checklist</span><span class="meta">45m</span></div>
+            <div class="item"><span class="time">13:30</span><span class="dot"></span><span class="t">Luca · updater keys</span><span class="meta">call</span></div>
+            <div class="item"><span class="time">16:00</span><span class="dot"></span><span class="t">Cycle 14 review</span><span class="meta">Linear</span></div>
+          </div>
+        </div>
+        <div class="sect"><span class="cap">Working set</span>
+          <div class="list">
+            <div class="item" style="padding:0"><span class="tile sm" style="--h:var(--h-git)"><i class="ic" data-i="folder"></i></span><span class="t">Relay</span><span class="meta">github-token-cache</span></div>
+            <div class="item" style="padding:0"><span class="tile sm" style="--h:var(--h-agent)"><i class="ic" data-i="bot"></i></span><span class="t">vault sync tests</span><span class="meta">step 3/5</span></div>
+            <div class="item" style="padding:0"><span class="tile sm" style="--h:var(--h-flow)"><i class="ic" data-i="terminal"></i></span><span class="t">Flow · 2 sessions</span><span class="meta">1 running</span></div>
+            <div class="item" style="padding:0"><span class="tile sm" style="--h:var(--h-files)"><i class="ic" data-i="file"></i></span><span class="t">docs/releasing.md</span><span class="meta">6d</span></div>
+          </div>
+        </div>
+        <div class="sect"><span class="cap">Devices</span>
+          <dl class="kv"><dt>This PC</dt><dd class="row gap6"><span class="dot ok"></span>Windows 11 · 2 agents</dd><dt>Pixel 9</dt><dd class="row gap6"><span class="dot ok"></span>reachable · synced 2m</dd><dt>Leaf</dt><dd class="row gap6"><span class="dot ok"></span>up 11d · 3 probes</dd></dl>
+        </div>
+        <div class="sect" style="border:0;margin-top:auto"><span class="cap">Ask</span>
+          <div class="field" style="height:34px"><i class="ic s14" data-i="sparkles"></i>What changed in Relay this week?<span style="margin-left:auto" class="kbd">Ctrl+L</span></div>
+        </div>
+      </aside>
+    </div>
+    <footer class="statusbar"></footer>
+    </div>
+  </div>
+</div>
+<script src="_shell.js"></script>
+<script>shell({rail:'Today',tabs:[{i:'home',l:'Today',on:true},{i:'bot',h:'--h-agent',l:'vault sync tests'},{i:'terminal',h:'--h-flow',l:'Flow · Relay'},{i:'file',h:'--h-files',l:'releasing.md'}]})</script>
+<script src="icons.js"></script></body></html>

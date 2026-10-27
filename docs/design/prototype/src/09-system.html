@@ -1,0 +1,88 @@
+<!doctype html><html><head><meta charset="utf-8"><meta name="size" content="1440,780"><title>Relay · System</title><link rel="stylesheet" href="proto.css">
+<style>
+body{background:var(--bg-0)}
+.sheet{width:1440px;height:780px;padding:36px 44px;display:grid;grid-template-columns:1fr 1.25fr 1fr;grid-template-rows:auto 1fr 1fr;gap:28px 36px;position:relative}
+h1{font-size:22px;font-weight:600;letter-spacing:-.03em;color:var(--ink-0)} h1 small{font-size:13px;font-weight:400;color:var(--ink-3);margin-left:12px;letter-spacing:0}
+.hd{grid-column:1/-1;display:flex;align-items:baseline;gap:24px}
+.hd p{font-size:12.5px;color:var(--ink-2);max-width:78ch}
+section{display:flex;flex-direction:column;gap:12px;min-width:0}
+section .cap{display:block}
+.sw{display:grid;grid-template-columns:repeat(5,1fr);gap:6px}
+.sw div{height:44px;border-radius:8px;display:flex;align-items:flex-end;padding:6px;font:10.5px var(--mono);color:var(--ink-3);box-shadow:inset 0 0 0 1px var(--line-1)}
+.hues{display:flex;gap:6px;flex-wrap:wrap}
+.hues .tile{width:34px;height:34px;border-radius:10px;flex-direction:column;gap:1px;font:10px var(--mono)}
+.type div{display:flex;align-items:baseline;gap:14px} .type .mono{color:var(--ink-4);font-size:10.5px;width:132px;flex:none;white-space:nowrap}
+.tiers{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.tier{padding:14px;border-radius:14px;min-height:150px;display:flex;flex-direction:column;gap:8px;font-size:12px}
+.tier b{font-weight:500;color:var(--ink-0);display:block} .tier span{color:var(--ink-2)}
+.tier.desk{background:#1b2440 radial-gradient(240px 160px at 20% 10%,#2d4a86,transparent 60%),radial-gradient(220px 160px at 90% 100%,#5a2f7a,transparent 60%);box-shadow:none}
+.tier.desk .glass{padding:10px 12px;border-radius:12px}
+.comps{display:flex;flex-direction:column;gap:12px}
+.rowc{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.rules{font-size:12px;color:var(--ink-2);display:flex;flex-direction:column;gap:7px}
+.rules b{font-weight:500;color:var(--ink-0)}
+.spacing{display:flex;align-items:flex-end;gap:8px} .spacing b{display:block;background:var(--accent-quiet);box-shadow:inset 0 0 0 1px var(--accent)}
+.spacing span{font:10.5px var(--mono);color:var(--ink-4);display:block;margin-top:4px;text-align:center}
+.item.demo{height:34px;padding:0 10px;border-radius:6px;background:var(--bg-2);box-shadow:inset 0 0 0 1px var(--line-0)}
+</style></head><body>
+<div class="sheet">
+  <div class="label">09 · SYSTEM · tokens, tiers, components</div>
+  <div class="hd"><h1>Relay system<small>Umbra 2 · proposal</small></h1><p>Same DNA as today's Umbra, three changes: a deeper tonal ladder so panes separate without borders, module hues as a first-class token, and two surface tiers that never mix. Dark is the default; light mirrors every token.</p></div>
+
+  <section>
+    <span class="cap">Tonal ladder · 5 steps</span>
+    <div class="sw"><div style="background:var(--bg-0)">bg-0</div><div style="background:var(--bg-1)">bg-1</div><div style="background:var(--bg-2)">bg-2</div><div style="background:var(--bg-3)">bg-3</div><div style="background:var(--bg-4)">bg-4</div></div>
+    <span class="cap">Ink · 5 steps</span>
+    <div class="sw"><div style="background:var(--ink-0);color:#000">ink-0</div><div style="background:var(--ink-1);color:#000">ink-1</div><div style="background:var(--ink-2);color:#000">ink-2</div><div style="background:var(--ink-3)">ink-3</div><div style="background:var(--ink-4)">ink-4</div></div>
+    <span class="cap">Status · how it is going</span>
+    <div class="rowc"><span class="chip"><span class="dot run"></span>Running</span><span class="chip"><span class="dot warn"></span>Needs you</span><span class="chip"><span class="dot ok"></span>Done</span><span class="chip"><span class="dot bad"></span>Failed</span><span class="chip"><span class="dot"></span>Idle</span><span class="chip" style="color:var(--accent)">accent · links, focus, one button</span></div>
+    <span class="cap">Module hue · which</span>
+    <div class="hues">
+      <span class="tile" style="--h:var(--h-agent)"><i class="ic s14" data-i="bot"></i>258</span><span class="tile" style="--h:var(--h-flow)"><i class="ic s14" data-i="terminal"></i>188</span><span class="tile" style="--h:var(--h-mail)"><i class="ic s14" data-i="mail"></i>22</span><span class="tile" style="--h:var(--h-git)"><i class="ic s14" data-i="pr"></i>152</span><span class="tile" style="--h:var(--h-linear)"><i class="ic s14" data-i="dot"></i>228</span><span class="tile" style="--h:var(--h-files)"><i class="ic s14" data-i="folder"></i>44</span><span class="tile" style="--h:var(--h-vault)"><i class="ic s14" data-i="lock"></i>336</span><span class="tile" style="--h:var(--h-runtime)"><i class="ic s14" data-i="activity"></i>98</span><span class="tile" style="--h:var(--h-chat)"><i class="ic s14" data-i="message"></i>300</span><span class="tile" style="--h:var(--h-relay)"><i class="ic s14" data-i="phone"></i>212</span>
+    </div>
+    <div class="rules"><span>Hue appears on tiles, dots and tracks. Never on text, borders or backgrounds. Third-party modules get a hue by stable hash of their id.</span></div>
+  </section>
+
+  <section>
+    <span class="cap">Type · Geist, Geist Mono</span>
+    <div class="type">
+      <div><span class="mono">22 / 600 / −.03</span><span style="font-size:22px;font-weight:600;letter-spacing:-.03em;color:var(--ink-0)">Page title</span></div>
+      <div><span class="mono">17 / 600 / −.02</span><span style="font-size:17px;font-weight:600;letter-spacing:-.02em;color:var(--ink-0)">Detail heading</span></div>
+      <div><span class="mono">14 / 500</span><span style="font-size:14px;font-weight:500;color:var(--ink-0)">Card and mobile title</span></div>
+      <div><span class="mono">13 / 400</span><span style="font-size:13px;color:var(--ink-1)">Body, rows, controls. The default.</span></div>
+      <div><span class="mono">12 / 400</span><span style="font-size:12px;color:var(--ink-2)">Descriptions, meta, inspector values</span></div>
+      <div><span class="mono">11 / 500 / .06 caps</span><span class="cap">Section caption</span></div>
+      <div><span class="mono">mono 11–12.5</span><span class="mono sm" style="white-space:nowrap">4,128 files · 212 MB · 3m 40s · a3f91c0</span></div>
+    </div>
+    <span class="cap">Spacing · 4px grid, fixed chrome</span>
+    <div class="spacing"><div><b style="width:4px;height:4px"></b><span>4</span></div><div><b style="width:8px;height:8px"></b><span>8</span></div><div><b style="width:12px;height:12px"></b><span>12</span></div><div><b style="width:16px;height:16px"></b><span>16</span></div><div><b style="width:24px;height:24px"></b><span>24</span></div><div style="margin-left:10px" class="rules"><span>Titlebar 40 · rail 52 · pane head 38 · row 34 · inspector 340 · status 24</span><span>Radii 4 / 6 / 9 / 12 in the shell, 18 on glass</span></div></div>
+    <span class="cap">Controls</span>
+    <div class="comps">
+      <div class="rowc"><span class="btn primary">Approve</span><span class="btn">Request changes</span><span class="btn ghost">Open thread</span><span class="btn sm">Dry run</span><span class="toggle on"></span><span class="toggle"></span><span class="kbd">Ctrl+Space</span><span class="kbd">↵</span></div>
+      <div class="rowc"><span class="field" style="width:220px"><i class="ic s14" data-i="search"></i>Find a file<span class="kbd" style="margin-left:auto;height:15px">Ctrl+P</span></span><span class="chip on">All</span><span class="chip">Agents</span><span class="chip mono">+412 −38</span><span class="avatar">N</span></div>
+      <div class="item demo"><span class="tile" style="--h:var(--h-git)"><i class="ic s14" data-i="pr"></i></span><span class="t">A row: tile, title, meta. Hover tints, selection tints harder, the cursor never changes.</span><span class="meta">14m</span></div>
+    </div>
+  </section>
+
+  <section>
+    <span class="cap">Two tiers · never mixed</span>
+    <div class="tiers">
+      <div class="tier card"><b>Shell · flat</b><span>Opaque. Tonal steps instead of borders where possible; hairlines where not. Lives in one window: the Deck.</span><div class="card" style="padding:8px 10px;background:var(--bg-3);margin-top:auto"><div class="row gap6 sm"><span class="dot ok"></span>bg-3 on bg-2 on bg-1</div></div></div>
+      <div class="tier desk"><div class="glass" style="margin-top:auto"><b style="color:#fafafa">Desktop · glass</b><span style="color:#d4d4d8">74% fill, blur 28, rim light, wide soft shadow. Only the Omnibar, the pill and the stack.</span></div></div>
+    </div>
+    <span class="cap">The four surfaces</span>
+    <div class="rules">
+      <span><b>Omnibar</b> · Ctrl+Space · do, ask, find, run. Context chips say where you are. A preview pane says what it costs before Enter.</span>
+      <span><b>Pill and stack</b> · always one line; expands with Ctrl+. · asks only when blocked on you.</span>
+      <span><b>Deck</b> · the one window. Rail of modules, tabs that split, an inspector that follows selection, Flow in any pane.</span>
+      <span><b>Phone</b> · Today and the Omnibar, nothing else. Approvals travel; the PC stays the place work happens.</span>
+    </div>
+    <span class="cap">Rules that bite</span>
+    <div class="rules">
+      <span><b>Nothing loads until opened.</b> A module that is off costs 0 MB and no startup time. The rail shows what is installed, not what is running.</span>
+      <span><b>Say what it costs.</b> Time, files touched, reversibility, tokens. Numbers in mono, specific or Unavailable.</span>
+      <span><b>Agents are tenants.</b> Same rows, same tiles, same approvals as a person. Their permissions are visible on every surface they appear on.</span>
+    </div>
+  </section>
+</div>
+<script src="icons.js"></script></body></html>

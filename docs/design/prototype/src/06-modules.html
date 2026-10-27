@@ -1,0 +1,88 @@
+<!doctype html><html><head><meta charset="utf-8"><title>Relay · Modules</title><link rel="stylesheet" href="proto.css">
+<style>
+.main{grid-template-columns:1fr 380px}
+.wrap{padding:20px 24px;overflow:hidden;display:flex;flex-direction:column;gap:18px}
+.hero h1{font-size:18px;font-weight:600;letter-spacing:-.02em;color:var(--ink-0)} .hero p{font-size:12.5px;color:var(--ink-2);margin-top:4px;max-width:70ch}
+.grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+.mod{padding:12px 12px 10px;display:flex;flex-direction:column;gap:8px}
+.mod.on{box-shadow:0 0 0 1px var(--line-2)}
+.mod .hd{display:flex;align-items:center;gap:10px}
+.mod .hd .n{font-size:13px;font-weight:500;color:var(--ink-0)} .mod .hd .s{font-size:11px;color:var(--ink-3)}
+.mod .gives{display:flex;gap:4px;flex-wrap:wrap} .mod .gives .chip{height:18px;font-size:10.5px;padding:0 6px}
+.mod .ft{display:flex;align-items:center;gap:6px;font-size:11px;color:var(--ink-3);margin-top:2px}
+.add{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}
+.src{padding:12px;display:flex;flex-direction:column;gap:6px;border-style:dashed;border-color:var(--line-1)}
+.src .n{font-size:12.5px;font-weight:500;color:var(--ink-1)} .src p{font-size:11.5px;color:var(--ink-3)}
+.contract{display:grid;grid-template-columns:repeat(4,1fr);gap:0;font-size:12px}
+.contract>div{padding:10px 12px;border-right:1px solid var(--line-0)} .contract>div:last-child{border:0}
+.contract b{display:block;font-weight:500;color:var(--ink-0);margin-bottom:3px} .contract span{color:var(--ink-3);font-size:11.5px}
+.perm{display:flex;align-items:center;gap:10px;height:30px;font-size:12px}
+.perm .t{flex:1} .perm .scope{font-family:var(--mono);font-size:11px;color:var(--ink-3)}
+</style></head><body>
+<div class="win" style="position:relative">
+  <div class="label">06 · MODULES · every capability is a module, including Relay's own</div>
+  <header class="titlebar"></header>
+  <div class="body">
+    <nav class="rail"></nav>
+    <div class="col" style="min-height:0">
+    <div class="main grow">
+      <div class="pane">
+        <div class="panehead"><h2>Modules</h2><span class="subtle sm">11 on · 2 off · 1 update</span><span style="margin-left:auto" class="row gap4"><span class="field" style="height:26px;width:220px"><i class="ic s14" data-i="search"></i>Search modules</span><span class="btn sm primary"><i class="ic s12" data-i="plus"></i>Add</span></span></div>
+        <div class="wrap">
+          <div class="card contract">
+            <div><b>Commands</b><span>appear in the Omnibar</span></div>
+            <div><b>Items</b><span>land in Today and search</span></div>
+            <div><b>Surfaces</b><span>open as tabs or panes</span></div>
+            <div><b>Signals</b><span>drive the pill and the stack</span></div>
+          </div>
+          <div class="hero" style="margin-top:-4px"><p>A module declares what it gives and what it needs. Relay draws the rest. Flow, Codex and Mail use the same contract as a web app you pin or an MCP server you point at.</p></div>
+
+          <div class="grid">
+            <div class="card mod on"><div class="hd"><span class="tile lg" style="--h:var(--h-flow)"><i class="ic" data-i="terminal"></i></span><div class="grow"><div class="n">Flow</div><div class="s">Logos · terminal · v2.3</div></div><span class="toggle on"></span></div><div class="gives"><span class="chip">4 commands</span><span class="chip">surface</span><span class="chip">signals</span></div><div class="ft"><i class="ic s12" data-i="shield"></i>shell, files in workspaces<span style="margin-left:auto" class="row gap4"><span class="dot run"></span>1 running</span></div></div>
+            <div class="card mod"><div class="hd"><span class="tile lg" style="--h:var(--h-agent)"><i class="ic" data-i="bot"></i></span><div class="grow"><div class="n">Codex</div><div class="s">OpenAI · agent</div></div><span class="toggle on"></span></div><div class="gives"><span class="chip">6 commands</span><span class="chip">items</span><span class="chip">surface</span><span class="chip">signals</span></div><div class="ft"><i class="ic s12" data-i="shield"></i>edit in workspaces, asks to run</div></div>
+            <div class="card mod"><div class="hd"><span class="tile lg" style="--h:var(--h-agent)"><i class="ic" data-i="sparkles"></i></span><div class="grow"><div class="n">Claude</div><div class="s">Anthropic · agent</div></div><span class="toggle on"></span></div><div class="gives"><span class="chip">5 commands</span><span class="chip">items</span><span class="chip">surface</span></div><div class="ft"><i class="ic s12" data-i="shield"></i>same policy as Codex</div></div>
+            <div class="card mod"><div class="hd"><span class="tile lg" style="--h:var(--h-mail)"><i class="ic" data-i="mail"></i></span><div class="grow"><div class="n">Mail</div><div class="s">Gmail · 2 accounts</div></div><span class="toggle on"></span></div><div class="gives"><span class="chip">3 commands</span><span class="chip">items</span><span class="chip">surface</span><span class="chip">signals</span></div><div class="ft"><i class="ic s12" data-i="shield"></i>read, send as you<span style="margin-left:auto" class="row gap4"><span class="dot ok"></span>polled 40 s</span></div></div>
+            <div class="card mod"><div class="hd"><span class="tile lg" style="--h:var(--h-git)"><i class="ic" data-i="pr"></i></span><div class="grow"><div class="n">GitHub</div><div class="s">via Nexus · 14 repos</div></div><span class="toggle on"></span></div><div class="gives"><span class="chip">9 commands</span><span class="chip">items</span><span class="chip">signals</span></div><div class="ft"><i class="ic s12" data-i="shield"></i>repo read, PR write</div></div>
+            <div class="card mod"><div class="hd"><span class="tile lg" style="--h:var(--h-linear)"><i class="ic" data-i="dot"></i></span><div class="grow"><div class="n">Linear</div><div class="s">workspace · Eresea</div></div><span class="toggle on"></span></div><div class="gives"><span class="chip">7 commands</span><span class="chip">items</span><span class="chip">surface</span></div><div class="ft"><i class="ic s12" data-i="shield"></i>read, write</div></div>
+            <div class="card mod"><div class="hd"><span class="tile lg" style="--h:var(--h-vault)"><i class="ic" data-i="lock"></i></span><div class="grow"><div class="n">Vault</div><div class="s">built in · encrypted</div></div><span class="toggle on"></span></div><div class="gives"><span class="chip">4 commands</span><span class="chip">surface</span></div><div class="ft"><i class="ic s12" data-i="shield"></i>no network · sync via Nexus</div></div>
+            <div class="card mod"><div class="hd"><span class="tile lg" style="--h:var(--h-files)"><i class="ic" data-i="cloud"></i></span><div class="grow"><div class="n">OpenCloud</div><div class="s">files · opencloud.eresea.dev</div></div><span class="toggle on"></span></div><div class="gives"><span class="chip">2 commands</span><span class="chip">items</span><span class="chip">place</span></div><div class="ft"><i class="ic s12" data-i="shield"></i>files in your space<span style="margin-left:auto" class="row gap4"><span class="dot warn"></span>update</span></div></div>
+            <div class="card mod"><div class="hd"><span class="tile lg" style="--h:var(--h-runtime)"><i class="ic" data-i="activity"></i></span><div class="grow"><div class="n">Runtime</div><div class="s">Leaf, Nexus, Grafana</div></div><span class="toggle on"></span></div><div class="gives"><span class="chip">3 commands</span><span class="chip">items</span><span class="chip">signals</span></div><div class="ft"><i class="ic s12" data-i="shield"></i>read only</div></div>
+            <div class="card mod"><div class="hd"><span class="tile lg" style="--h:var(--h-chat)"><i class="ic" data-i="message"></i></span><div class="grow"><div class="n">Matrix</div><div class="s">chat · 3 rooms</div></div><span class="toggle"></span></div><div class="gives"><span class="chip">items</span><span class="chip">surface</span><span class="chip">signals</span></div><div class="ft subtle">Off · nothing polled</div></div>
+            <div class="card mod"><div class="hd"><span class="tile lg" style="--h:200"><i class="ic" data-i="globe"></i></span><div class="grow"><div class="n">Grafana</div><div class="s">pinned web app</div></div><span class="toggle on"></span></div><div class="gives"><span class="chip">1 command</span><span class="chip">surface</span></div><div class="ft"><i class="ic s12" data-i="shield"></i>isolated webview</div></div>
+            <div class="card mod"><div class="hd"><span class="tile lg" style="--h:var(--h-relay)"><i class="ic" data-i="phone"></i></span><div class="grow"><div class="n">Devices</div><div class="s">built in · Pixel 9, Leaf</div></div><span class="toggle on"></span></div><div class="gives"><span class="chip">handoff</span><span class="chip">signals</span></div><div class="ft"><i class="ic s12" data-i="shield"></i>Nexus relay only</div></div>
+          </div>
+
+          <div><span class="cap" style="display:block;margin-bottom:8px">Add a module from</span>
+          <div class="add">
+            <div class="card src"><div class="row gap6"><i class="ic s14" data-i="package"></i><span class="n">Relay module</span></div><p>A manifest and a bundle. Native (Rust) or web (any framework) surfaces.</p></div>
+            <div class="card src"><div class="row gap6"><i class="ic s14" data-i="cpu"></i><span class="n">MCP server</span></div><p>Tools become commands, resources become items. No UI needed.</p></div>
+            <div class="card src"><div class="row gap6"><i class="ic s14" data-i="globe"></i><span class="n">Web app</span></div><p>Pin a URL. Gets a tab, a command and an isolated session.</p></div>
+            <div class="card src"><div class="row gap6"><i class="ic s14" data-i="terminal"></i><span class="n">CLI</span></div><p>Wrap a binary. Flow runs it, the stack reports it.</p></div>
+          </div></div>
+        </div>
+      </div>
+
+      <aside class="inspector">
+        <div class="sect"><div class="row gap12"><span class="tile xl" style="--h:var(--h-flow)"><i class="ic" data-i="terminal"></i></span><div class="grow"><div class="strong" style="font-size:14px">Flow</div><div class="xs subtle">Logos · terminal · v2.3 · native</div></div><span class="toggle on"></span></div>
+          <p class="sm muted" style="margin-top:10px">Block-based terminal with sessions, SSH and inline explanations. Relay hosts it as a surface and routes its jobs through the attention stack.</p></div>
+        <div class="sect"><span class="cap">Needs</span>
+          <div class="perm"><i class="ic s14" data-i="check" style="color:var(--ok)"></i><span class="t">Run a shell</span><span class="scope">this PC</span></div>
+          <div class="perm"><i class="ic s14" data-i="check" style="color:var(--ok)"></i><span class="t">Read and write files</span><span class="scope">workspaces only</span></div>
+          <div class="perm"><i class="ic s14" data-i="check" style="color:var(--ok)"></i><span class="t">Open SSH connections</span><span class="scope">leaf, nexus</span></div>
+          <div class="perm"><i class="ic s14" data-i="x" style="color:var(--ink-4)"></i><span class="t subtle">Read mail, calendar, vault</span><span class="scope">not asked</span></div>
+          <div class="perm"><i class="ic s14" data-i="alert" style="color:var(--warn)"></i><span class="t">Agents may drive it</span><span class="scope">asks per task</span></div>
+        </div>
+        <div class="sect"><span class="cap">Gives</span>
+          <div class="list"><div class="item" style="padding:0;height:28px"><i class="ic s14" data-i="command" style="color:var(--ink-3)"></i><span class="t sm">Run in Flow</span><span class="meta">Ctrl+`</span></div><div class="item" style="padding:0;height:28px"><i class="ic s14" data-i="command" style="color:var(--ink-3)"></i><span class="t sm">New session here</span></div><div class="item" style="padding:0;height:28px"><i class="ic s14" data-i="command" style="color:var(--ink-3)"></i><span class="t sm">Attach to Leaf</span></div><div class="item" style="padding:0;height:28px"><i class="ic s14" data-i="command" style="color:var(--ink-3)"></i><span class="t sm">Explain last error</span></div><div class="item" style="padding:0;height:28px"><i class="ic s14" data-i="layers" style="color:var(--ink-3)"></i><span class="t sm">Surface · Flow pane</span></div><div class="item" style="padding:0;height:28px"><i class="ic s14" data-i="bell" style="color:var(--ink-3)"></i><span class="t sm">Signals · job started, finished, failed</span></div></div>
+        </div>
+        <div class="sect"><span class="cap">Footprint</span><dl class="kv" style="grid-template-columns:90px 1fr"><dt>Idle</dt><dd class="mono">0 MB · not loaded</dd><dt>Open</dt><dd class="mono">31 MB · 1 session</dd><dt>Startup cost</dt><dd class="mono">none</dd></dl></div>
+        <div class="sect" style="border:0;margin-top:auto"><div class="row gap6"><span class="btn sm">Open</span><span class="btn sm">Update settings</span><span class="btn ghost sm" style="margin-left:auto;color:var(--bad)">Remove</span></div></div>
+      </aside>
+    </div>
+    <footer class="statusbar"></footer>
+    </div>
+  </div>
+</div>
+<script src="_shell.js"></script>
+<script>shell({rail:'Modules',tabs:[{i:'home',l:'Today'},{i:'blocks',l:'Modules',on:true}]})</script>
+<script src="icons.js"></script></body></html>

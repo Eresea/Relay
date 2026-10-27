@@ -1,0 +1,131 @@
+<!doctype html><html><head><meta charset="utf-8"><title>Relay · Workbench</title><link rel="stylesheet" href="proto.css">
+<style>
+.main{grid-template-columns:1fr 1fr 300px}
+.thread{flex:1;overflow:hidden;padding:16px 20px;display:flex;flex-direction:column;gap:16px}
+.turn{display:grid;grid-template-columns:22px 1fr;gap:10px;min-width:0}.turn>div{min-width:0}
+.turn .who{font-size:12px;font-weight:500;color:var(--ink-0)} .turn .when{font-family:var(--mono);font-size:11px;color:var(--ink-4);margin-left:6px}
+.turn p{font-size:12.5px;color:var(--ink-1);margin-top:3px;max-width:60ch}
+.plan{margin-top:8px;display:flex;flex-direction:column}
+.step{display:flex;align-items:center;gap:10px;height:28px;padding:0 10px;font-size:12px;color:var(--ink-2)}
+.step.done{color:var(--ink-3)} .step.now{color:var(--ink-0);background:var(--tint)} .step .meta{margin-left:auto;font-family:var(--mono);font-size:11px;color:var(--ink-4)}
+.tool{margin-top:8px;overflow:hidden}
+.tool .hd{display:flex;align-items:center;gap:8px;height:30px;padding:0 10px;font-size:12px;color:var(--ink-2);border-bottom:1px solid var(--line-0)}
+.tool .hd .mono{color:var(--ink-1)}
+.tool pre{padding:8px 12px;max-height:150px;overflow:hidden}
+.ask{padding:12px 20px 16px;border-top:1px solid var(--line-0)}
+.ask .box{padding:10px 12px;display:flex;flex-direction:column;gap:10px;background:var(--bg-0);box-shadow:inset 0 0 0 1px var(--line-1);border-radius:var(--r-3)}
+.ask .box .ph{font-size:13px;color:var(--ink-3)}
+.ask .ctl{display:flex;align-items:center;gap:6px}
+/* Flow */
+.flow{background:var(--bg-0)}
+.blk{border-bottom:1px solid var(--line-0);padding:10px 16px 12px}
+.blk .cmd{display:flex;align-items:center;gap:8px;font-family:var(--mono);font-size:12.5px;color:var(--ink-0)}
+.blk .cmd .ps{color:hsl(188 80% 70%)} .blk .cmd .meta{margin-left:auto;font-size:11px;color:var(--ink-4)}
+.blk pre{margin-top:8px;font-family:var(--mono);font-size:11.5px;line-height:1.55;color:var(--ink-2);white-space:pre-wrap}
+.blk.live{background:linear-gradient(180deg,transparent,rgba(122,168,255,.03))}
+.blk .ai{margin-top:8px;display:flex;gap:8px;align-items:flex-start;padding:8px 10px;border-radius:var(--r-2);background:var(--accent-quiet);font-size:12px;color:var(--ink-1)}
+.prompt{margin-top:auto;display:flex;align-items:center;gap:8px;padding:10px 16px;border-top:1px solid var(--line-0);font-family:var(--mono);font-size:12.5px;color:var(--ink-0)}
+.prompt .ps{color:hsl(188 80% 70%)} .prompt .caret{width:7px;height:15px;background:var(--ink-0);opacity:.9}
+.prompt .hint{margin-left:auto;font:11px var(--sans);color:var(--ink-4)}
+.sesstabs{display:flex;gap:2px;margin-left:8px}
+.sesstabs .chip{height:22px;border-radius:6px}
+.files .item{height:28px;padding:0;font-size:12px}
+.files .mono{font-size:11.5px}
+.pm{display:flex;flex-direction:column;gap:8px}
+.perm{display:flex;align-items:center;gap:8px;font-size:12px}
+</style></head><body>
+<div class="win" style="position:relative">
+  <div class="label">04 · WORKBENCH · agent thread + Flow terminal, split</div>
+  <header class="titlebar"></header>
+  <div class="body">
+    <nav class="rail"></nav>
+    <div class="col" style="min-height:0">
+    <div class="main grow">
+      <!-- agent thread -->
+      <div class="pane">
+        <div class="panehead"><span class="tile sm" style="--h:var(--h-agent)"><i class="ic" data-i="bot"></i></span><h2>vault sync tests</h2><span class="chip"><span class="dot run"></span>Working · step 3 of 5</span><span style="margin-left:auto" class="row gap4"><span class="btn ghost sm"><i class="ic s14" data-i="pause"></i></span><span class="btn ghost sm"><i class="ic s14" data-i="history"></i></span><span class="btn ghost sm"><i class="ic s14" data-i="more"></i></span></span></div>
+        <div class="thread">
+          <div class="turn"><span class="avatar">N</span><div><span class="who">You</span><span class="when">14m</span><p>Add regression tests for vault sync: wrong password on restore, and two devices uploading conflicting revisions. Don't touch the transport.</p></div></div>
+          <div class="turn"><span class="tile sm" style="--h:var(--h-agent);width:22px;height:22px"><i class="ic" data-i="bot"></i></span><div><span class="who">Codex</span><span class="when">13m</span><p>The conflict path already returns a structured <span class="mono">VaultConflict</span>, so both tests can sit in <span class="mono">vault.rs</span> next to the atomic-write tests and use the existing <span class="mono">FakeSink</span>.</p>
+            <div class="plan card">
+              <div class="step done"><i class="ic s14" data-i="checkc" style="color:var(--ok)"></i>Read vault.rs and nexus_sync.rs<span class="meta">41 s</span></div>
+              <div class="step done"><i class="ic s14" data-i="checkc" style="color:var(--ok)"></i>Wrong-password restore test<span class="meta">+38 lines</span></div>
+              <div class="step now"><span class="ring" style="width:14px;height:14px;border-radius:50%;background:conic-gradient(hsl(258 80% 70%) 0 62%,rgba(255,255,255,.12) 62% 100%);-webkit-mask:radial-gradient(circle,transparent 4px,#000 4.5px)"></span>Two-device conflict test<span class="meta">writing</span></div>
+              <div class="step"><i class="ic s14" data-i="circle" style="color:var(--ink-4)"></i>Run cargo test<span class="meta">needs you</span></div>
+              <div class="step"><i class="ic s14" data-i="circle" style="color:var(--ink-4)"></i>Summarise and open a PR<span class="meta"></span></div>
+            </div>
+            <div class="tool card diff">
+              <div class="hd"><i class="ic s14" data-i="pencil"></i>Editing <span class="mono">src-tauri/src/vault.rs</span><span class="subtle" style="margin-left:auto">+27 −0</span></div>
+<pre class="code"><span class="c">@@ -412,6 +412,33 @@ mod tests {</span>
+<span class="add">+    #[test]</span>
+<span class="add">+    fn restore_rejects_wrong_password_and_keeps_local() {</span>
+<span class="add">+        let dir = tempdir();</span>
+<span class="add">+        let local = write_vault(&amp;dir, "correct horse", &amp;[entry("a")]);</span>
+<span class="add">+        let remote = encrypt(&amp;[entry("b")], "wrong");</span>
+<span class="add">+        let err = restore(&amp;dir, remote, "correct horse").unwrap_err();</span>
+<span class="add">+        assert!(matches!(err, Error::WrongPassword));</span>
+<span class="add">+        assert_eq!(read_vault(&amp;dir, "correct horse"), local);</span></pre>
+            </div>
+          </div></div>
+        </div>
+        <div class="ask"><div class="box"><span class="ph">Steer, or let it keep going</span><div class="ctl"><span class="chip"><i class="ic s12" data-i="clip"></i>Context · 3 files</span><span class="chip"><i class="ic s12" data-i="shield"></i>Can edit · asks before running</span><span style="margin-left:auto" class="row gap4"><span class="kbd">Ctrl+↵</span><span class="btn primary sm">Send</span></span></div></div></div>
+      </div>
+
+      <!-- Flow terminal -->
+      <div class="pane flow">
+        <div class="panehead"><span class="tile sm" style="--h:var(--h-flow)"><i class="ic" data-i="terminal"></i></span><h2>Flow</h2><div class="sesstabs"><span class="chip on">relay · pwsh</span><span class="chip"><span class="dot run"></span>app:build</span><span class="chip">leaf · ssh</span><span class="chip"><i class="ic s12" data-i="plus"></i></span></div><span style="margin-left:auto" class="row gap4"><span class="btn ghost sm"><i class="ic s14" data-i="split"></i></span><span class="btn ghost sm"><i class="ic s14" data-i="search"></i></span></span></div>
+        <div class="blk"><div class="cmd"><span class="ps">❯</span>git status --short<span class="meta">12:41 · 0.1 s · <i class="ic s12" data-i="check" style="color:var(--ok)"></i></span></div><pre> M src-tauri/src/vault.rs
+?? src-tauri/src/vault_tests.rs</pre></div>
+        <div class="blk"><div class="cmd"><span class="ps">❯</span>cargo test vault::<span class="meta">12:43 · 38.2 s · <i class="ic s12" data-i="x" style="color:var(--bad)"></i> 1</span></div><pre>running 14 tests
+test vault::tests::atomic_replace_keeps_old_on_failure ... ok
+test vault::tests::restore_rejects_wrong_password_and_keeps_local ... ok
+test vault::tests::two_devices_conflict_reports_both_revisions ... <span style="color:var(--bad)">FAILED</span>
+
+---- two_devices_conflict_reports_both_revisions stdout ----
+assertion `left == right` failed
+  left:  Conflict { base: 3, theirs: 4, ours: 4 }
+  right: Conflict { base: 3, theirs: 5, ours: 4 }</pre>
+          <div class="ai"><i class="ic s14" data-i="sparkles" style="color:var(--accent);margin-top:1px"></i><span><b style="font-weight:500;color:var(--ink-0)">The fake sync server increments revisions per upload, not per device.</b> The test expects device B to land on 5. Either seed B at revision 4 or assert on <span class="mono">theirs &gt; base</span>. <span class="subtle">· Hand to agent · Explain more</span></span></div></div>
+        <div class="blk live"><div class="cmd"><span class="ps">❯</span>npm run app:build<span class="meta">12:44 · 3m 40s · <span class="dot run" style="display:inline-block;width:6px;height:6px"></span></span></div><pre>     Running beforeBuildCommand `npm run build`
+Initial chunk files  | Names         |  Raw size | Estimated transfer size
+main-H4K2L9.js       | main          | 612.40 kB |               148.22 kB
+    Finished `release` profile [optimized] target(s) in 2m 51s
+    Bundling Relay_0.3.0_x64-setup.exe (F:\Code\Apps\Relay\src-tauri\target\release\bundle\nsis)<span class="caret" style="display:inline-block;width:7px;height:13px;background:var(--ink-2);vertical-align:-2px;margin-left:2px"></span></pre></div>
+        <div class="prompt"><span class="ps">relay</span><span class="subtle mono">github-token-cache</span><span class="ps">❯</span><span class="caret"></span><span class="hint">Tab completes · <span class="mono">?</span> asks in natural language</span></div>
+      </div>
+
+      <aside class="inspector">
+        <div class="sect"><span class="cap">Changes · this task</span>
+          <div class="list files">
+            <div class="item"><span class="dot" style="background:var(--warn)"></span><span class="t mono">src-tauri/src/vault.rs</span><span class="meta" style="color:var(--ok)">+27</span></div>
+            <div class="item"><span class="dot" style="background:var(--ok)"></span><span class="t mono">src-tauri/src/vault_tests.rs</span><span class="meta" style="color:var(--ok)">+64</span></div>
+          </div>
+          <div class="row gap6" style="margin-top:10px"><span class="btn sm">Review diff</span><span class="btn ghost sm">Discard</span></div>
+        </div>
+        <div class="sect"><span class="cap">Allowed</span>
+          <div class="pm">
+            <div class="perm"><i class="ic s14" data-i="check" style="color:var(--ok)"></i>Read and edit files in Relay</div>
+            <div class="perm"><i class="ic s14" data-i="check" style="color:var(--ok)"></i>Run <span class="mono">git</span> read commands</div>
+            <div class="perm"><i class="ic s14" data-i="alert" style="color:var(--warn)"></i>Run tests · asks each time</div>
+            <div class="perm"><i class="ic s14" data-i="x" style="color:var(--ink-4)"></i><span class="subtle">Network · off</span></div>
+            <div class="perm"><i class="ic s14" data-i="x" style="color:var(--ink-4)"></i><span class="subtle">Push, release, delete · off</span></div>
+          </div>
+        </div>
+        <div class="sect"><span class="cap">Cost</span>
+          <dl class="kv" style="grid-template-columns:80px 1fr"><dt>Elapsed</dt><dd class="mono">14m 02s</dd><dt>Tokens</dt><dd class="mono">184k in · 9.1k out</dd><dt>Spend</dt><dd class="mono">$0.61</dd><dt>Budget</dt><dd class="mono">$5.00 · task</dd></dl>
+        </div>
+        <div class="sect" style="border:0"><span class="cap">Linked</span>
+          <div class="list files">
+            <div class="item"><span class="tile sm" style="--h:var(--h-linear)"><i class="ic" data-i="dot"></i></span><span class="t">REL-44 Vault sync verification</span></div>
+            <div class="item"><span class="tile sm" style="--h:var(--h-git)"><i class="ic" data-i="branch"></i></span><span class="t mono">codex/vault-sync-tests</span></div>
+          </div>
+        </div>
+      </aside>
+    </div>
+    <footer class="statusbar"></footer>
+    </div>
+  </div>
+</div>
+<script src="_shell.js"></script>
+<script>shell({rail:'Agents',tabs:[{i:'home',l:'Today'},{i:'bot',h:'--h-agent',l:'vault sync tests',on:true},{i:'terminal',h:'--h-flow',l:'Flow · Relay'},{i:'file',h:'--h-files',l:'releasing.md'}]})</script>
+<script src="icons.js"></script></body></html>

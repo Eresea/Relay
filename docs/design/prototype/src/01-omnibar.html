@@ -1,0 +1,79 @@
+<!doctype html><html><head><meta charset="utf-8"><title>Relay · Omnibar</title><link rel="stylesheet" href="proto.css">
+<style>
+.bar{position:absolute;left:50%;top:170px;transform:translateX(-50%);width:760px;display:grid;grid-template-rows:auto 1fr auto;overflow:hidden}
+.ctx{display:flex;align-items:center;gap:8px;height:30px;padding:0 16px;font-size:11px;color:var(--ink-3);border-bottom:1px solid var(--line-0)}
+.ctx .chip{height:18px;font-size:10.5px}
+.q{display:flex;align-items:center;gap:12px;height:54px;padding:0 18px;font-size:17px;color:var(--ink-0);border-bottom:1px solid var(--line-0)}
+.q .caret{width:1.5px;height:20px;background:var(--accent)}
+.q .ghost{color:var(--ink-4)}
+.modes{display:flex;gap:4px;margin-left:auto}
+.modes .chip{height:22px}
+.split{display:grid;grid-template-columns:1fr 300px;min-height:0}
+.res{padding:6px 0 8px;display:flex;flex-direction:column;max-height:430px;overflow:hidden}
+.res .cap{padding:10px 18px 6px;font-size:10.5px}
+.r{display:flex;align-items:center;gap:12px;height:36px;padding:0 18px;color:var(--ink-2)}
+.r.on{background:var(--tint-2);color:var(--ink-0)} .r .t{flex:1;min-width:0;display:flex;align-items:baseline;gap:8px;white-space:nowrap}.r .t>span:first-child{flex:none}.r .t .sub{overflow:hidden;text-overflow:ellipsis}
+.r .t em{font-style:normal;color:var(--ink-0);text-decoration:underline;text-decoration-color:var(--accent);text-underline-offset:3px}
+.r .t .sub{font-size:11.5px;color:var(--ink-3)}
+.r .kbd{opacity:.8}
+.prev{border-left:1px solid var(--line-0);padding:16px 18px;display:flex;flex-direction:column;gap:14px;background:rgba(255,255,255,.015)}
+.prev h3{font-size:13px;font-weight:500;color:var(--ink-0)}
+.prev .acts{display:flex;flex-wrap:wrap;gap:6px;margin-top:auto}
+.foot{display:flex;align-items:center;gap:14px;height:32px;padding:0 18px;font-size:11px;color:var(--ink-3);border-top:1px solid var(--line-0)}
+.foot .r2{margin-left:auto;display:flex;gap:14px}
+.foot span b{font-weight:400;color:var(--ink-2);margin-right:5px}
+</style></head><body>
+<div class="desktop">
+  <div class="label">01 · OMNIBAR · Ctrl+Space</div>
+  <div class="ghostwin"><div class="lines"><b style="width:220px"></b><b style="width:420px"></b><b style="width:380px"></b><b style="width:260px"></b><b style="width:470px"></b><b style="width:160px"></b><b style="width:390px"></b></div></div>
+
+  <div class="bar glass">
+    <div class="ctx">
+      <span class="chip"><i class="ic s12" data-i="folder"></i>Relay</span>
+      <span class="chip mono"><i class="ic s12" data-i="branch"></i>github-token-cache</span>
+      <span class="chip"><i class="ic s12" data-i="bot"></i>2 agents running</span>
+      <span style="margin-left:auto" class="row gap6"><span class="dot warn"></span>1 needs you</span>
+    </div>
+    <div class="q">
+      <i class="ic s18" data-i="search" style="color:var(--ink-3)"></i>
+      <span>release relay<span class="ghost"> 0.3.0 with the october fixes</span></span><span class="caret"></span>
+      <div class="modes">
+        <span class="chip on"><i class="ic s12" data-i="command"></i>Do</span>
+        <span class="chip"><i class="ic s12" data-i="sparkles"></i>Ask</span>
+        <span class="chip"><i class="ic s12" data-i="file"></i>Find</span>
+        <span class="chip"><i class="ic s12" data-i="terminal"></i>Run</span>
+      </div>
+    </div>
+    <div class="split">
+      <div class="res">
+        <span class="cap">Actions</span>
+        <div class="r on"><span class="tile" style="--h:var(--h-git)"><i class="ic s14" data-i="package"></i></span><span class="t"><span><em>Release</em> Relay 0.3.0</span><span class="sub">bump manifests · tag · build installers · publish</span></span><span class="kbd">↵</span></div>
+        <div class="r"><span class="tile" style="--h:var(--h-agent)"><i class="ic s14" data-i="bot"></i></span><span class="t"><span>Ask an agent to prepare the <em>release</em> notes</span><span class="sub">Codex · uses the 12 commits since v0.2.1</span></span></div>
+        <div class="r"><span class="tile" style="--h:var(--h-flow)"><i class="ic s14" data-i="terminal"></i></span><span class="t"><span>Run <span class="mono">npm run app:build</span> in Flow</span><span class="sub">last run 3d ago · 4m 12s</span></span></div>
+        <span class="cap">Work</span>
+        <div class="r"><span class="tile" style="--h:var(--h-linear)"><i class="ic s14" data-i="dot"></i></span><span class="t"><span>REL-48 Publish 0.3.0 after Windows CI verifies #25</span><span class="sub">Linear · In progress · Cycle 14</span></span><span class="meta mono xs subtle">2d</span></div>
+        <div class="r"><span class="tile" style="--h:var(--h-git)"><i class="ic s14" data-i="pr"></i></span><span class="t"><span>#36 fix(<em>relay</em>): report failed jobs</span><span class="sub">GitHub · checks passing · ready to merge</span></span></div>
+        <span class="cap">Mail</span>
+        <div class="r"><span class="tile" style="--h:var(--h-mail)"><i class="ic s14" data-i="mail"></i></span><span class="t"><span>Tauri Updater signature rotation for <em>release</em> channels</span><span class="sub">Luca Ferri · 09:14</span></span></div>
+        <span class="cap">Files</span>
+        <div class="r"><span class="tile" style="--h:var(--h-files)"><i class="ic s14" data-i="file"></i></span><span class="t"><span class="mono sm">docs/releasing.md</span><span class="sub">edited 6d ago</span></span></div>
+      </div>
+      <div class="prev">
+        <div class="row gap12"><span class="tile lg" style="--h:var(--h-git)"><i class="ic" data-i="package"></i></span><div><h3>Release Relay 0.3.0</h3><div class="xs subtle">Runs as a job · you can keep working</div></div></div>
+        <div class="col gap6 sm">
+          <div class="row"><i class="ic s14" data-i="checkc" style="color:var(--ok)"></i><span>Version check passes</span></div>
+          <div class="row"><i class="ic s14" data-i="checkc" style="color:var(--ok)"></i><span>Working tree clean</span></div>
+          <div class="row"><i class="ic s14" data-i="alert" style="color:var(--warn)"></i><span>Windows CI for #25 not yet green</span></div>
+          <div class="row"><i class="ic s14" data-i="circle" style="color:var(--ink-4)"></i><span class="muted">Updater key present in keychain</span></div>
+        </div>
+        <dl class="kv" style="grid-template-columns:70px 1fr"><dt>Takes</dt><dd class="mono">~6 min</dd><dt>Touches</dt><dd class="mono">4 manifests, 1 tag</dd><dt>Reversible</dt><dd>Until publish</dd></dl>
+        <div class="acts"><span class="btn primary sm">Start</span><span class="btn sm">Dry run</span><span class="btn ghost sm">Open steps</span></div>
+      </div>
+    </div>
+    <div class="foot">
+      <span><b>Move</b><span class="kbd">↑↓</span></span><span><b>Open</b><span class="kbd">↵</span></span><span><b>Preview</b><span class="kbd">→</span></span><span><b>Mode</b><span class="kbd">Tab</span></span>
+      <div class="r2"><span><b>Attention</b><span class="kbd">Ctrl+.</span></span><span><b>Deck</b><span class="kbd">Ctrl+↵</span></span></div>
+    </div>
+  </div>
+</div>
+<script src="icons.js"></script></body></html>

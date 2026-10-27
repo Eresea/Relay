@@ -1,0 +1,86 @@
+<!doctype html><html><head><meta charset="utf-8"><title>Relay · Files</title><link rel="stylesheet" href="proto.css">
+<style>
+.main{grid-template-columns:220px 1fr 340px}
+.sources{background:var(--bg-0);border-right:1px solid var(--line-0);padding:8px 0;display:flex;flex-direction:column}
+.sources .group{padding:10px 14px 4px}
+.sources .item{height:28px;font-size:12.5px}
+.sources .item .meta{font-size:10.5px}
+.crumbs{display:flex;align-items:center;gap:4px;font-size:12.5px;color:var(--ink-3)} .crumbs b{font-weight:500;color:var(--ink-0)}
+.tbl{display:grid;grid-template-columns:1fr 110px 90px 140px 70px;font-size:12.5px}
+.tbl>div{display:contents}
+.tbl .h span{height:30px;display:flex;align-items:center;padding:0 10px;font-size:10.5px;font-weight:500;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-4);border-bottom:1px solid var(--line-0)}
+.tbl .r span{height:32px;display:flex;align-items:center;gap:9px;padding:0 10px;color:var(--ink-1);border-bottom:1px solid var(--line-0)}
+.tbl .r span.mono{font-size:11.5px;color:var(--ink-3)}
+.tbl .r.on span{background:var(--tint)}
+.tbl .r .name{color:var(--ink-0)}
+.tbl .r .tag{height:18px;padding:0 6px;border-radius:4px;font-size:10.5px;background:var(--tint);color:var(--ink-2);box-shadow:inset 0 0 0 1px var(--line-1)}
+.prev{height:190px;margin:14px 16px 0;border-radius:var(--r-3);background:var(--bg-0);box-shadow:inset 0 0 0 1px var(--line-1);padding:14px;overflow:hidden}
+.prev .code{font-size:11px;line-height:1.5;color:var(--ink-2)}
+.people{display:flex;flex-direction:column;gap:8px}
+.person{display:flex;align-items:center;gap:8px;font-size:12px}
+.person .avatar{width:20px;height:20px;font-size:9px}
+.tl{display:flex;flex-direction:column;gap:8px;font-size:12px}
+.tl .e{display:grid;grid-template-columns:40px 1fr;gap:10px;color:var(--ink-2)} .tl .e .mono{font-size:11px;color:var(--ink-4)}
+.drop{position:absolute;right:360px;bottom:44px;width:300px;padding:12px 14px;border-radius:12px;display:flex;align-items:center;gap:10px;font-size:12px}
+</style></head><body>
+<div class="win" style="position:relative">
+  <div class="label">05 · FILES · one tree over every place a file can live</div>
+  <header class="titlebar"></header>
+  <div class="body">
+    <nav class="rail"></nav>
+    <div class="col" style="min-height:0">
+    <div class="main grow">
+      <div class="sources">
+        <div class="row" style="padding:4px 10px 8px"><span class="field grow" style="height:26px"><i class="ic s14" data-i="search"></i>Find a file<span style="margin-left:auto" class="kbd" style="height:15px">Ctrl+P</span></span></div>
+        <div class="group"><span class="cap">Places</span></div>
+        <div class="item"><i class="ic s14" data-i="clock" style="color:var(--ink-3)"></i><span class="t">Recent</span></div>
+        <div class="item"><i class="ic s14" data-i="star" style="color:var(--ink-3)"></i><span class="t">Pinned</span><span class="meta">12</span></div>
+        <div class="item"><i class="ic s14" data-i="share" style="color:var(--ink-3)"></i><span class="t">Shared with you</span><span class="meta">3</span></div>
+        <div class="group"><span class="cap">This PC</span></div>
+        <div class="item on"><i class="ic s14" data-i="folder" style="color:var(--ink-2)"></i><span class="t">Code</span><span class="meta">F:</span></div>
+        <div class="item"><i class="ic s14" data-i="folder" style="color:var(--ink-3)"></i><span class="t">Documents</span></div>
+        <div class="item"><i class="ic s14" data-i="download" style="color:var(--ink-3)"></i><span class="t">Downloads</span><span class="meta">41</span></div>
+        <div class="group"><span class="cap">Connected</span></div>
+        <div class="item"><span class="tile sm" style="--h:var(--h-files)"><i class="ic" data-i="cloud"></i></span><span class="t">OpenCloud</span><span class="dot ok"></span></div>
+        <div class="item"><span class="tile sm" style="--h:var(--h-git)"><i class="ic" data-i="pr"></i></span><span class="t">GitHub · 14 repos</span></div>
+        <div class="item"><span class="tile sm" style="--h:var(--h-vault)"><i class="ic" data-i="lock"></i></span><span class="t">Vault</span><span class="meta">locked</span></div>
+        <div class="item"><span class="tile sm" style="--h:var(--h-runtime)"><i class="ic" data-i="drive"></i></span><span class="t">Leaf · /srv</span><span class="dot ok"></span></div>
+        <div class="item"><span class="tile sm" style="--h:var(--h-mail)"><i class="ic" data-i="clip"></i></span><span class="t">Mail attachments</span></div>
+        <div class="item"><i class="ic s14" data-i="phone" style="color:var(--ink-3)"></i><span class="t">Pixel 9</span><span class="dot ok"></span></div>
+        <div class="item" style="margin-top:auto;color:var(--ink-3)"><i class="ic s14" data-i="plus"></i><span class="t">Add a place</span></div>
+      </div>
+
+      <div class="pane">
+        <div class="panehead"><span class="crumbs">F: <i class="ic s12" data-i="chevr"></i> Code <i class="ic s12" data-i="chevr"></i> Apps <i class="ic s12" data-i="chevr"></i> <b>Relay</b></span><span class="chip mono" style="margin-left:6px"><i class="ic s12" data-i="branch"></i>github-token-cache · clean</span><span style="margin-left:auto" class="row gap4"><span class="btn ghost sm"><i class="ic s14" data-i="columns"></i></span><span class="btn ghost sm"><i class="ic s14" data-i="grid"></i></span><span class="btn ghost sm"><i class="ic s14" data-i="filter"></i></span><span class="btn sm"><i class="ic s14" data-i="terminal"></i>Open in Flow</span></span></div>
+        <div class="tbl">
+          <div class="h"><span>Name</span><span>Modified</span><span>Size</span><span>Where else</span><span></span></div>
+          <div class="r"><span class="name"><i class="ic s14" data-i="folder" style="color:var(--ink-3)"></i>docs</span><span class="mono">2h</span><span class="mono">—</span><span><span class="tag">OpenCloud</span></span><span></span></div>
+          <div class="r on"><span class="name"><i class="ic s14" data-i="folder" style="color:var(--ink-3)"></i>docs / design</span><span class="mono">now</span><span class="mono">—</span><span></span><span></span></div>
+          <div class="r"><span class="name"><i class="ic s14" data-i="folder" style="color:var(--ink-3)"></i>src</span><span class="mono">1d</span><span class="mono">—</span><span></span><span></span></div>
+          <div class="r"><span class="name"><i class="ic s14" data-i="folder" style="color:var(--ink-3)"></i>src-tauri</span><span class="mono">12m</span><span class="mono">—</span><span><span class="tag">agent editing</span></span><span></span></div>
+          <div class="r"><span class="name"><i class="ic s14" data-i="file" style="color:var(--ink-3)"></i>README.md</span><span class="mono">6d</span><span class="mono">5.1 kB</span><span><span class="tag">GitHub</span></span><span></span></div>
+          <div class="r"><span class="name"><i class="ic s14" data-i="file" style="color:var(--ink-3)"></i>package.json</span><span class="mono">3d</span><span class="mono">2.4 kB</span><span></span><span></span></div>
+          <div class="r"><span class="name"><i class="ic s14" data-i="file" style="color:var(--ink-3)"></i>angular.json</span><span class="mono">19d</span><span class="mono">3.0 kB</span><span></span><span></span></div>
+          <div class="r"><span class="name"><i class="ic s14" data-i="lock" style="color:hsl(336 85% 74%)"></i>gmail.config.toml</span><span class="mono">27d</span><span class="mono">412 B</span><span><span class="tag"><i class="ic s12" data-i="lock"></i>Vault</span></span><span></span></div>
+          <div class="r"><span class="name"><i class="ic s14" data-i="file" style="color:var(--ink-3)"></i>LICENSE</span><span class="mono">4mo</span><span class="mono">1.1 kB</span><span></span><span></span></div>
+        </div>
+        <div class="row" style="padding:10px 14px;font-size:11px;color:var(--ink-4);margin-top:auto"><span class="mono">9 items · 4,128 files inside · 212 MB</span><span style="margin-left:auto">Indexed 2m ago</span></div>
+      </div>
+
+      <aside class="inspector">
+        <div class="sect" style="padding-bottom:0;border:0"><div class="row gap12"><span class="tile lg" style="--h:var(--h-files)"><i class="ic" data-i="folder"></i></span><div><div class="strong">design</div><div class="xs subtle mono">F:\Code\Apps\Relay\docs\design</div></div></div></div>
+        <div class="prev"><div class="code"><span class="c">prototype/</span><br>  src/  <span class="c">11 files</span><br>  png/  <span class="c">9 images · 2.8 MB</span><br>  render.ps1<br><span class="c">overhaul-2026-10.md</span></div></div>
+        <div class="sect"><dl class="kv"><dt>Contains</dt><dd class="mono">24 files · 2.9 MB</dd><dt>Modified</dt><dd class="mono">just now · by you</dd><dt>Tracked</dt><dd class="row gap6"><span class="dot warn"></span>untracked in git</dd><dt>Synced</dt><dd class="row gap6"><span class="dot"></span>not on OpenCloud</dd></dl></div>
+        <div class="sect"><span class="cap">Do</span><div class="row gap6" style="flex-wrap:wrap"><span class="btn sm"><i class="ic s12" data-i="cloud"></i>Sync to OpenCloud</span><span class="btn sm"><i class="ic s12" data-i="share"></i>Share link</span><span class="btn sm"><i class="ic s12" data-i="lock"></i>Protect</span><span class="btn sm"><i class="ic s12" data-i="sparkles"></i>Summarise</span></div></div>
+        <div class="sect"><span class="cap">People</span><div class="people"><div class="person"><span class="avatar">N</span><span class="grow">You</span><span class="subtle xs">owner</span></div><div class="person"><span class="tile sm" style="--h:var(--h-agent)"><i class="ic" data-i="bot"></i></span><span class="grow">vault sync tests</span><span class="subtle xs">can read</span></div></div></div>
+        <div class="sect" style="border:0"><span class="cap">Activity</span><div class="tl"><div class="e"><span class="mono">now</span><span>You rendered 9 prototypes</span></div><div class="e"><span class="mono">2h</span><span>docs synced to OpenCloud</span></div><div class="e"><span class="mono">6d</span><span>releasing.md edited</span></div></div></div>
+      </aside>
+    </div>
+    <footer class="statusbar"></footer>
+    </div>
+  </div>
+  <div class="drop glass"><span class="tile" style="--h:var(--h-files)"><i class="ic s14" data-i="download"></i></span><span class="grow">Dropped <b style="font-weight:500;color:var(--ink-0)">relay-logo.svg</b> here</span><span class="btn sm">Move</span><span class="btn ghost sm">Copy</span></div>
+</div>
+<script src="_shell.js"></script>
+<script>shell({rail:'Files',tabs:[{i:'home',l:'Today'},{i:'bot',h:'--h-agent',l:'vault sync tests'},{i:'folder',h:'--h-files',l:'Relay',on:true}]})</script>
+<script src="icons.js"></script></body></html>

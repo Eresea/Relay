@@ -1,0 +1,71 @@
+<!doctype html><html><head><meta charset="utf-8"><title>Relay · Attention</title><link rel="stylesheet" href="proto.css">
+<style>
+.stack{position:absolute;right:28px;bottom:28px;width:400px;display:flex;flex-direction:column;gap:10px}
+.n{padding:14px 16px;display:grid;grid-template-columns:auto 1fr auto;gap:4px 12px;align-items:center;border-radius:14px}
+.n .t{min-width:0} .n .t p{font-size:13px;font-weight:500;color:var(--ink-0)} .n .t .d{font-size:11.5px;color:var(--ink-2);margin-top:1px}
+.n .st{display:flex;align-items:center;gap:6px;font-size:11px;color:var(--ink-3)}
+.n .acts{grid-column:2/-1;display:flex;gap:6px;margin-top:8px}
+.n .track{grid-column:1/-1;margin-top:8px}
+.n.ask{box-shadow:var(--shadow-glass),inset 0 1px 0 var(--glass-rim),0 0 0 1px rgba(251,191,36,.25)}
+.quiet{display:flex;align-items:center;gap:10px;padding:10px 16px;border-radius:12px;font-size:12px;color:var(--ink-2)}
+.quiet .faces{display:flex;gap:4px}
+.pill{position:absolute;left:50%;top:14px;transform:translateX(-50%);height:34px;padding:0 6px 0 14px;border-radius:999px;display:flex;align-items:center;gap:14px;font-size:12px;color:var(--ink-1)}
+.pill .seg{display:flex;align-items:center;gap:7px}
+.pill .seg .mono{color:var(--ink-3);font-size:11px}
+.pill .cnt{height:22px;min-width:22px;padding:0 7px;border-radius:999px;background:var(--warn);color:#1a1300;font-weight:600;font-size:11px;display:flex;align-items:center;justify-content:center}
+.ring{width:14px;height:14px;border-radius:50%;background:conic-gradient(hsl(258 80% 70%) 0 62%,rgba(255,255,255,.12) 62% 100%);-webkit-mask:radial-gradient(circle,transparent 4px,#000 4.5px)}
+.note{position:absolute;left:40px;bottom:36px;width:300px;font-size:11.5px;color:rgba(255,255,255,.55);line-height:1.5}
+.note b{color:rgba(255,255,255,.85);font-weight:500}
+</style></head><body>
+<div class="desktop">
+  <div class="label">02 · ATTENTION · stack (bottom right) + pill (top)</div>
+  <div class="ghostwin"><div class="lines"><b style="width:220px"></b><b style="width:420px"></b><b style="width:380px"></b><b style="width:260px"></b><b style="width:470px"></b><b style="width:160px"></b><b style="width:390px"></b></div></div>
+
+  <!-- collapsed state: a pill at the top that says everything in 34px -->
+  <div class="pill glass">
+    <span class="seg"><span class="ring"></span><span>Codex · vault sync tests</span><span class="mono">62%</span></span>
+    <span class="vsep" style="height:14px;background:var(--line-2)"></span>
+    <span class="seg"><span class="dot run"></span><span>Flow · app:build</span><span class="mono">3m 40s</span></span>
+    <span class="vsep" style="height:14px;background:var(--line-2)"></span>
+    <span class="seg"><i class="ic s14" data-i="mail" style="color:var(--ink-3)"></i><span class="mono">3</span></span>
+    <span class="cnt">1</span>
+  </div>
+
+  <!-- expanded state: Ctrl+. -->
+  <div class="stack">
+    <div class="quiet glass">
+      <span class="faces"><span class="tile sm" style="--h:var(--h-mail)"><i class="ic" data-i="mail"></i></span><span class="tile sm" style="--h:var(--h-linear)"><i class="ic" data-i="dot"></i></span><span class="tile sm" style="--h:var(--h-git)"><i class="ic" data-i="commit"></i></span></span>
+      <span class="grow" style="margin-left:4px">3 mails, 2 issue updates, 1 CI pass</span><span class="subtle xs">Quiet · open in Deck</span><i class="ic s14" data-i="chevr" style="color:var(--ink-4)"></i>
+    </div>
+
+    <div class="n glass">
+      <span class="tile lg" style="--h:var(--h-flow)"><i class="ic" data-i="terminal"></i></span>
+      <div class="t"><p>app:build · Relay</p><div class="d mono">tauri build · bundling nsis · 3m 40s</div></div>
+      <div class="st"><span class="dot run"></span>Running</div>
+      <div class="track" style="--h:var(--h-flow)"><b style="width:71%"></b></div>
+    </div>
+
+    <div class="n glass">
+      <span class="tile lg" style="--h:var(--h-agent)"><i class="ic" data-i="bot"></i></span>
+      <div class="t"><p>Codex · vault sync tests</p><div class="d">Writing the two-device conflict test · 3 of 5 steps</div></div>
+      <div class="st"><span class="dot run"></span>Working</div>
+      <div class="track" style="--h:var(--h-agent)"><b style="width:62%"></b></div>
+    </div>
+
+    <div class="n glass ask">
+      <span class="tile lg" style="--h:var(--h-agent)"><i class="ic" data-i="bot"></i></span>
+      <div class="t"><p>Codex wants to run <span class="mono">cargo test</span></p><div class="d">In Relay · 137 tests · takes about 40 s · no network</div></div>
+      <div class="st"><span class="dot warn"></span>Needs you</div>
+      <div class="acts"><span class="btn primary sm">Allow <span class="kbd" style="height:14px;min-width:14px;font-size:10px;background:rgba(0,0,0,.1);box-shadow:none;color:#333">↵</span></span><span class="btn sm">Allow for this task</span><span class="btn ghost sm">Deny</span><span class="btn ghost sm" style="margin-left:auto">Open thread</span></div>
+    </div>
+
+    <div class="n glass">
+      <span class="tile lg" style="--h:var(--h-git)"><i class="ic" data-i="pr"></i></span>
+      <div class="t"><p>#36 merged into main</p><div class="d">fix(relay): report failed jobs · 3 checks passed</div></div>
+      <div class="st"><span class="dot ok"></span>Done · 12s</div>
+    </div>
+  </div>
+
+  <div class="note"><b>Three rules.</b> The pill never grows past one line. A card asks only when work is blocked on you, and names the cost. Everything else collapses into the quiet row and waits in the Deck.</div>
+</div>
+<script src="icons.js"></script></body></html>
