@@ -63,6 +63,10 @@ pub enum Error {
     PasskeyUnavailable,
 
     #[error("Windows Hello was cancelled")]
+    #[cfg_attr(
+        not(windows),
+        allow(dead_code, reason = "only Windows Hello reports this")
+    )]
     PasskeyCancelled,
 
     #[error("Windows Hello unlock is not set up for this vault")]
@@ -72,6 +76,10 @@ pub enum Error {
     PasskeyStale,
 
     #[error("Windows Hello failed: {0}")]
+    #[cfg_attr(
+        not(windows),
+        allow(dead_code, reason = "only Windows Hello reports this")
+    )]
     PasskeyFailed(String),
 
     #[error("no vault entry `{0}`")]
