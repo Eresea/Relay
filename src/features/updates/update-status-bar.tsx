@@ -53,7 +53,11 @@ export function UpdateStatusBar() {
               {percent !== null && <span className="fill" style={{ inlineSize: `${percent}%` }} />}
             </span>
           )}
-          <span className="version">v{snapshot.currentVersion}</span>
+          <span className="version">
+            {/^\d/.test(snapshot.currentVersion)
+              ? `v${snapshot.currentVersion}`
+              : 'Development build'}
+          </span>
           <span className="u-sr-only">{label}</span>
         </button>
       </div>

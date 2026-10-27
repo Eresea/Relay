@@ -11,6 +11,7 @@ import { inject } from '@/lib/inject';
 import { computed, signal, useController, useSignals } from '@/lib/signals';
 import { cn, vars } from '@/lib/utils';
 import { Icon } from '@/shared/icon';
+import { InlineText } from '@/shared/inline-text';
 
 import { SOURCES, buildToday, type Filter, type Source, type TodayItem } from './today';
 import './today.css';
@@ -140,7 +141,12 @@ export default function Today() {
             <span className="row-meta">{age(item)}</span>
             <span className="row-detail">
               <span className="row-source">{SOURCES[item.source].label}</span>
-              {item.detail && ` · ${item.detail}`}
+              {item.detail && (
+                <>
+                  {' · '}
+                  <InlineText text={item.detail} />
+                </>
+              )}
             </span>
             {item.status === 'running' && item.progress !== undefined && (
               <span className="u-entity-track row-track" style={tone(item)}>
@@ -241,7 +247,11 @@ export default function Today() {
                     ` · ${selected.progress}%`}
                 </span>
               </header>
-              {selected.detail && <p className="detail-body">{selected.detail}</p>}
+              {selected.detail && (
+                <p className="detail-body">
+                  <InlineText text={selected.detail} />
+                </p>
+              )}
               <footer className="detail-actions">
                 {selected.actions?.map((action) => (
                   <Button

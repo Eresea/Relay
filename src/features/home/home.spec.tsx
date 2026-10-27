@@ -3,7 +3,8 @@ import { expect, it, vi } from 'vitest';
 
 import type { NexusAuthStatus } from '@/core/tauri';
 import { ThemeService } from '@/core/theme';
-import { provide } from '@/lib/inject';
+import { NotificationCenter } from '@/core/notification-center';
+import { inject, provide } from '@/lib/inject';
 import { signal } from '@/lib/signals';
 import { provideBridge } from '@/test/bridge';
 import { fakeModuleCore } from '@/test/modules';
@@ -136,4 +137,52 @@ it('builds the rail from the core registry and drops a module turned off on the 
   await waitFor(() => expect(rail()).not.toContain('Vault'));
   expect(screen.getAllByRole('tab').map((tab) => tab.textContent)).toEqual(['Today', 'Modules']);
   expect(screen.getByRole('switch', { name: 'Vault on' })).toHaveProperty('checked', false);
+});
+
+it('marks a tab whose module needs you, reorders tabs, and opens Today from the counts', async () => {
+  provideBridge({ ...fakeModuleCore(), available: false });
+  provide(ThemeService, {
+    theme: signal('dark'),
+    toggle: () => undefined,
+  } as unknown as ThemeService);
+  inject(NotificationCenter).handle({
+    type: 'notification',
+    notificationId: 'ask',
+    jobId: 'ask',
+    hueSource: 'claude',
+    title: 'Claude · add a health check',
+    detail: 'Run `npm test`',
+    status: 'waiting',
+  });
+  render(<Home />);
+  const tabs = () =>
+    screen.getAllByRole('tab').map((tab) => ({
+      label: tab.querySelector('.tab-label')?.textContent,
+      waiting: !!tab.querySelector('.tab-dot'),
+    }));
+
+  fireEvent.click(await screen.findByRole('button', { name: 'Agents' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Vault' }));
+  expect(tabs()).toEqual([
+    { label: 'Today', waiting: true },
+    { label: 'Agents', waiting: true },
+    { label: 'Vault', waiting: false },
+  ]);
+
+  // Drag Vault onto Agents; a drop on Today is refused, so it stays first.
+  const tab = (label: string) =>
+    screen.getAllByRole('tab').find((el) => el.textContent?.startsWith(label))!.parentElement!;
+  // jsdom's drag events carry no DataTransfer; a browser's always do.
+  const dataTransfer = { effectAllowed: 'none' };
+  fireEvent.dragStart(tab('Vault'), { dataTransfer });
+  fireEvent.dragOver(tab('Agents'));
+  fireEvent.drop(tab('Agents'));
+  fireEvent.dragEnd(tab('Vault'));
+  fireEvent.dragStart(tab('Agents'), { dataTransfer });
+  fireEvent.drop(tab('Today'));
+  fireEvent.dragEnd(tab('Agents'));
+  expect(tabs().map((t) => t.label)).toEqual(['Today', 'Vault', 'Agents']);
+
+  fireEvent.click(screen.getByRole('button', { name: /1 need you, 0 running. Open Today/ }));
+  expect(screen.getByRole('tab', { selected: true }).textContent).toContain('Today');
 });

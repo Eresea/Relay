@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect } from 'react';
+import { lazy, Suspense, useEffect, useState } from 'react';
 
 import { moduleHueVar } from '@/core/entity-hue';
 import { ModuleRegistry } from '@/core/modules';
@@ -7,6 +7,8 @@ import { NotificationCenter } from '@/core/notification-center';
 import { TauriBridge } from '@/core/tauri';
 import { ThemeService } from '@/core/theme';
 import Today from '@/features/today/today-view';
+import { keycaps } from '@/features/settings/shortcuts';
+import { SOURCES, sourceOf } from '@/features/today/today';
 import { UpdateStatusBar } from '@/features/updates/update-status-bar';
 import { inject } from '@/lib/inject';
 import { computed, signal, useSignals } from '@/lib/signals';
@@ -81,10 +83,23 @@ export class HomeState {
   readonly needsYou = computed(() =>
     this.center.items().filter((n) => n.status === 'waiting' || n.status === 'blocked'),
   );
+  /** Modules with something waiting on you, so their tab can say so. */
+  readonly needsYouIn = computed(
+    () => new Set(this.needsYou().map((n) => SOURCES[sourceOf(n.hueSource)].module)),
+  );
+  /** The Omnibar's shortcut as keycaps, as Settings has it bound. */
+  readonly paletteKeys = signal<readonly string[]>(['Ctrl', 'Space']);
 
   /** Window and event listeners; returns their disposer. */
   start(): () => void {
     void this.modules.load();
+    void this.tauri
+      .shortcutsList()
+      .then((list) => {
+        const palette = list.find((shortcut) => shortcut.action === 'palette');
+        if (palette) this.paletteKeys.set(keycaps(palette.accelerator));
+      })
+      .catch(() => undefined);
     void this.tauri
       .getSetting<boolean>(INSPECTOR_SETTING_KEY, this.inspector())
       .then((stored) => this.inspector.set(stored));
@@ -129,6 +144,21 @@ export class HomeState {
       return [...tabs.slice(0, at), view, ...tabs.slice(at)];
     });
     this.view.set(view);
+  }
+
+  /** Moves tab `view` to where `target` is; Today stays pinned first. */
+  move(view: HomeView, target: HomeView): void {
+    if (view === target || view === 'today' || target === 'today') return;
+    this.tabs.update((tabs) => {
+      const rest = tabs.filter((tab) => tab !== view);
+      const at = rest.indexOf(target) + (tabs.indexOf(view) < tabs.indexOf(target) ? 1 : 0);
+      return [...rest.slice(0, at), view, ...rest.slice(at)];
+    });
+  }
+
+  /** The Omnibar: search, run or ask, from inside the window too. */
+  openPalette(): void {
+    void this.tauri.togglePalette();
   }
 
   close(view: HomeView): void {
@@ -210,6 +240,7 @@ export default function Home() {
   useSignals();
   const s = inject(HomeState);
   useEffect(() => s.start(), [s]);
+  const [dragging, setDragging] = useState<HomeView | null>(null);
 
   const view = s.current();
   // Today is pinned before the registry has loaded, so it needs a face of its own.
@@ -227,12 +258,43 @@ export default function Home() {
         <span className="wordmark" data-tauri-drag-region="">
           Relay
         </span>
-        <Kbd keys={['Ctrl', 'Space']} className="titlebar-kbd" />
-        <div className="tabs" role="tablist" aria-label="Open views" data-tauri-drag-region="">
+        <button
+          type="button"
+          className="search"
+          onClick={() => s.openPalette()}
+          aria-label="Search, run or ask"
+        >
+          <Icon name="search" size={14} />
+          <span className="search-label">Search, run or ask</span>
+          <Kbd keys={s.paletteKeys()} />
+        </button>
+        <div
+          className="tabs"
+          role="tablist"
+          aria-label="Open views"
+          data-tauri-drag-region=""
+          onWheel={(event) => {
+            // A vertical wheel scrolls the strip sideways, as in a browser.
+            event.currentTarget.scrollLeft += event.deltaY;
+          }}
+        >
           {s.openTabs().map((tab) => (
             <div
               key={tab}
-              className={cn('tab', view === tab && 'active')}
+              className={cn('tab', view === tab && 'active', dragging === tab && 'dragging')}
+              draggable={tab !== 'today'}
+              onDragStart={(event) => {
+                event.dataTransfer.effectAllowed = 'move';
+                setDragging(tab);
+              }}
+              onDragOver={(event) => {
+                if (dragging && dragging !== tab && tab !== 'today') event.preventDefault();
+              }}
+              onDrop={(event) => {
+                event.preventDefault();
+                if (dragging) s.move(dragging, tab);
+              }}
+              onDragEnd={() => setDragging(null)}
               // Middle click closes a tab, as in a browser; the mousedown
               // guard stops the webview starting autoscroll first.
               onMouseDown={(event) => {
@@ -259,7 +321,10 @@ export default function Home() {
                     <Icon name={surface(tab).icon} size={14} />
                   </span>
                 )}
-                {surface(tab).label}
+                <span className="tab-label">{surface(tab).label}</span>
+                {(tab === 'today' ? needsYou > 0 : s.needsYouIn().has(tab)) && (
+                  <span className="tab-dot" aria-label="needs you" />
+                )}
               </button>
               {tab !== 'today' && (
                 <button
@@ -273,8 +338,23 @@ export default function Home() {
               )}
             </div>
           ))}
+          <button
+            type="button"
+            className="tab-new"
+            aria-label="Open something new"
+            title="Open something new"
+            onClick={() => s.openPalette()}
+          >
+            <Icon name="plus" size={14} />
+          </button>
         </div>
-        <span className="activity" data-tauri-drag-region="">
+        <button
+          type="button"
+          className="activity"
+          hidden={running + needsYou === 0}
+          onClick={() => s.open('today')}
+          aria-label={`${needsYou} need you, ${running} running. Open Today`}
+        >
           {running > 0 && (
             <span className="activity-part">
               <span className="dot" data-status="running" />
@@ -287,7 +367,7 @@ export default function Home() {
               {needsYou} need{needsYou === 1 ? 's' : ''} you
             </span>
           )}
-        </span>
+        </button>
         <div className="window-controls">
           <button
             type="button"
@@ -340,10 +420,14 @@ export default function Home() {
               <button
                 key={module.id}
                 type="button"
-                className={cn('rail-item', view === module.id && 'active')}
+                className={cn(
+                  'rail-item',
+                  view === module.id && 'active',
+                  s.openTabs().includes(module.id) && 'open',
+                )}
                 onClick={() => s.open(module.id)}
                 aria-label={surface(module.id).label}
-                title={surface(module.id).label}
+                data-label={surface(module.id).label}
               >
                 <Icon name={surface(module.id).icon} size={16} />
                 {module.id === 'today' && needsYou > 0 && <span className="badge" />}
@@ -357,7 +441,7 @@ export default function Home() {
               className={cn('rail-item', view === 'modules' && 'active')}
               onClick={() => s.open('modules')}
               aria-label="Modules"
-              title="Modules"
+              data-label="Modules"
             >
               <Icon name="blocks" size={16} />
             </button>
@@ -366,7 +450,7 @@ export default function Home() {
               className={cn('rail-item', view === 'settings' && 'active')}
               onClick={() => s.openSettings()}
               aria-label="Settings"
-              title="Settings"
+              data-label="Settings"
             >
               <Icon name="settings" size={16} />
             </button>

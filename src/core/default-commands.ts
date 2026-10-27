@@ -17,7 +17,7 @@ export function registerDefaultCommands(): () => void {
   const commands: Command[] = [
     {
       id: 'relay.projects.open',
-      title: 'Open projects',
+      title: 'Open Projects',
       group: 'Project',
       icon: 'library',
       keywords: ['project', 'workspace', 'folder', 'github', 'sync'],
@@ -33,7 +33,7 @@ export function registerDefaultCommands(): () => void {
     },
     {
       id: 'relay.agents.open',
-      title: 'Agents',
+      title: 'Open Agents',
       group: 'Agents',
       icon: 'sparkles',
       keywords: [
@@ -51,7 +51,7 @@ export function registerDefaultCommands(): () => void {
     },
     {
       id: 'relay.terminal.open',
-      title: 'Open terminal',
+      title: 'Open Terminal',
       group: 'Relay',
       icon: 'terminal',
       keywords: ['terminal', 'shell', 'powershell', 'console', 'command line', 'pty'],
@@ -67,14 +67,14 @@ export function registerDefaultCommands(): () => void {
     },
     {
       id: 'relay.window.settings',
-      title: 'Open settings',
+      title: 'Open Settings',
       group: 'Relay',
       icon: 'settings',
       run: () => tauri.runCoreCommand({ id: 'open_settings' }),
     },
     {
       id: 'relay.vault.open',
-      title: 'Password vault',
+      title: 'Open Vault',
       group: 'Relay',
       icon: 'lock',
       keywords: ['password', 'generate', 'vault', 'security', 'account'],
@@ -82,15 +82,15 @@ export function registerDefaultCommands(): () => void {
     },
     {
       id: 'relay.github.open',
-      title: 'GitHub',
+      title: 'GitHub settings',
       group: 'Relay',
-      icon: 'inbox',
+      icon: 'git-pull-request',
       keywords: ['github', 'pull request', 'pr', 'ci', 'notifications', 'connector'],
       run: () => tauri.runCoreCommand({ id: 'open_github' }),
     },
     {
       id: 'relay.linear.open',
-      title: 'Linear',
+      title: 'Open My work (Linear)',
       group: 'Relay',
       icon: 'inbox',
       keywords: ['linear', 'issues', 'projects', 'cycles', 'connector'],
