@@ -114,6 +114,50 @@ it('opens views as tabs and closes them like browser tabs', async () => {
   expect(selected()).toBe('Today');
 });
 
+it('splits the Deck into two panes, like an editor, and joins it again', async () => {
+  provideBridge({ ...fakeModuleCore(), available: false });
+  provide(ThemeService, {
+    theme: signal('dark'),
+    toggle: () => undefined,
+  } as unknown as ThemeService);
+  render(<Home />);
+  const panes = () =>
+    screen.getAllByRole('tabpanel').map((pane) => pane.getAttribute('aria-label'));
+  const selected = () => screen.getByRole('tab', { selected: true }).textContent;
+
+  fireEvent.click(await screen.findByRole('button', { name: 'Vault' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Runtime' }));
+  // Ctrl+\ moves the focused tab to a right-hand pane, beside the tab before it.
+  fireEvent.keyDown(window, { key: '\\', ctrlKey: true });
+  expect(panes()).toEqual(['Vault', 'Runtime']);
+  expect(selected()).toBe('Runtime');
+
+  // Pointing into a pane focuses it; panes keep their sides.
+  fireEvent.pointerDown(screen.getByRole('tabpanel', { name: 'Vault' }));
+  expect(selected()).toBe('Vault');
+  expect(panes()).toEqual(['Vault', 'Runtime']);
+  // Another tab replaces the focused pane only.
+  fireEvent.click(screen.getByRole('tab', { name: 'Today' }));
+  expect(panes()).toEqual(['Today', 'Runtime']);
+
+  // A tab dropped on the right half replaces the right-hand pane.
+  const dataTransfer = { effectAllowed: '' };
+  fireEvent.dragStart(screen.getByRole('tab', { name: 'Vault' }).parentElement!, { dataTransfer });
+  fireEvent.drop(screen.getByText('Open on the right'), { dataTransfer });
+  expect(panes()).toEqual(['Today', 'Vault']);
+  expect(selected()).toBe('Vault');
+
+  // The divider follows the arrow keys, but no pane gets squeezed away.
+  const divider = screen.getByRole('separator', { name: 'Resize panes' });
+  for (let press = 0; press < 10; press++) fireEvent.keyDown(divider, { key: 'ArrowRight' });
+  expect(divider.getAttribute('aria-valuenow')).toBe('80');
+
+  // Closing one half leaves the other as the whole Deck.
+  fireEvent.keyDown(window, { key: 'w', ctrlKey: true });
+  expect(panes()).toEqual(['Today']);
+  expect(screen.queryByRole('separator')).toBeNull();
+});
+
 it('builds the rail from the core registry and drops a module turned off on the Modules screen', async () => {
   const core = fakeModuleCore();
   provideBridge({ ...core, available: false });

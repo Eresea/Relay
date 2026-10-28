@@ -100,6 +100,12 @@
       inset -1px 0 0 var(--border-subtle);
   }
 
+  /* On screen in the other pane of a split. */
+  .tab.shown {
+    color: var(--text-body);
+    background: var(--tint-hover);
+  }
+
   .tab.dragging {
     opacity: 0.5;
   }
@@ -366,10 +372,66 @@
     font-weight: var(--weight-semibold);
   }
 
+  .panes {
+    position: relative;
+    display: flex;
+    flex: 1;
+    min-inline-size: 0;
+  }
+
   .content {
     flex: 1;
     min-inline-size: 0;
     overflow-y: auto;
+  }
+
+  /* Two views side by side, the focused one marked along its top edge. */
+  .panes.split {
+    display: grid;
+    grid-template-columns: minmax(0, calc(var(--split) - 3px)) 6px minmax(0, 1fr);
+  }
+
+  .content.focused {
+    box-shadow: inset 0 2px 0 var(--accent);
+  }
+
+  .split-divider {
+    position: relative;
+    cursor: col-resize;
+    touch-action: none;
+    outline: none;
+
+    &::before {
+      content: '';
+      position: absolute;
+      inset-block: 0;
+      inset-inline-start: 50%;
+      inline-size: 1px;
+      background: var(--border-subtle);
+      transition: background-color var(--dur-hover) var(--ease-standard);
+    }
+
+    &:hover::before,
+    &:focus-visible::before {
+      inline-size: 2px;
+      background: var(--border-focus);
+    }
+  }
+
+  .split-drop {
+    position: absolute;
+    inset-block: var(--space-4);
+    inset-inline-end: var(--space-4);
+    inline-size: calc(50% - var(--space-4));
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--space-3);
+    border: 1px dashed var(--border-strong);
+    border-radius: var(--radius-lg);
+    background: var(--accent-tint);
+    font-size: var(--text-12);
+    color: var(--text-body);
   }
 
   .inspector {

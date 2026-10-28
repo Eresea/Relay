@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useState } from 'react';
+import { Fragment, lazy, Suspense, useEffect, useState } from 'react';
 
 import { moduleHueVar } from '@/core/entity-hue';
 import { ModuleRegistry } from '@/core/modules';
@@ -34,6 +34,9 @@ const Projects = lazy(() => import('@/features/projects/projects'));
 const Modules = lazy(() => import('@/features/modules/modules'));
 
 const INSPECTOR_SETTING_KEY = 'deck.inspector';
+const SPLIT_SETTING_KEY = 'deck.split';
+/** Neither pane of a split gets narrower than this share of the width. */
+const MIN_SPLIT = 0.2;
 /** Module ids of pinned web apps; mirrors webapps::MODULE_PREFIX. */
 const WEB = 'web-';
 
@@ -61,7 +64,14 @@ export class HomeState {
   );
   /** Open tabs, left to right. Today is pinned first and never closes. */
   readonly tabs = signal<readonly HomeView[]>(['today']);
+  /** The focused pane's view; tab keys, opening and closing act on it. */
   readonly view = signal<HomeView>('today');
+  /** The other pane's view while the Deck is split, else null. */
+  readonly other = signal<HomeView | null>(null);
+  /** Whether the focused pane is the left one of a split. */
+  readonly focusedLeft = signal(true);
+  /** The left pane's share of the width while split. */
+  readonly splitRatio = signal(0.5);
   /** A conversation another surface asked the Agents tab to open. */
   readonly requestedChat = signal<ChatRequest>(null);
   /** Stable, so the Agents tab's effect does not re-run on every render. */
@@ -78,6 +88,17 @@ export class HomeState {
     this.tabs().filter((id) => id === 'today' || this.modules.isEnabled(id)),
   );
   readonly current = computed(() => (this.modules.isEnabled(this.view()) ? this.view() : 'today'));
+  /** The other pane's view, gone once its tab or module is. */
+  readonly otherPane = computed(() => {
+    const other = this.other();
+    return other && other !== this.current() && this.openTabs().includes(other) ? other : null;
+  });
+  /** The views on screen, left to right: one, or two when split. */
+  readonly panes = computed<readonly HomeView[]>(() => {
+    const other = this.otherPane();
+    if (!other) return [this.current()];
+    return this.focusedLeft() ? [this.current(), other] : [other, this.current()];
+  });
 
   readonly running = computed(() => this.center.items().filter((n) => n.status === 'running'));
   readonly needsYou = computed(() =>
@@ -103,6 +124,9 @@ export class HomeState {
     void this.tauri
       .getSetting<boolean>(INSPECTOR_SETTING_KEY, this.inspector())
       .then((stored) => this.inspector.set(stored));
+    void this.tauri
+      .getSetting<number>(SPLIT_SETTING_KEY, this.splitRatio())
+      .then((stored) => this.resizeSplit(stored));
     void this.tauri.isWindowMaximized().then((value) => this.maximized.set(value));
 
     const unlisteners: Promise<() => void>[] = [
@@ -143,7 +167,59 @@ export class HomeState {
       const at = tabs.indexOf(this.current()) + 1;
       return [...tabs.slice(0, at), view, ...tabs.slice(at)];
     });
+    this.select(view);
+  }
+
+  /** Shows an open tab: focuses its pane if it is on screen, else puts it in the focused pane. */
+  select(view: HomeView): void {
+    if (view === this.otherPane()) {
+      this.other.set(this.current());
+      this.focusedLeft.update((left) => !left);
+    }
     this.view.set(view);
+  }
+
+  /** Focuses the pane at `index` (0 is the left one). */
+  focusPane(index: number): void {
+    const view = this.panes()[index];
+    if (view && view !== this.current()) this.select(view);
+  }
+
+  /**
+   * Shows `view` in a right-hand pane and focuses it. The left pane keeps
+   * what it showed; splitting the focused tab itself puts its neighbour there.
+   */
+  split(view: HomeView): void {
+    const tabs = this.openTabs();
+    if (!tabs.includes(view)) return;
+    const [first, second] = this.panes();
+    const left =
+      first !== view
+        ? first
+        : (second ?? tabs[tabs.indexOf(view) - 1] ?? tabs[tabs.indexOf(view) + 1]);
+    if (!left) return;
+    this.other.set(left);
+    this.focusedLeft.set(false);
+    this.view.set(view);
+  }
+
+  unsplit(): void {
+    this.other.set(null);
+    this.focusedLeft.set(true);
+  }
+
+  toggleSplit(): void {
+    if (this.otherPane()) this.unsplit();
+    else this.split(this.current());
+  }
+
+  resizeSplit(ratio: number): void {
+    if (Number.isFinite(ratio))
+      this.splitRatio.set(Math.min(1 - MIN_SPLIT, Math.max(MIN_SPLIT, ratio)));
+  }
+
+  saveSplit(): void {
+    void this.tauri.setSetting(SPLIT_SETTING_KEY, this.splitRatio());
   }
 
   /** Moves tab `view` to where `target` is; Today stays pinned first. */
@@ -168,11 +244,17 @@ export class HomeState {
       void this.tauri.webAppsClose(view.slice(WEB.length));
     const tabs = this.openTabs();
     const at = tabs.indexOf(view);
+    const other = this.otherPane();
     this.tabs.update((all) => all.filter((tab) => tab !== view));
-    if (this.current() === view) this.view.set(tabs[at - 1] ?? 'today');
+    // Closing either half of a split leaves the other half the whole Deck.
+    if (this.current() === view) this.view.set(other ?? tabs[at - 1] ?? 'today');
+    if (other && (view === other || this.current() === other)) this.unsplit();
   }
 
-  /** Browser tab keys: Ctrl+W closes the tab, Ctrl+Tab and Ctrl+Shift+Tab cycle. */
+  /**
+   * Browser tab keys: Ctrl+W closes the tab, Ctrl+Tab and Ctrl+Shift+Tab
+   * cycle. Ctrl+\ splits the Deck or joins it again, as in an editor.
+   */
   private onKey(event: KeyboardEvent): void {
     if (!event.ctrlKey || event.altKey || event.metaKey) return;
     if (event.key.toLowerCase() === 'w' && !event.shiftKey) {
@@ -182,7 +264,10 @@ export class HomeState {
       event.preventDefault();
       const tabs = this.openTabs();
       const step = event.shiftKey ? -1 : 1;
-      this.view.set(tabs[(tabs.indexOf(this.current()) + step + tabs.length) % tabs.length]);
+      this.select(tabs[(tabs.indexOf(this.current()) + step + tabs.length) % tabs.length]);
+    } else if (event.key === '\\' || event.code === 'Backslash') {
+      event.preventDefault();
+      this.toggleSplit();
     }
   }
 
@@ -243,6 +328,8 @@ export default function Home() {
   const [dragging, setDragging] = useState<HomeView | null>(null);
 
   const view = s.current();
+  const panes = s.panes();
+  const split = panes.length > 1;
   // Today is pinned before the registry has loaded, so it needs a face of its own.
   const surface = (id: string) =>
     s.modules.get(id)?.surface ??
@@ -281,7 +368,12 @@ export default function Home() {
           {s.openTabs().map((tab) => (
             <div
               key={tab}
-              className={cn('tab', view === tab && 'active', dragging === tab && 'dragging')}
+              className={cn(
+                'tab',
+                view === tab && 'active',
+                s.otherPane() === tab && 'shown',
+                dragging === tab && 'dragging',
+              )}
               draggable={tab !== 'today'}
               onDragStart={(event) => {
                 event.dataTransfer.effectAllowed = 'move';
@@ -309,7 +401,7 @@ export default function Home() {
                 role="tab"
                 aria-selected={view === tab}
                 className="tab-open"
-                onClick={() => s.view.set(tab)}
+                onClick={() => s.select(tab)}
               >
                 {tab === 'today' ? (
                   <Icon name={surface(tab).icon} size={14} />
@@ -369,6 +461,17 @@ export default function Home() {
           )}
         </button>
         <div className="window-controls">
+          <button
+            type="button"
+            className={cn('window-btn', split && 'on')}
+            onClick={() => s.toggleSplit()}
+            disabled={!split && s.openTabs().length < 2}
+            aria-label={split ? 'Join panes' : 'Split view'}
+            aria-pressed={split}
+            title={split ? 'Join panes (Ctrl+\\)' : 'Split view (Ctrl+\\)'}
+          >
+            <Icon name="columns-2" size={14} />
+          </button>
           <button
             type="button"
             className={cn('window-btn', s.inspector() && 'on')}
@@ -526,40 +629,42 @@ export default function Home() {
           </div>
         </nav>
 
-        <main className="content" role="tabpanel" aria-label={surface(view).label}>
-          <Suspense fallback={<div className="page-loading" aria-busy="true" />}>
-            {view === 'today' ? (
-              <Today />
-            ) : view === 'modules' ? (
-              <Modules onOpen={(id) => s.open(id)} />
-            ) : view === 'account' ? (
-              <AccountPage s={s} />
-            ) : view === 'settings' ? (
-              <Settings initialTab={s.settingsTab()} />
-            ) : view === 'agents' ? (
-              <Agents request={s.requestedChat()} onRequestHandled={s.chatHandled} />
-            ) : view === 'linear' ? (
-              <Linear
-                projectRequest={s.linearProjectRequest()}
-                onProjectRequestHandled={(request) => s.handleLinearProjectRequest(request)}
-              />
-            ) : view === 'vault' ? (
-              <Vault />
-            ) : s.modules.get(view)?.kind === 'web' ? (
-              <WebAppView
-                key={view}
-                id={view.slice(WEB.length)}
-                name={s.modules.get(view)?.name ?? 'Web app'}
-              />
-            ) : view === 'terminal' ? (
-              <Terminal />
-            ) : view === 'runtime' ? (
-              <Runtime />
-            ) : (
-              <Projects onLinearProjectSelected={(request) => s.openLinearProject(request)} />
-            )}
-          </Suspense>
-        </main>
+        <div
+          className={cn('panes', split && 'split')}
+          style={vars({ '--split': `${s.splitRatio() * 100}%` })}
+        >
+          {panes.map((pane, index) => (
+            <Fragment key={pane}>
+              {index === 1 && <SplitDivider s={s} />}
+              <main
+                className={cn('content', split && pane === view && 'focused')}
+                role="tabpanel"
+                aria-label={surface(pane).label}
+                onPointerDownCapture={() => s.focusPane(index)}
+              >
+                <Suspense fallback={<div className="page-loading" aria-busy="true" />}>
+                  <DeckView s={s} view={pane} />
+                </Suspense>
+              </main>
+            </Fragment>
+          ))}
+          {dragging && (
+            // Dropping a dragged tab on the right half opens it beside the
+            // focused view, as dragging an editor tab does in an IDE.
+            <div
+              className="split-drop"
+              onDragOver={(event) => event.preventDefault()}
+              onDrop={(event) => {
+                event.preventDefault();
+                s.split(dragging);
+                setDragging(null);
+              }}
+            >
+              <Icon name="columns-2" size={16} />
+              Open on the right
+            </div>
+          )}
+        </div>
 
         {s.inspector() && <Inspector onOpenThread={(id) => s.openThread(id)} />}
       </div>
@@ -579,6 +684,75 @@ export default function Home() {
         </span>
       </footer>
     </div>
+  );
+}
+
+/** A module's surface, in whichever pane shows it. */
+function DeckView({ s, view }: { s: HomeState; view: HomeView }) {
+  return view === 'today' ? (
+    <Today />
+  ) : view === 'modules' ? (
+    <Modules onOpen={(id) => s.open(id)} />
+  ) : view === 'account' ? (
+    <AccountPage s={s} />
+  ) : view === 'settings' ? (
+    <Settings initialTab={s.settingsTab()} />
+  ) : view === 'agents' ? (
+    <Agents request={s.requestedChat()} onRequestHandled={s.chatHandled} />
+  ) : view === 'linear' ? (
+    <Linear
+      projectRequest={s.linearProjectRequest()}
+      onProjectRequestHandled={(request) => s.handleLinearProjectRequest(request)}
+    />
+  ) : view === 'vault' ? (
+    <Vault />
+  ) : s.modules.get(view)?.kind === 'web' ? (
+    <WebAppView
+      key={view}
+      id={view.slice(WEB.length)}
+      name={s.modules.get(view)?.name ?? 'Web app'}
+    />
+  ) : view === 'terminal' ? (
+    <Terminal />
+  ) : view === 'runtime' ? (
+    <Runtime />
+  ) : (
+    <Projects onLinearProjectSelected={(request) => s.openLinearProject(request)} />
+  );
+}
+
+/** The bar between split panes: drag it, or focus it and use the arrow keys. */
+function SplitDivider({ s }: { s: HomeState }) {
+  const percent = Math.round(s.splitRatio() * 100);
+  return (
+    <div
+      className="split-divider"
+      role="separator"
+      aria-orientation="vertical"
+      aria-label="Resize panes"
+      aria-valuemin={MIN_SPLIT * 100}
+      aria-valuemax={100 - MIN_SPLIT * 100}
+      aria-valuenow={percent}
+      tabIndex={0}
+      onPointerDown={(event) => event.currentTarget.setPointerCapture(event.pointerId)}
+      onPointerMove={(event) => {
+        if (!event.currentTarget.hasPointerCapture(event.pointerId)) return;
+        const box = event.currentTarget.parentElement!.getBoundingClientRect();
+        s.resizeSplit((event.clientX - box.left) / box.width);
+      }}
+      onPointerUp={() => s.saveSplit()}
+      onDoubleClick={() => {
+        s.resizeSplit(0.5);
+        s.saveSplit();
+      }}
+      onKeyDown={(event) => {
+        const step = { ArrowLeft: -0.05, ArrowRight: 0.05 }[event.key];
+        if (step === undefined) return;
+        event.preventDefault();
+        s.resizeSplit(s.splitRatio() + step);
+        s.saveSplit();
+      }}
+    />
   );
 }
 
