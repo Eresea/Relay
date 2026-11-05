@@ -16,6 +16,7 @@ import { ThemeService } from '@/core/theme';
 import { TauriBridge, type MobileUpdate, type VaultStatus } from '@/core/tauri';
 import Settings from '@/features/settings/settings';
 import Vault from '@/features/vault/vault';
+import { MobileAccount } from './mobile-account';
 import { MobileConnections } from './mobile-connections';
 
 type MobileTab = 'dashboard' | 'notifications' | 'vault' | 'connections' | 'settings';
@@ -81,6 +82,8 @@ const MOBILE_MODULES: readonly MobileModule[] = [
   },
 ];
 
+const SETTINGS_MODULE = MOBILE_MODULES.find((module) => module.tab === 'settings')!;
+
 import './mobile.css';
 
 export class MobileState {
@@ -110,16 +113,21 @@ export class MobileState {
   } | null = null;
   private pendingRailBackAt = 0;
   private suppressClickFor: string | null = null;
+  /** Only the search button asks for the keyboard; sliding the rail open does not. */
+  private searchOnOpen = false;
 
   readonly tab = signal<MobileTab>('dashboard');
   readonly focusModuleHeading = signal(false);
   readonly moduleQuery = signal('');
   readonly activeModuleIndex = signal(0);
   readonly moduleMatches = computed<readonly MobileModuleMatch[]>(() =>
-    search(MOBILE_MODULES, this.moduleQuery()).map((match) => ({
-      ...match,
-      command: MOBILE_MODULES.find((module) => module.id === match.command.id)!,
-    })),
+    search(MOBILE_MODULES, this.moduleQuery())
+      .map((match) => ({
+        ...match,
+        command: MOBILE_MODULES.find((module) => module.id === match.command.id)!,
+      }))
+      // Settings stays pinned below the list, and joins it only when searched for.
+      .filter((match) => this.moduleQuery() !== '' || match.command !== SETTINGS_MODULE),
   );
   readonly activeModule = computed(() => this.moduleMatches()[this.activeModuleIndex()]?.command);
   readonly railOpen = signal(false);
@@ -159,8 +167,8 @@ export class MobileState {
         if (focusHeading) {
           this.pageTitle.current?.focus();
           this.focusModuleHeading.set(false);
-        } else if (railOpen) {
-          this.moduleSearch.current?.focus();
+        } else if (railOpen && !this.searchOnOpen) {
+          this.railCloseButton.current?.focus();
         }
       });
       return () => clearTimeout(timer);
@@ -242,13 +250,20 @@ export class MobileState {
     this.openCommandMenu();
   }
 
+  findModule(): void {
+    this.searchOnOpen = true;
+    this.openCommandMenu();
+  }
+
   closeRail(): void {
+    this.searchOnOpen = false;
     this.moduleQuery.set('');
     this.setRailOpen(false);
   }
 
   onRailTransitionEnd(event: TransitionEvent): void {
-    if (event.propertyName === 'transform' && this.railOpen()) {
+    if (event.propertyName === 'transform' && this.railOpen() && this.searchOnOpen) {
+      this.searchOnOpen = false;
       this.moduleSearch.current?.focus();
     }
   }
@@ -563,7 +578,7 @@ export default function Mobile() {
               className="header-button"
               type="button"
               onClick={() => {
-                void s.openCommandMenu();
+                void s.findModule();
               }}
               aria-label="Find a module"
             >
@@ -719,6 +734,20 @@ export default function Mobile() {
               </p>
             </>
           ) : null}
+          <div className="rail-settings">
+            <button
+              className={cn('rail-item', s.tab() === 'settings' && 'active')}
+              type="button"
+              aria-current={s.tab() === 'settings' ? 'page' : undefined}
+              onClick={() => {
+                void s.selectModule(SETTINGS_MODULE);
+              }}
+            >
+              <Icon name="settings" size={16} />
+              <span className="module-label">Settings</span>
+            </button>
+            <MobileAccount />
+          </div>
         </aside>
 
         <main className="mobile-content">
