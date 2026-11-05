@@ -173,9 +173,13 @@ pub fn set_hud_unlocked(unlocked: bool) {
 
 /// Hands the pointer to the OS so the HUD follows it. Only while unlocked.
 pub fn drag_hud(app: &AppHandle) -> Result<()> {
+    // Windows cannot be dragged on a phone, which has no HUD to move.
+    #[cfg(desktop)]
     if placement().unlocked {
         window(app, HUD)?.start_dragging()?;
     }
+    #[cfg(mobile)]
+    let _ = app;
     Ok(())
 }
 
