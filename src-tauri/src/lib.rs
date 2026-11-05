@@ -8,6 +8,8 @@ mod claude;
 #[cfg(desktop)]
 mod codex;
 mod commands;
+#[cfg(windows)]
+mod elevation;
 mod error;
 mod events;
 mod github;
@@ -475,6 +477,9 @@ pub fn run() {
 
     builder
         .setup(|app| {
+            #[cfg(windows)]
+            elevation::accept_links_when_elevated(app.handle());
+
             #[cfg(windows)]
             if let Err(error) = app.deep_link().register_all() {
                 log::warn!("could not register Relay deep links: {error}");
