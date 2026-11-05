@@ -1,0 +1,112 @@
+@use '../../styles/umbra/recipes' as *;
+
+
+:host {
+  display: block;
+  width: 100%;
+  color: inherit;
+  font: inherit;
+}
+
+@each $hue in 'indigo', 'violet', 'cyan', 'emerald', 'amber', 'orange', 'rose' {
+  :host([data-hue='#{$hue}']) {
+    --row-hue: var(--entity-#{$hue});
+  }
+}
+
+.row {
+  display: flex;
+  width: 100%;
+  min-width: 0;
+  min-height: var(--row-h);
+  align-items: center;
+  gap: var(--space-5);
+  border-radius: var(--radius-md);
+  padding: var(--space-3) var(--space-5);
+}
+
+:host([data-selected]) .row {
+  background: var(--surface-selected);
+}
+
+.activator {
+  display: block;
+  width: 100%;
+  border: 0;
+  border-radius: var(--radius-md);
+  padding: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: start;
+  transition: var(--transition-control);
+}
+
+.activator:hover {
+  background: var(--surface-hover);
+}
+
+.activator:active {
+  transform: translateY(var(--control-press-offset));
+}
+
+.activator:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+.copy {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.heading {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.name {
+  @include truncate;
+  color: var(--text-body);
+  font: var(--type-ui);
+  line-height: var(--leading-snug);
+}
+
+:host([data-selected]) .name {
+  font-weight: var(--weight-semibold);
+}
+
+.detail {
+  @include truncate;
+  color: var(--text-muted);
+  font: var(--type-caption);
+}
+
+.track {
+  display: block;
+  height: var(--space-1);
+  overflow: hidden;
+  border-radius: var(--radius-pill);
+  background: var(--track);
+}
+
+.fill {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--row-hue);
+  transition: width var(--dur-slow) var(--ease-out);
+}
+
+.meta {
+  flex: none;
+  color: var(--text-muted);
+  font: var(--type-mono);
+  font-size: var(--text-2xs);
+  font-variant-numeric: tabular-nums;
+}

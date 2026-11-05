@@ -1,0 +1,20 @@
+:host {
+  display: inline-flex;
+  gap: var(--space-1);
+}
+
+kbd {
+  display: inline-flex;
+  min-width: var(--space-10);
+  height: var(--space-10);
+  align-items: center;
+  justify-content: center;
+  border: var(--border-width) solid var(--border-default);
+  border-radius: var(--radius-xs);
+  padding-inline: var(--space-2);
+  background: var(--surface-hover);
+  color: var(--text-muted);
+  font: var(--type-mono);
+  font-size: var(--text-2xs);
+  box-shadow: var(--inset-hairline);
+}

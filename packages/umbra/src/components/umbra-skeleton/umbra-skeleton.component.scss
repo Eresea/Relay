@@ -37,7 +37,7 @@
 }
 
 :host([data-animation='pulse']) {
-  animation: umbra-skeleton-pulse var(--dur-skeleton) ease-in-out infinite;
+  animation: umbra-pulse var(--dur-skeleton) ease-in-out infinite;
 }
 
 @keyframes umbra-skeleton-wave {
@@ -46,8 +46,3 @@
   }
 }
 
-@keyframes umbra-skeleton-pulse {
-  50% {
-    opacity: 0.5;
-  }
-}

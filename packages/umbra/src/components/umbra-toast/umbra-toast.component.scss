@@ -1,0 +1,71 @@
+@use '../../styles/umbra/recipes' as *;
+
+
+:host {
+  display: block;
+  width: min(var(--drawer-w-sm), calc(100vw - var(--space-8)));
+  max-width: 100%;
+}
+
+:host([data-tone='success']) {
+  --toast-ink: var(--success-text);
+}
+
+:host([data-tone='warning']) {
+  --toast-ink: var(--warning-text);
+}
+
+:host([data-tone='danger']) {
+  --toast-ink: var(--danger-text);
+}
+
+.toast {
+  display: flex;
+  min-width: 0;
+  align-items: flex-start;
+  gap: var(--space-4);
+  border: var(--border-width) solid var(--border-strong);
+  border-radius: var(--radius-md);
+  padding: var(--space-5) var(--space-6);
+  background: var(--surface-overlay);
+  color: var(--text-body);
+  box-shadow: var(--shadow-md);
+  animation: umbra-slide-up var(--dur-slow) var(--ease-out) both;
+}
+
+.dot {
+  width: var(--space-3);
+  height: var(--space-3);
+  flex: none;
+  margin-block-start: var(--space-2);
+  border-radius: var(--radius-pill);
+  background: var(--toast-ink);
+}
+
+.content {
+  display: grid;
+  min-width: 0;
+  flex: 1;
+  gap: var(--space-1);
+}
+
+.title {
+  font: var(--type-ui);
+  line-height: var(--leading-snug);
+}
+
+.message {
+  margin: 0;
+  color: var(--text-muted);
+  font: var(--type-small);
+}
+
+.dismiss {
+  @include icon-action;
+  margin-block: calc(-1 * var(--space-1));
+  margin-inline-end: calc(-1 * var(--space-2));
+}
+
+.dismiss svg {
+  @include action-glyph;
+}

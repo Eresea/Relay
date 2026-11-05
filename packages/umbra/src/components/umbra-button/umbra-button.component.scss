@@ -1,3 +1,5 @@
+@use '../../styles/umbra/recipes' as *;
+
 :host {
   position: relative;
   display: inline-block;
@@ -5,6 +7,7 @@
 }
 
 :host(.umbra-button-host--icon) { width: var(--control-h); height: var(--control-h); }
+
 
 @property --umbra-button-progress-angle {
   syntax: "<angle>";
@@ -37,13 +40,9 @@
   box-shadow: var(--shadow-xs), var(--shadow-control-halo);
 }
 .umbra-button:active:not(:disabled) { transform: translateY(var(--control-press-offset)); }
-.umbra-button[aria-pressed="true"] {
-  background: color-mix(in srgb, var(--primary) 94%, var(--text-inverted));
-  font-weight: var(--weight-semibold);
-}
-.umbra-button:focus-visible { outline: none; box-shadow: var(--focus-ring); }
+.umbra-button[aria-pressed="true"] { background: color-mix(in srgb, var(--primary) 85%, var(--text-inverted)); }
 .umbra-button:disabled { cursor: not-allowed; }
-.umbra-button:disabled:not([data-loading]) { opacity: 0.45; }
+.umbra-button:disabled:not([data-loading]) { opacity: var(--opacity-disabled); }
 .umbra-button[data-loading]:not([data-size="icon"])::after {
   content: "";
   position: absolute;
@@ -52,7 +51,7 @@
   border-radius: inherit;
   background: conic-gradient(from var(--umbra-button-progress-angle), transparent 0 64%, currentColor 78%, transparent 92%);
   pointer-events: none;
-  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask: linear-gradient(black 0 0) content-box, linear-gradient(black 0 0);
   -webkit-mask-composite: xor;
   mask-composite: exclude;
   animation: umbra-button-border-progress var(--dur-indeterminate) linear infinite;
@@ -62,11 +61,14 @@
   background: var(--surface-raised);
   color: var(--text-body);
 }
-.umbra-button[data-variant="secondary"]:hover:not(:disabled),
 .umbra-button[data-variant="ghost"]:hover:not(:disabled) { background: var(--surface-hover); }
-.umbra-button[data-variant="secondary"]:hover:not(:disabled) { border-color: var(--border-strong); }
+.umbra-button[data-variant="secondary"]:hover:not(:disabled) {
+  border-color: var(--border-strong);
+  background: var(--surface-raised-hover);
+}
 .umbra-button[data-variant="secondary"][aria-pressed="true"] {
-  background: color-mix(in srgb, var(--surface-raised) 94%, var(--text-body));
+  border-color: var(--border-strong);
+  background: color-mix(in srgb, var(--surface-raised) 85%, var(--text-body));
 }
 .umbra-button[data-variant="outline"] {
   border-color: var(--border-default);
@@ -79,26 +81,30 @@
   background: var(--surface-hover);
 }
 .umbra-button[data-variant="outline"][aria-pressed="true"] {
-  background: color-mix(in srgb, var(--bg-app) 94%, var(--text-body));
+  border-color: var(--border-strong);
+  background: var(--surface-active);
 }
 .umbra-button[data-variant="ghost"],
 .umbra-button[data-variant="link"] { background: transparent; color: var(--text-body); box-shadow: none; }
 .umbra-button[data-variant="ghost"][aria-pressed="true"],
-.umbra-button[data-variant="link"][aria-pressed="true"] { background: var(--surface-selected); }
+.umbra-button[data-variant="link"][aria-pressed="true"] { background: var(--surface-active); }
 .umbra-button[data-variant="destructive"] {
   background: var(--danger);
   color: var(--text-inverted);
   --control-hover-halo-color: var(--danger-quiet);
 }
 .umbra-button[data-variant="destructive"][aria-pressed="true"] {
-  background: color-mix(in srgb, var(--danger) 94%, var(--text-inverted));
+  background: color-mix(in srgb, var(--danger) 85%, var(--text-inverted));
 }
 .umbra-button[data-variant="destructive"]:hover:not(:disabled) {
   background: var(--danger-hover);
   box-shadow: var(--shadow-xs), var(--shadow-control-halo);
 }
 .umbra-button[data-variant="link"] { height: auto; padding: 0; text-underline-offset: var(--space-2); }
-.umbra-button[data-variant="link"]:hover:not(:disabled) { color: var(--text-link-hover); text-decoration: underline; }
+.umbra-button[data-variant="link"]:hover:not(:disabled) { background: transparent; box-shadow: none; color: var(--text-link-hover); text-decoration: underline; }
+
+/* Last, and as specific as any hover rule, so a hovered control keeps its ring. */
+.umbra-button[data-variant]:focus-visible:not(:disabled) { outline: none; box-shadow: var(--focus-ring); }
 
 .umbra-button[data-size="sm"] { height: var(--control-h-sm); padding-inline: var(--space-5); font-size: var(--text-xs); }
 .umbra-button[data-size="lg"] { height: var(--control-h-lg); padding-inline: var(--space-8); font-size: var(--text-base); }
@@ -110,11 +116,10 @@
 }
 .umbra-button[data-size="icon"] .labels { display: none; }
 
-.icon-slot { position: relative; display: inline-grid; width: var(--space-7); height: var(--space-7); flex: 0 0 auto; place-items: center; }
+.icon-slot { --icon-size: var(--space-7); position: relative; display: inline-grid; width: var(--icon-size); height: var(--icon-size); flex: 0 0 auto; place-items: center; @include slotted-icon(var(--icon-size)); }
 .icon-slot:empty { display: none; }
-.icon-slot :where(svg, img) { width: 100%; height: 100%; }
-.umbra-button[data-size="sm"] .icon-slot { width: var(--space-6); height: var(--space-6); }
-.umbra-button[data-size="lg"] .icon-slot { width: var(--space-8); height: var(--space-8); }
+.umbra-button[data-size="sm"] .icon-slot { --icon-size: var(--space-6); }
+.umbra-button[data-size="lg"] .icon-slot { --icon-size: var(--space-8); }
 .umbra-button[data-icon-position="end"] .icon-slot { order: 2; }
 
 .labels { display: inline-grid; }

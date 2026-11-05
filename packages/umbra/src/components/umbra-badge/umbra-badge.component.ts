@@ -4,7 +4,9 @@ export type UmbraBadgeVariant =
   | 'default'
   | 'secondary'
   | 'outline'
-  | 'destructive';
+  | 'destructive'
+  | 'success'
+  | 'warning';
 
 @Component({
   selector: 'umbra-badge',

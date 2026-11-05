@@ -9,6 +9,7 @@ import {
   inject,
   input,
   model,
+  signal,
   SimpleChanges,
   viewChild,
   WritableSignal,
@@ -38,6 +39,7 @@ import {
   rowSelectionFeature,
   rowSortingFeature,
   tableFeatures,
+  type RowData,
 } from "@tanstack/angular-table";
 import {
   UmbraTableCellContent,
@@ -61,9 +63,9 @@ const umbraTableFeatures = tableFeatures({
 });
 
 type UmbraTableFeatures = typeof umbraTableFeatures;
-type UmbraTableRow<T> = Row<UmbraTableFeatures, T>;
-type UmbraTableColumnInstance<T> = Column<UmbraTableFeatures, T, unknown>;
-type UmbraTableCell<T> = Cell<UmbraTableFeatures, T, unknown>;
+type UmbraTableRow<T extends RowData> = Row<UmbraTableFeatures, T>;
+type UmbraTableColumnInstance<T extends RowData> = Column<UmbraTableFeatures, T, unknown>;
+type UmbraTableCell<T extends RowData> = Cell<UmbraTableFeatures, T, unknown>;
 
 @Component({
   selector: "umbra-table",
@@ -76,7 +78,7 @@ type UmbraTableCell<T> = Cell<UmbraTableFeatures, T, unknown>;
     class: "umbra-table-host",
   },
 })
-export class UmbraTableComponent<T> implements OnChanges {
+export class UmbraTableComponent<T extends RowData> implements OnChanges {
   readonly rows = input<readonly T[]>([]);
   readonly columns = input<readonly UmbraTableColumn<T>[]>([]);
   readonly rowId = input<(row: T, index: number) => string>((_row, index) =>
@@ -91,11 +93,15 @@ export class UmbraTableComponent<T> implements OnChanges {
   readonly selectionMode = input<"single" | "multiple">("multiple");
   readonly resizable = input(true);
   readonly ariaLabel = input.required<string>();
+  readonly emptyMessage = input('No rows to display.');
+  readonly selectAllLabel = input('Select all rows');
+  readonly selectRowLabel = input('Select row');
 
   readonly sorting = model<SortingState>([]);
   readonly columnFilters = model<ColumnFiltersState>([]);
   readonly globalFilter = model("");
   readonly columnVisibility = model<ColumnVisibilityState>({});
+  readonly mobileColumnIds = input<readonly string[] | null>(null);
   readonly columnOrder = model<ColumnOrderState>([]);
   readonly columnSizing = model<Record<string, number>>({});
   readonly columnPinning = model<UmbraTableColumnPinning>({
@@ -108,6 +114,20 @@ export class UmbraTableComponent<T> implements OnChanges {
   );
 
   private readonly destroyRef = inject(DestroyRef);
+  private readonly narrowViewport = signal(false);
+  readonly effectiveColumnVisibility = computed<ColumnVisibilityState>(() => {
+    const visibility = this.columnVisibility();
+    const mobileColumns = this.mobileColumnIds();
+    if (!this.narrowViewport() || mobileColumns === null) return visibility;
+    const priority = new Set(mobileColumns);
+    return {
+      ...visibility,
+      ...Object.fromEntries(this.columns().map((column) => [
+        column.id,
+        priority.has(column.id) && visibility[column.id] !== false,
+      ])),
+    };
+  });
   private resizeCleanup?: () => void;
   private lastSelectedRowId?: string;
   private pendingShiftSelection = false;
@@ -150,7 +170,7 @@ export class UmbraTableComponent<T> implements OnChanges {
       sorting: this.sorting(),
       columnFilters: this.columnFilters(),
       globalFilter: this.globalFilter(),
-      columnVisibility: this.columnVisibility(),
+      columnVisibility: this.effectiveColumnVisibility(),
       columnOrder: this.columnOrder(),
       columnSizing: this.columnSizing(),
       columnPinning: {
@@ -275,6 +295,16 @@ export class UmbraTableComponent<T> implements OnChanges {
   }));
 
   constructor() {
+    const media = globalThis.matchMedia?.("(max-width: 767px)");
+    if (media) {
+      this.narrowViewport.set(media.matches);
+      const updateViewport = (event: MediaQueryListEvent) =>
+        this.narrowViewport.set(event.matches);
+      media.addEventListener("change", updateViewport);
+      this.destroyRef.onDestroy(() =>
+        media.removeEventListener("change", updateViewport),
+      );
+    }
     this.destroyRef.onDestroy(() => this.resizeCleanup?.());
   }
 
@@ -377,16 +407,19 @@ export class UmbraTableComponent<T> implements OnChanges {
   }
 
   toggleRow(row: UmbraTableRow<T>, event: Event): void {
-    const control = event.target as HTMLInputElement;
     const shiftKey = this.pendingShiftSelection;
     this.pendingShiftSelection = false;
+    this.setRowSelected(row, (event.target as HTMLInputElement).checked, shiftKey);
+  }
+
+  private setRowSelected(row: UmbraTableRow<T>, selected: boolean, extendRange: boolean): void {
     const rows = this.tableRows();
     const currentIndex = rows.findIndex((candidate) => candidate.id === row.id);
     const previousIndex = this.lastSelectedRowId
       ? rows.findIndex((candidate) => candidate.id === this.lastSelectedRowId)
       : -1;
 
-    if (control.checked && shiftKey && previousIndex >= 0) {
+    if (selected && extendRange && previousIndex >= 0) {
       const start = Math.min(previousIndex, currentIndex);
       const end = Math.max(previousIndex, currentIndex);
       this.rowSelection.update((selection) => {
@@ -396,7 +429,7 @@ export class UmbraTableComponent<T> implements OnChanges {
         return next;
       });
     } else {
-      row.toggleSelected(control.checked);
+      row.toggleSelected(selected);
     }
     this.lastSelectedRowId = row.id;
   }
@@ -451,6 +484,11 @@ export class UmbraTableComponent<T> implements OnChanges {
     row: UmbraTableRow<T>,
     column: UmbraTableColumnInstance<T>,
   ): void {
+    if (event.key === " " && this.selectable() && event.target === event.currentTarget) {
+      event.preventDefault();
+      this.setRowSelected(row, !row.getIsSelected(), event.shiftKey);
+      return;
+    }
     const keys = [
       "ArrowUp",
       "ArrowDown",
@@ -476,14 +514,14 @@ export class UmbraTableComponent<T> implements OnChanges {
       nextRow -= Math.max(
         1,
         Math.floor(
-          this.viewport()?.nativeElement.clientHeight / this.rowHeight(),
+          (this.viewport()?.nativeElement.clientHeight ?? 0) / this.rowHeight(),
         ),
       );
     if (event.key === "PageDown")
       nextRow += Math.max(
         1,
         Math.floor(
-          this.viewport()?.nativeElement.clientHeight / this.rowHeight(),
+          (this.viewport()?.nativeElement.clientHeight ?? 0) / this.rowHeight(),
         ),
       );
     if (event.key === "ArrowLeft") nextColumn--;

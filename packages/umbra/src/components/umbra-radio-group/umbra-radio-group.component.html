@@ -23,7 +23,7 @@
             [name]="controlName()"
             [value]="option.value"
             [checked]="value() === option.value"
-            [disabled]="option.disabled"
+            [disabled]="option.disabled ?? false"
             [required]="required()"
             (change)="select(option.value)"
             (blur)="touch.emit()"
@@ -34,9 +34,6 @@
           <span>{{ option.label }}</span>
           @if (option.hint) {
             <small>{{ option.hint }}</small>
-          }
-          @if (option.disabled) {
-            <small class="disabled-label">Disabled</small>
           }
         </span>
       </label>

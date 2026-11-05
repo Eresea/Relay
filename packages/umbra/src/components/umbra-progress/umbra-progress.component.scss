@@ -18,7 +18,7 @@
   height: var(--space-3);
   overflow: hidden;
   border-radius: var(--radius-pill);
-  background: var(--bg-sunken);
+  background: var(--track);
 }
 
 .indicator {
@@ -46,7 +46,7 @@ circle {
 }
 
 .circle-track {
-  stroke: var(--border-default);
+  stroke: var(--track);
 }
 
 .circle-indicator {
@@ -60,7 +60,7 @@ circle {
   stroke-dasharray: 28 72;
   transform-box: fill-box;
   transform-origin: center;
-  animation: umbra-progress-spin var(--dur-indeterminate) linear infinite;
+  animation: umbra-spin var(--dur-indeterminate) linear infinite;
 }
 
 @keyframes umbra-progress-linear {
@@ -72,8 +72,3 @@ circle {
   }
 }
 
-@keyframes umbra-progress-spin {
-  to {
-    transform: rotate(360deg);
-  }
-}

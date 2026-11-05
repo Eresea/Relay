@@ -1,23 +1,32 @@
+<div class="select-field">
+@if (label()) {
+  <label class="select-label" [for]="triggerId">
+    {{ label() }}
+    @if (required()) {
+      <span class="select-required" aria-hidden="true">*</span>
+    }
+  </label>
+}
+
 <div class="select-shell">
   <button
     #triggerButton
     class="select-trigger"
     type="button"
+    [id]="triggerId"
     [attr.aria-expanded]="isOpen()"
     [attr.aria-controls]="listboxId"
     aria-haspopup="listbox"
     [attr.aria-label]="triggerAriaLabel()"
     [attr.aria-labelledby]="ariaLabelledBy() || null"
-    [attr.aria-describedby]="ariaDescribedBy() || null"
-    [attr.aria-invalid]="invalid() || null"
-    [attr.aria-required]="required() || null"
+    [attr.aria-describedby]="describedBy()"
+    [attr.aria-invalid]="hasError() || null"
     [disabled]="disabled()"
     (click)="toggle()"
     (keydown)="onTriggerKeydown($event)"
     (blur)="onTriggerBlur()"
   >
     <span class="select-copy">
-      @if (label()) { <span class="select-label">{{ label() }}</span> }
       <span class="select-value" [attr.data-placeholder]="displayLabel() === null ? '' : null">
         {{ displayLabel() ?? placeholder() }}
       </span>
@@ -39,6 +48,13 @@
       </svg>
     </button>
   }
+</div>
+
+@if (error()) {
+  <small class="select-message select-error" [id]="errorId">{{ error() }}</small>
+} @else if (hint()) {
+  <small class="select-message" [id]="hintId">{{ hint() }}</small>
+}
 </div>
 
 <ng-template #panelTemplate>
@@ -76,7 +92,12 @@
           (mousedown)="$event.preventDefault()"
           (click)="selectOption(item)"
         >
-          <span class="select-option-label">{{ displayWith()(item) }}</span>
+          <span class="select-option-copy">
+            <span class="select-option-label">{{ displayWith()(item) }}</span>
+            @if (descriptionWith(); as describe) {
+              <span class="select-option-description">{{ describe(item) }}</span>
+            }
+          </span>
           @if (isSelected(item)) {
             <svg class="select-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
               <path d="m5 12 4 4L19 6" />
@@ -108,6 +129,6 @@
       }
     </div>
 
-    <div class="sr-only" aria-live="polite" aria-atomic="true">{{ announcement() }}</div>
+    <div class="visually-hidden" aria-live="polite" aria-atomic="true">{{ announcement() }}</div>
   </div>
 </ng-template>

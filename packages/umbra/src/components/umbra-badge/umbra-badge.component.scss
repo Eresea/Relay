@@ -15,7 +15,7 @@
 }
 
 :host([data-variant='secondary']) {
-  background: var(--bg-sunken);
+  background: var(--surface-hover);
   color: var(--text-muted);
 }
 
@@ -26,4 +26,14 @@
 :host([data-variant='destructive']) {
   background: var(--danger);
   color: var(--text-inverted);
+}
+
+:host([data-variant='success']) {
+  background: var(--success-quiet);
+  color: var(--success-text);
+}
+
+:host([data-variant='warning']) {
+  background: var(--warning-quiet);
+  color: var(--warning-text);
 }

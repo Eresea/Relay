@@ -12,6 +12,7 @@
     class="field"
     [attr.data-invalid]="hasError() || null"
     [attr.data-disabled]="disabled() || null"
+    [attr.data-readonly]="readonly() || null"
   >
     <span class="slot prefix">
       <ng-content select="[umbraInputPrefix]" />
@@ -21,10 +22,10 @@
       [id]="controlId()"
       [type]="visibleType()"
       [value]="value()"
-      [attr.name]="name()"
+      [attr.name]="name() || null"
       [placeholder]="placeholder()"
       [attr.autocomplete]="autocomplete()"
-      [attr.inputmode]="inputMode()"
+      [attr.inputmode]="inputMode() ?? (type() === 'number' ? 'decimal' : null)"
       [attr.minlength]="minLength()"
       [attr.maxlength]="maxLength()"
       [attr.min]="nativeMin()"
@@ -53,35 +54,38 @@
         [attr.aria-label]="clearLabel()"
         (click)="clear()"
       >
-        Clear
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18" /></svg>
       </button>
     }
     @if (type() === 'password' && !disabled()) {
       <button
         type="button"
         class="action"
-        [attr.aria-label]="
-          passwordVisible() ? 'Hide password' : passwordLabel()
-        "
+        [attr.aria-label]="passwordVisible() ? hidePasswordLabel() : passwordLabel()"
         [attr.aria-pressed]="passwordVisible()"
         (click)="togglePassword()"
       >
-        {{ passwordVisible() ? 'Hide password' : 'Show password' }}
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7Z" />
+          <circle cx="12" cy="12" r="3" />
+          @if (passwordVisible()) {
+            <path d="m3 3 18 18" />
+          }
+        </svg>
       </button>
     }
   </div>
 
-  @if (error()) {
-    <small class="description error" [id]="errorId">{{ error() }}</small>
-  } @else if (hint()) {
-    <small class="description" [id]="hintId">{{ hint() }}</small>
-  }
-  @if (showCount()) {
-    <small class="count" [id]="countId">
-      {{ value().length }}
-      @if (maxLength() !== undefined) {
-        / {{ maxLength() }}
+  @if (error() || hint() || showCount()) {
+    <div class="messages">
+      @if (error()) {
+        <small class="description error" [id]="errorId">{{ error() }}</small>
+      } @else if (hint()) {
+        <small class="description" [id]="hintId">{{ hint() }}</small>
       }
-    </small>
+      @if (showCount()) {
+        <small class="count" [id]="countId">{{ value().length }}@if (maxLength() !== undefined) {/{{ maxLength() }}}</small>
+      }
+    </div>
   }
 </div>

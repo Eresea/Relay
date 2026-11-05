@@ -1,7 +1,10 @@
+@use '../../styles/umbra/recipes' as *;
+
 :host {
   display: block;
   min-width: 0;
 }
+
 
 .empty-state {
   display: flex;
@@ -16,6 +19,7 @@
 }
 
 .icon-slot {
+  @include slotted-icon(var(--space-10));
   display: inline-flex;
   flex: 0 0 auto;
   color: var(--text-muted);
@@ -29,14 +33,15 @@
   gap: var(--space-2);
 }
 
-h3,
+.title,
 p {
   margin: 0;
 }
 
-h3 {
+.title {
   color: var(--text-body);
   font: var(--type-ui);
+  line-height: var(--leading-snug);
 }
 
 p {

@@ -1,0 +1,147 @@
+:host {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+button {
+  display: inline-flex;
+  flex: none;
+  height: var(--control-h-sm);
+  align-items: center;
+  gap: var(--space-2);
+  border: var(--border-width) solid transparent;
+  border-radius: var(--radius-sm);
+  padding-inline: var(--space-5);
+  background: transparent;
+  color: var(--text-muted);
+  font: var(--type-ui);
+  letter-spacing: var(--tracking-snug);
+  user-select: none;
+  white-space: nowrap;
+  transition: var(--transition-control);
+}
+
+button:hover:not(:disabled) {
+  background: var(--surface-hover);
+  color: var(--text-body);
+}
+
+button:active:not(:disabled) {
+  transform: translateY(var(--control-press-offset));
+}
+
+button:focus-visible {
+  z-index: 1;
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+button:disabled {
+  cursor: not-allowed;
+  opacity: var(--opacity-disabled);
+}
+
+button[aria-selected='true'] {
+  color: var(--text-body);
+}
+
+.icon {
+  font-size: var(--text-base);
+}
+
+.count {
+  min-width: var(--space-8);
+  color: var(--text-muted);
+  font: var(--type-mono);
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+}
+
+/* The scrolling tab rows clip anything outside themselves, so the ring sits inside. */
+button:focus-visible {
+  box-shadow: var(--focus-ring-inset);
+}
+
+/* underline */
+:host([data-variant='underline']) {
+  gap: var(--space-4);
+  overflow-x: auto;
+  border-block-end: var(--border-width) solid var(--border-subtle);
+}
+
+:host([data-variant='underline']) button {
+  height: var(--control-h-lg);
+  margin-block-end: calc(-1 * var(--border-width));
+  border-block-end: calc(var(--border-width) * 2) solid transparent;
+  border-radius: 0;
+  padding-inline: var(--space-1);
+}
+
+:host([data-variant='underline']) button:hover:not(:disabled) {
+  background: transparent;
+  border-block-end-color: var(--border-strong);
+}
+
+:host([data-variant='underline']) button[aria-selected='true'],
+:host([data-variant='underline']) button[aria-selected='true']:hover:not(:disabled) {
+  border-block-end-color: var(--text-body);
+}
+
+/* segmented and group share a sunken tray */
+:host([data-variant='segmented']),
+:host([data-variant='group']) {
+  width: fit-content;
+  max-width: 100%;
+  gap: 0;
+  overflow-x: auto;
+  border: var(--border-width) solid var(--border-default);
+  border-radius: var(--radius-md);
+  padding: var(--space-1);
+  background: var(--bg-sunken);
+}
+
+:host([data-variant='segmented']) button[aria-selected='true'],
+:host([data-variant='segmented']) button[aria-selected='true']:hover:not(:disabled) {
+  border-color: var(--border-default);
+  background: var(--surface-raised);
+  box-shadow: var(--shadow-xs);
+}
+
+:host([data-variant='segmented']) button[aria-selected='true']:focus-visible,
+:host([data-variant='segmented']) button[aria-selected='true']:focus-visible:hover:not(:disabled) {
+  box-shadow: var(--focus-ring-inset);
+}
+
+/* group: equal widths and a sliding selection */
+:host([data-variant='group']) {
+  position: relative;
+  display: grid;
+  grid-template-columns: repeat(var(--tab-count), minmax(0, 1fr));
+}
+
+:host([data-variant='group']) button {
+  position: relative;
+  z-index: 1;
+  min-width: max-content;
+  justify-content: center;
+}
+
+:host([data-variant='group']) button:hover:not(:disabled) {
+  background: transparent;
+}
+
+.selection {
+  position: absolute;
+  z-index: 0;
+  inset-block: var(--space-1);
+  inset-inline-start: var(--space-1);
+  width: calc((100% - var(--space-2)) / var(--tab-count));
+  border: var(--border-width) solid var(--border-default);
+  border-radius: var(--radius-sm);
+  background: var(--surface-raised);
+  box-shadow: var(--shadow-xs);
+  pointer-events: none;
+  transform: translateX(calc(var(--selected-index) * 100%));
+  transition: transform var(--dur-base) var(--ease-standard);
+}

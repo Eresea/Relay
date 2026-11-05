@@ -20,9 +20,12 @@ opted into with `class="light"` or `data-theme="light"` on `<html>`.
 | --- | --- |
 | `src/styles/umbra/umbra.scss` | The complete token and baseline style entry point. |
 | `src/styles/umbra/_*.scss` | Colour, typography, spacing, radius, elevation, motion and entity tokens. |
+| `src/styles/umbra/_recipes.scss` | Mixins for decisions several components share: the field, choice controls, small actions, overlay panels and menu rows. |
 | `src/components/` | Reusable UI components. |
 | `docs/components.md` | Component identities and their public contracts. |
 | `.agents/skills/umbra-component/` | The Umbra-specific component audit and migration workflow. |
+| `scripts/audit.mjs` | Enforces these rules against the source: tokens, contrast, theme parity, one styling dialect. |
+| `gallery/` | Every component on one page, and the browser checks that run against it. |
 
 Umbra is the source of truth for shared visual decisions. Consumer-specific layout and behavior stay in the consuming project.
 ## The rules
@@ -49,7 +52,9 @@ by a status dot or a glyph.
 
 **Numbers are specific.** "4,128 files · updated 2m ago", not "several files,
 recently". Sizes, counts, durations and paths are set in Geist Mono at
-`--text-subtle`, with tabular figures so they do not jitter while the clock runs.
+`--text-subtle`, with tabular figures so they do not jitter while the clock runs. Headline
+metric values and table cells stay in Geist, still with tabular figures, because they are the
+main content rather than a note beside it.
 
 **Buttons name the action, not the assent.** `Create`, `Delete`, `Resume`,
 `Save changes` — never `OK`, `Submit`, `Yes`.
@@ -63,6 +68,10 @@ next action instead of rendering fake data. Never present a state-changing actio
 `Rising` / `Falling`. Never synthesise a completion percentage out of conditions
 that are simply met or not.
 
+Persistent inline alerts use a quiet tinted surface and state text. Keep transient
+confirmations in toasts and blocking decisions in dialogs; icons are decorative,
+and actions stay in the alert's content flow.
+
 Contractions are used. Jargon is allowed where it is the accurate word — the
 audience is technical. Apologies are not: no "Oops", no "Sorry", no exclamation
 marks anywhere.
@@ -75,10 +84,19 @@ through **objects**, not decoration.
 The **primary action is monochrome** — near-white on near-black in dark mode,
 inverted in light. Not blue. A single blue (`--accent`, `#3b82f6`) is reserved for
 focus rings, quiet "in progress" tints and onboarding surfaces. Green, amber and
-red appear **only** as status.
+red carry explicit status meaning. Metrics may use positive or negative status
+tones only when that polarity matters to the user; never infer it from the sign
+alone.
 
-**Two background colours per screen, maximum**: `--bg-app` and `--bg-sunken`. The
-Data visualizations may use additional semantic colors when the data requires them.
+**Two background colours per screen, maximum**: `--bg-app` and `--bg-sunken`. Data
+visualizations may use additional semantic colours when the data requires them.
+
+Three tokens exist so that a control stays legible on those backgrounds. Use
+`--border-control` for the edge of a checkbox, radio or switch, whose boundary is the only
+thing identifying it; use `--track` for the unfilled part of a slider, progress bar or
+switch; and use `--danger-text`, `--success-text` or `--warning-text` whenever status
+colour sets text. The plain `--danger`, `--success` and `--warning` are fills and edges,
+and do not meet the text contrast floor on every surface.
 
 ### Entity hues
 
@@ -100,6 +118,10 @@ Three rules keep this from becoming confetti:
 3. **One hue per object, not per row.** Use stable hues when they help users
    distinguish related entities; keep unrelated values and ordinary file lists
    neutral.
+
+Status is orthogonal to entity hue. A status marker always exposes its state as
+text or an accessible name. Only the running state pulses, using the skeleton
+duration token: slow enough to sit in a long list, and slower still under reduced motion.
 
 ### Surfaces
 
@@ -126,7 +148,7 @@ is 14/1.5, UI labels are 13/500. Tracking tightens as size grows (`-0.011em` at
 body, `-0.02em` at display). **Display type is used once per screen at most** — an
 app is not a landing page.
 
-Use the role tokens (`--type-body`, `--type-ui`, `--type-caption`, `--type-mono`,
+Use the role tokens (`--type-body`, `--type-ui`, `--type-small`, `--type-caption`, `--type-mono`,
 `--type-heading`, `--type-title`, `--type-display`) rather than assembling a font
 shorthand by hand.
 
@@ -197,14 +219,23 @@ reads as a hang.
 
 - **Hover** — a 4% white tint plus ink lifting from `--text-muted` to
   `--text-body`. Solid buttons go *lighter* and gain a 3px translucent halo in
-  their own colour; bordered controls step from `--border-default` to
+  their own colour, except that a hover never drops a label below the text contrast
+  floor: light-theme destructive darkens instead; bordered controls step from `--border-default` to
   `--border-strong`; link buttons pick up a tint and an underline. Every variant
   must change on hover, since the cursor never does.
 - **Press** — `translateY(0.5px)`. No scale, no colour change.
-- **Selected** — a persistent 6% tint plus medium weight. Never an accent fill.
+- **Selected** — a persistent 6% tint. Items inside a tray or rail (a segmented tab, the
+  active navigation item) instead take the raised surface and its border, because they sit
+  on a fill of their own. Rows of a fixed width also take medium weight;
+  buttons, tabs and anything else sized by its label do not, because that would move their
+  neighbours. Never an accent fill.
+- **Disabled** — `--opacity-disabled` and the `not-allowed` cursor, everywhere.
+- **Read-only** — no well: a transparent fill and `--border-subtle`, so it never reads as
+  a field waiting for input.
 - **Focus** — one ring, on the element that owns the state: `--focus-ring`, a 1px
   edge plus a 3px low-alpha haze, via `:focus-visible`. Focus must always be
-  obvious.
+  obvious. A control inside something that clips or paints over it (a scrolling tab row, a
+  grid cell) uses `--focus-ring-inset` instead, so the ring is never cut off.
 - **Fields focus by lifting, not by glowing.** An input rests as a sunken well with
   a hairline `--border-default`; hover brightens it to `--border-strong`; focus
   raises the fill from `--bg-sunken` to `--bg-app`, takes the border to
@@ -221,7 +252,8 @@ reads as a hang.
 **Choice controls are labels until touched.** A select has no border or fill at
 rest — it reads as a line of muted text with a small chevron. Hover fills a pill
 behind it; clicking opens a 10px-radius popover whose rows follow the same rule.
-Raised, bordered selects are not used.
+Raised, bordered selects are not used. Its label sits above the trigger like every
+other field label, and an invalid select draws the one red border.
 
 Date fields use separate day, month and year segments and return date-only
 `YYYY-MM-DD` values. Each segment is individually focusable; typing a complete
@@ -249,9 +281,13 @@ apologised for, and always offer the next action.
 
 Favour open layouts, rails, lists and clear hierarchy over nested, card-heavy layouts. Spacing responds to viewport size rather than preserving oversized padding.
 
+Keyboard shortcut hints use separate keycaps with platform-conventional modifier glyphs. They are readable hints, not buttons. Inside a menu row the hint is plain mono text, so a long menu stays quiet.
+
 ### Accessibility
 
 Use native semantic elements and behaviour before recreating them in ARIA. Shared form controls preserve browser validation, autocomplete, keyboard, selection, disabled and read-only behaviour. **Every menu item, list row and tab is a real `<button>` with visible focus** — never `role` and a click handler on a div, which Tab skips.
+
+Interactive entity rows are native buttons with `aria-pressed` for their selected state; place adjacent actions as siblings so buttons are never nested.
 
 Labels, hints, errors and counts get stable ids wired through `aria-describedby`,
 and **error copy replaces hint copy** rather than stacking. Icon-only controls
@@ -265,12 +301,20 @@ naming every share, and the exact values live in a definition list beside it.
 
 The data grid uses `role="grid"` because it implements cell navigation. Arrow and
 page keys move between cells, while Tab stays with the browser so users can leave
-the grid normally. Column resizing works by pointer and keyboard.
+the grid normally. Space selects the focused row and Shift+Space extends the range, so row checkboxes are not tab stops. Column resizing works by pointer and keyboard.
 
-Dialogs dismiss on Escape and return focus to their trigger. Modal keystrokes stay within the active dialog.
+Dialogs and drawers return focus to their trigger or, when opened programmatically, to the element that opened them. Modal keystrokes stay within the active overlay.
 
-Text meets 4.5:1 (3:1 at 24px and above). `--border-subtle` is a hairline, not a
-signal: never let a border carry state on its own.
+Text meets 4.5:1 (3:1 at 24px and above), and the edge of a checkbox, radio or switch and
+every status mark meet 3:1, in both themes and on every surface; `scripts/audit.mjs` computes this from
+the tokens. `--border-subtle` is a hairline, not a signal: never let a border carry state on
+its own.
+
+A composite widget is one tab stop with arrow keys inside it: the calendar grid moves by
+day and week, Home and End reach the week's edges and Page keys change month (with Shift,
+year); menus also accept typeahead. Tooltips wait `--dur-tooltip-delay` on hover, open
+immediately on keyboard focus but not on a click, and Escape dismisses them wherever the
+pointer is.
 
 ### Iconography
 
@@ -283,6 +327,9 @@ Never use emoji or text pictographs as icons. Inline SVG remains appropriate for
 charts, maps, flags and illustrations — things that are drawings, not glyphs.
 ## Building on this
 
+- Run `node scripts/audit.mjs` before committing, and `npm run check` in `gallery/` when a change affects how something looks or behaves. Add new components to the gallery.
+- Style a component in its own stylesheet from tokens and `_recipes.scss`. Components never rely on a consumer's utility classes, so they render the same in any project.
+- When a second component needs the same decision, move it into a recipe rather than copying it.
 - Reuse tokens. Do not hard-code component dimensions, colours, radii, shadows, durations or fonts in a stylesheet, template or style binding.
 - Prefer native platform behavior and existing Umbra components over app-specific reimplementations.
 - Keep variants and public interfaces opinionated. Add only what a real consumer demonstrates a need for.

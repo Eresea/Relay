@@ -1,3 +1,4 @@
+import { NgTemplateOutlet } from '@angular/common';
 import { Overlay, OverlayRef } from '@angular/cdk/overlay';
 import { ComponentPortal } from '@angular/cdk/portal';
 import {
@@ -8,6 +9,7 @@ import {
   ElementRef,
   Renderer2,
   SecurityContext,
+  TemplateRef,
   computed,
   inject,
   input,
@@ -20,6 +22,7 @@ let nextId = 0;
 
 @Component({
   selector: 'umbra-tooltip-panel',
+  imports: [NgTemplateOutlet],
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './umbra-tooltip-panel.component.html',
@@ -27,6 +30,7 @@ let nextId = 0;
   host: {
     role: 'tooltip',
     '[attr.id]': 'panelId()',
+    '[class.has-template]': '!!template()',
   },
 })
 export class UmbraTooltipPanelComponent {
@@ -34,6 +38,7 @@ export class UmbraTooltipPanelComponent {
   readonly text = input.required<string>();
   readonly html = input<string | null>(null);
   readonly panelId = input.required<string>();
+  readonly template = input<TemplateRef<unknown> | null>(null);
   readonly sanitizedHtml = computed(() => {
     const value = this.html()?.trim();
     return value ? this.sanitizer.sanitize(SecurityContext.HTML, value) : null;
@@ -47,7 +52,7 @@ export class UmbraTooltipPanelComponent {
     '(mouseenter)': 'onMouseEnter()',
     '(mouseleave)': 'onMouseLeave()',
     '(touchstart)': 'onTouchStart()',
-    '(focusin)': 'onFocusIn()',
+    '(focusin)': 'onFocusIn($event)',
     '(focusout)': 'onFocusOut()',
     '(keydown.escape)': 'hide()',
   },
@@ -55,6 +60,7 @@ export class UmbraTooltipPanelComponent {
 export class UmbraTooltipDirective {
   readonly umbraTooltip = input('');
   readonly tooltipHtml = input<string | null>(null);
+  readonly tooltipTemplate = input<TemplateRef<unknown> | null>(null);
   readonly tooltipPosition = input<UmbraTooltipPosition>('top');
 
   private readonly overlay = inject(Overlay);
@@ -66,6 +72,11 @@ export class UmbraTooltipDirective {
   private focused = false;
   private suppressMouseEnter = false;
   private originalDescribedBy: string | null = null;
+  private showTimer?: ReturnType<typeof setTimeout>;
+  // A hovered tooltip must be dismissible without moving the pointer (WCAG 1.4.13).
+  private readonly dismissOnEscape = (event: KeyboardEvent): void => {
+    if (event.key === 'Escape') this.hide();
+  };
 
   constructor() {
     inject(DestroyRef).onDestroy(() => this.dispose());
@@ -77,7 +88,10 @@ export class UmbraTooltipDirective {
       return;
     }
     this.hovered = true;
-    this.show();
+    const delay = Number.parseFloat(
+      getComputedStyle(this.element.nativeElement).getPropertyValue('--dur-tooltip-delay'),
+    );
+    this.showTimer = setTimeout(() => this.show(), Number.isFinite(delay) ? delay : 0);
   }
 
   onTouchStart(): void {
@@ -87,11 +101,15 @@ export class UmbraTooltipDirective {
 
   onMouseLeave(): void {
     this.hovered = false;
+    clearTimeout(this.showTimer);
     if (!this.focused) this.hide();
   }
 
-  onFocusIn(): void {
+  onFocusIn(event: FocusEvent): void {
+    // A click also focuses its target; only keyboard focus should open a tooltip.
+    if (!(event.target as HTMLElement).matches(':focus-visible')) return;
     this.focused = true;
+    clearTimeout(this.showTimer);
     this.show();
   }
 
@@ -119,11 +137,13 @@ export class UmbraTooltipDirective {
       disposeOnNavigation: true,
     });
 
+    document.addEventListener('keydown', this.dismissOnEscape);
     const panel = this.overlayRef.attach(
       new ComponentPortal(UmbraTooltipPanelComponent),
     );
     panel.setInput('text', this.content());
     panel.setInput('html', this.tooltipHtml());
+    panel.setInput('template', this.tooltipTemplate());
     panel.setInput('panelId', this.panelId);
 
     const host = this.element.nativeElement;
@@ -135,7 +155,9 @@ export class UmbraTooltipDirective {
   }
 
   hide(): void {
+    clearTimeout(this.showTimer);
     if (!this.overlayRef) return;
+    document.removeEventListener('keydown', this.dismissOnEscape);
 
     this.overlayRef.dispose();
     this.overlayRef = undefined;
@@ -210,7 +232,7 @@ export class UmbraTooltipDirective {
   }
 
   private hasContent(): boolean {
-    return Boolean(this.content() || this.tooltipHtml()?.trim());
+    return Boolean(this.tooltipTemplate() || this.content() || this.tooltipHtml()?.trim());
   }
 
   private tokenPixels(styles: CSSStyleDeclaration, token: string): number {

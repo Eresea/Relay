@@ -1,3 +1,5 @@
+@use '../../styles/umbra/recipes' as *;
+
 :host {
   display: block;
   width: 100%;
@@ -6,98 +8,54 @@
 }
 
 .date-field {
-  display: grid;
-  min-width: 0;
-  gap: var(--space-2);
+  @include field-stack;
 }
 
 .date-label {
-  color: var(--text-muted);
-  font: var(--type-caption);
+  @include field-label;
+}
+
+.date-required {
+  @include field-required;
 }
 
 .date-control {
-  display: flex;
-  min-width: 0;
-  min-height: var(--control-h-lg);
-  align-items: center;
-  border: 1px solid var(--border-default);
-  border-radius: var(--radius-md);
-  background: var(--bg-sunken);
-  box-shadow: var(--shadow-xs);
-  transition:
-    background-color var(--dur-fast) var(--ease-standard),
-    border-color var(--dur-fast) var(--ease-standard),
-    box-shadow var(--dur-fast) var(--ease-standard);
-}
-
-.date-control:hover:not([data-disabled]) {
-  border-color: var(--border-strong);
-}
-
-.date-control:focus-within:not([data-disabled]) {
-  border-color: var(--border-focus);
-  box-shadow: var(--focus-ring);
-}
-
-.date-control[data-invalid] {
-  border-color: var(--danger);
-}
-
-.date-control[data-disabled] {
-  opacity: 0.5;
+  @include field-shell;
 }
 
 .date-segments {
   display: flex;
-  box-sizing: border-box;
   width: 100%;
   min-width: 0;
-  min-height: var(--control-h-lg);
   flex: 1 1 auto;
   align-items: center;
   gap: var(--space-1);
-  padding: 0 0 0 var(--space-2);
+  padding-inline-start: var(--space-2);
 }
 
 .date-segment {
-  box-sizing: border-box;
-  height: var(--control-h);
-  padding: 0;
-  border: 0;
+  @include field-text;
+  height: var(--space-12);
   border-radius: var(--radius-sm);
-  outline: 0;
-  color: var(--text-body);
-  background: transparent;
+  padding: 0;
   font: var(--type-mono);
   font-variant-numeric: tabular-nums;
   text-align: center;
+  transition: var(--transition-control);
 }
 
 .date-segment-day,
 .date-segment-month {
-  width: var(--space-20);
+  width: var(--space-14);
 }
 
 .date-segment-year {
-  width: var(--space-24);
+  width: var(--space-20);
 }
 
-.date-segment::placeholder {
-  color: var(--text-subtle);
-}
-
-.date-segment:hover:not(:disabled) {
-  background: var(--surface-hover);
-}
-
+.date-segment:hover:not(:disabled):not([readonly]),
 .date-segment:focus-visible {
   background: var(--surface-hover);
-}
-
-.date-segment:disabled,
-.date-segment[readonly] {
-  color: var(--text-muted);
 }
 
 .date-separator {
@@ -106,60 +64,26 @@
 }
 
 .date-action {
-  display: grid;
-  width: var(--control-h);
-  height: var(--control-h);
-  flex: 0 0 auto;
-  place-items: center;
-  padding: 0;
-  border: 0;
-  border-radius: var(--radius-sm);
-  color: var(--text-muted);
-  background: transparent;
-  font: inherit;
-}
-
-.date-action:hover {
-  color: var(--text-body);
-  background: var(--surface-hover);
-}
-
-.date-action:focus-visible,
-.calendar button:focus-visible {
-  outline: none;
-  box-shadow: var(--focus-ring);
-}
-
-.date-calendar-trigger {
-  flex: 0 0 auto;
+  @include icon-action;
+  margin-inline-end: var(--space-1);
 }
 
 .date-icon {
-  width: var(--space-5);
-  height: var(--space-5);
-  fill: none;
-  stroke: currentColor;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-  stroke-width: 1.75;
+  @include action-glyph;
 }
 
 .calendar {
+  @include overlay-panel;
   box-sizing: border-box;
   width: min(calc(var(--space-32) * 4), calc(100vw - var(--space-8)));
   padding: var(--space-6);
-  border: 1px solid var(--border-default);
-  border-radius: var(--radius-lg);
-  color: var(--text-body);
-  background: var(--surface-overlay);
-  box-shadow: var(--shadow-md);
 }
 
 .calendar-heading {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: var(--space-3);
+  margin-block-end: var(--space-3);
 }
 
 .calendar-period {
@@ -168,31 +92,43 @@
   gap: var(--space-2);
 }
 
-.calendar-period-button {
-  min-width: 0;
-  padding: var(--space-2);
+.calendar-nav {
+  @include icon-action;
+}
+
+.calendar-period-button,
+.calendar-choice,
+.calendar-day,
+.calendar-footer button {
   border: 0;
   border-radius: var(--radius-sm);
-  color: var(--text-body);
   background: transparent;
+  color: var(--text-body);
   font: var(--type-ui);
+  transition: var(--transition-control);
 }
 
-.calendar-period-button:hover,
+.calendar-period-button {
+  min-width: 0;
+  padding: var(--space-2) var(--space-3);
+}
+
 .calendar-period-button[data-viewed] {
-  background: var(--surface-hover);
+  background: var(--surface-selected);
 }
 
-.calendar-period-button:focus-visible {
+.calendar button:not(.calendar-nav):hover:not([data-selected]):not([data-viewed]):not(:disabled) {
+  background: var(--surface-hover);
+  color: var(--text-body);
+}
+
+.calendar button:not(.calendar-nav):active:not(:disabled) {
+  transform: translateY(var(--control-press-offset));
+}
+
+.calendar button:focus-visible {
   outline: none;
   box-shadow: var(--focus-ring);
-}
-
-.calendar-nav {
-  display: grid;
-  width: var(--control-h);
-  height: var(--control-h);
-  place-items: center;
 }
 
 .calendar-grid {
@@ -201,7 +137,7 @@
 }
 
 .calendar-weekdays {
-  padding-bottom: var(--space-2);
+  padding-block-end: var(--space-2);
   color: var(--text-subtle);
   font: var(--type-caption);
   text-align: center;
@@ -226,37 +162,16 @@
   grid-template-columns: repeat(5, minmax(0, 1fr));
 }
 
-.calendar button,
-.calendar-nav {
-  border: 0;
-  border-radius: var(--radius-sm);
-  color: var(--text-body);
-  background: transparent;
-  font: var(--type-ui);
-}
-
-.calendar-nav {
-  color: var(--text-muted);
-}
-
-.calendar button:hover:not([data-selected]):not(:disabled) {
-  color: var(--text-body);
-  background: var(--surface-hover);
-}
-
-.calendar-nav:disabled {
-  color: var(--text-subtle);
-}
-
 .calendar-choice {
   min-width: 0;
   min-height: var(--control-h);
   padding: var(--space-1);
 }
 
-.calendar-choice[data-viewed] {
-  color: var(--primary-text);
+.calendar-choice[data-viewed],
+.calendar-day[data-selected] {
   background: var(--primary);
+  color: var(--primary-text);
 }
 
 .calendar-day {
@@ -274,25 +189,24 @@
 
 .calendar-day[data-today]::after {
   position: absolute;
-  bottom: var(--space-2);
+  inset-block-end: var(--space-2);
   width: var(--space-1);
   height: var(--space-1);
   border-radius: var(--radius-pill);
   background: var(--accent);
-  content: "";
+  content: '';
 }
 
-.calendar-day[data-selected] {
-  color: var(--primary-text);
-  background: var(--primary);
+.calendar-day[data-selected][data-today]::after {
+  background: currentColor;
 }
 
 .calendar-footer {
   display: flex;
   justify-content: space-between;
-  margin-top: var(--space-4);
-  padding-top: var(--space-3);
-  border-top: 1px solid var(--border-subtle);
+  margin-block-start: var(--space-4);
+  border-block-start: var(--border-width) solid var(--border-subtle);
+  padding-block-start: var(--space-3);
 }
 
 .calendar-footer button {
@@ -301,16 +215,9 @@
 }
 
 .date-message {
-  color: var(--text-muted);
-  font: var(--type-caption);
+  @include field-message;
 }
 
 .date-error {
-  color: var(--danger);
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .date-control {
-    transition: none;
-  }
+  @include field-error;
 }

@@ -1,0 +1,250 @@
+<main>
+<h1 class="g-title">Umbra</h1>
+<p class="g-lede">Every component in its resting, invalid and disabled states.</p>
+
+<section class="g-section" data-c="button">
+  <h2>Button</h2>
+  <div class="g-row">
+    <umbra-button>Create</umbra-button>
+    <umbra-button variant="secondary">Save changes</umbra-button>
+    <umbra-button variant="outline">Export</umbra-button>
+    <umbra-button variant="ghost">Cancel</umbra-button>
+    <umbra-button variant="destructive">Delete</umbra-button>
+    <umbra-button variant="link">Open logs</umbra-button>
+  </div>
+  <div class="g-row">
+    <umbra-button size="sm">Small</umbra-button>
+    <umbra-button>Medium</umbra-button>
+    <umbra-button size="lg">Large</umbra-button>
+    <umbra-button size="icon" variant="secondary" ariaLabel="Add">
+      <svg umbraButtonIcon class="g-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14" /></svg>
+    </umbra-button>
+    <umbra-button variant="secondary">
+      <svg umbraButtonIcon class="g-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14" /></svg>
+      New job
+    </umbra-button>
+  </div>
+  <div class="g-row">
+    <umbra-button [disabled]="true">Disabled</umbra-button>
+    <umbra-button variant="secondary" [disabled]="true">Disabled</umbra-button>
+    <umbra-button [loading]="true" loadingLabel="Saving">Save</umbra-button>
+    <umbra-button variant="secondary" [pressed]="true">Pressed</umbra-button>
+    <umbra-button variant="ghost" [pressed]="true">Pressed</umbra-button>
+  </div>
+</section>
+
+<section class="g-section" data-c="alignment">
+  <h2>Controls side by side</h2>
+  <p class="g-note">Every control on this row should share one height and one baseline.</p>
+  <div class="g-row" id="align-row">
+    <umbra-input class="g-cell" ariaLabel="Name" placeholder="Name" />
+    <umbra-select [dataSource]="dataSource" [displayWith]="displayOption" [valueWith]="valueOption" ariaLabel="Region" placeholder="Region" />
+    <umbra-date class="g-cell" ariaLabel="Start date" />
+    <umbra-button>Apply</umbra-button>
+    <umbra-button variant="secondary">Reset</umbra-button>
+  </div>
+</section>
+
+<section class="g-section" data-c="fields">
+  <h2>Fields</h2>
+  <div class="g-grid">
+    <umbra-input label="Display name" placeholder="Ada Lovelace" hint="Shown on your profile." />
+    <umbra-input label="Email" value="ada@" error="Enter a complete email address." [required]="true" />
+    <umbra-input label="API token" type="password" value="relay-demo" />
+    <umbra-input label="Search" value="vault" [showClear]="true" />
+    <umbra-input label="Disabled" value="Locked" [disabled]="true" />
+    <umbra-input label="Read only" value="Read only" [readonly]="true" />
+    <umbra-input label="Handle" [showCount]="true" [maxLength]="20" value="ada" />
+    <umbra-textarea label="Notes" placeholder="Add a note" hint="Markdown is supported." />
+    <umbra-textarea label="Summary" value="Too short" error="Write at least 20 characters." [showCount]="true" [maxLength]="200" />
+    <umbra-date label="Start date" hint="Used for the first run." />
+    <umbra-date label="End date" [required]="true" error="Choose a date after the start date." />
+    <umbra-date label="Disabled date" [disabled]="true" />
+    <umbra-select [dataSource]="dataSource" [displayWith]="displayOption" [valueWith]="valueOption" [isOptionDisabled]="disableOption" label="Region" placeholder="Choose a region" />
+    <umbra-select [dataSource]="dataSource" [displayWith]="displayOption" [valueWith]="valueOption" label="Disabled region" [disabled]="true" />
+    <umbra-select [dataSource]="dataSource" [displayWith]="displayOption" [valueWith]="valueOption" label="Required region" [invalid]="true" [required]="true" />
+    <umbra-slider label="Volume" [value]="64" [showValue]="true" hint="Applied immediately." />
+    <umbra-slider ariaLabel="Unlabelled" [value]="30" />
+    <umbra-slider label="Invalid" [value]="12" error="Must be above 20." />
+    <umbra-slider label="Disabled" [value]="48" [disabled]="true" />
+    <umbra-file-input accept="image/*"><umbra-button variant="secondary">Choose file</umbra-button></umbra-file-input>
+  </div>
+</section>
+
+<section class="g-section" data-c="choices">
+  <h2>Checkbox, switch and radio</h2>
+  <div class="g-grid">
+    <div class="g-stack">
+      <umbra-checkbox label="Unchecked" />
+      <umbra-checkbox label="Checked" [value]="true" />
+      <umbra-checkbox label="Indeterminate" [indeterminate]="true" />
+      <umbra-checkbox label="With a hint" hint="Sent once a week." />
+      <umbra-checkbox label="Invalid" error="Accept the terms to continue." />
+      <umbra-checkbox label="Disabled" [disabled]="true" />
+      <umbra-checkbox label="Disabled checked" [value]="true" [disabled]="true" />
+      <umbra-checkbox label="A long label that wraps onto a second line so its alignment with the box can be checked here" />
+    </div>
+    <div class="g-stack">
+      <umbra-switch label="Off" />
+      <umbra-switch label="On" [value]="true" />
+      <umbra-switch label="With a hint" hint="Sent once a week." />
+      <umbra-switch label="Invalid" error="This must be on." />
+      <umbra-switch label="Disabled" [disabled]="true" />
+      <umbra-switch label="Disabled on" [value]="true" [disabled]="true" />
+    </div>
+    <div class="g-stack">
+      <umbra-radio-group label="Schedule" name="schedule" [options]="radioOptions" value="daily" hint="Change this at any time." />
+      <umbra-radio-group label="Invalid" name="invalid" [options]="radioOptions" error="Choose a schedule." />
+      <umbra-radio-group ariaLabel="Horizontal" name="horizontal" orientation="horizontal" [options]="radioOptions" value="weekly" />
+    </div>
+  </div>
+</section>
+
+<section class="g-section" data-c="feedback">
+  <h2>Badges, status and progress</h2>
+  <div class="g-row">
+    <umbra-badge>Default</umbra-badge>
+    <umbra-badge variant="secondary">Secondary</umbra-badge>
+    <umbra-badge variant="outline">Outline</umbra-badge>
+    <umbra-badge variant="destructive">Failed</umbra-badge>
+  </div>
+  <div class="g-row">
+    @for (status of statuses; track status) {
+      <umbra-status-dot [state]="status" [label]="true" />
+    }
+  </div>
+  <div class="g-row">
+    <umbra-kbd keys="Ctrl+K" />
+    <umbra-kbd keys="⌘+Shift+P" />
+  </div>
+  <div class="g-grid">
+    <umbra-progress ariaLabel="Determinate" [value]="42" />
+    <umbra-progress ariaLabel="Indeterminate" />
+    <div class="g-row">
+      <umbra-progress variant="circular" ariaLabel="Circular" [value]="64" />
+      <umbra-progress variant="circular" ariaLabel="Circular indeterminate" />
+    </div>
+  </div>
+  <div class="g-grid">
+    <umbra-skeleton />
+    <umbra-skeleton animation="pulse" height="var(--space-16)" radius="md" />
+    <umbra-skeleton shape="circle" width="var(--space-16)" height="var(--space-16)" />
+  </div>
+  <umbra-separator />
+  <div class="g-grid">
+    <umbra-alert title="Maintenance window">Writes pause for 4 minutes at 02:00 UTC.</umbra-alert>
+    <umbra-alert tone="success" title="Backup verified">12.4 GB checked 2m ago.</umbra-alert>
+    <umbra-alert tone="warning" title="Certificate expires soon">Renew within 9 days.</umbra-alert>
+    <umbra-alert tone="danger" title="Deploy blocked">Needs 2 more approvals.</umbra-alert>
+  </div>
+  <div class="g-grid">
+    <umbra-toast title="Saved" message="Your changes are live." />
+    <umbra-toast tone="success" title="Deployed" message="Version 4.2 is live." />
+    <umbra-toast tone="warning" title="Slow response" message="Latency is above 400 ms." />
+    <umbra-toast tone="danger" title="Sync failed" message="Retry in 30 seconds." />
+  </div>
+</section>
+
+<section class="g-section" data-c="navigation">
+  <h2>Tabs, navigation and menu</h2>
+  <umbra-tabs ariaLabel="Underline tabs" [tabs]="tabs" [value]="tab()" (tabChange)="tab.set($event)" />
+  <umbra-tabs ariaLabel="Segmented tabs" variant="segmented" [tabs]="tabs" [value]="tab()" (tabChange)="tab.set($event)" />
+  <umbra-tabs ariaLabel="Group tabs" variant="group" [tabs]="tabs" [value]="tab()" (tabChange)="tab.set($event)" />
+  <div class="g-row g-row--top">
+    <umbra-nav-rail class="g-rail" mobileOrientation="vertical">
+      <umbra-nav-item label="Home" [active]="true" />
+      <umbra-nav-item label="Jobs" />
+      <umbra-nav-item label="Vault" [disabled]="true" />
+    </umbra-nav-rail>
+    <umbra-nav-rail orientation="horizontal" ariaLabel="Secondary navigation">
+      <umbra-nav-item orientation="horizontal" label="Home" [active]="true" />
+      <umbra-nav-item orientation="horizontal" label="Jobs" />
+    </umbra-nav-rail>
+    <umbra-menu class="g-cell" ariaLabel="Actions" [items]="menuItems" />
+  </div>
+</section>
+
+<section class="g-section" data-c="surfaces">
+  <h2>Cards, tiles and rows</h2>
+  <div class="g-grid">
+    <umbra-card title="Billing" description="Next invoice on 1 December.">
+      <umbra-button cardActions size="sm" variant="secondary">Edit</umbra-button>
+      <p class="g-note">The default card with an action and a footer.</p>
+      <umbra-button cardFooter size="sm">Pay now</umbra-button>
+    </umbra-card>
+    <umbra-card [interactive]="true" title="Interactive" description="Lifts its border on hover." />
+    <umbra-metric-tile value="4,128" label="Requests" delta="+4.2%" />
+    <umbra-metric-tile value="99.97%" label="Uptime" tone="running" />
+    <umbra-metric-tile value="12" label="Failures" tone="blocked" delta="-3" />
+    <umbra-metric-tile value="218 ms" label="Latency" hue="violet" />
+  </div>
+  <div class="g-row">
+    @for (hue of hues; track hue) {
+      <umbra-entity-tile [hue]="hue" [label]="hue">
+        <svg umbraEntityTileIcon class="g-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14" /></svg>
+      </umbra-entity-tile>
+    }
+    <umbra-entity-tile size="sm" entityId="small" label="Small"><svg umbraEntityTileIcon class="g-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14" /></svg></umbra-entity-tile>
+    <umbra-entity-tile size="lg" entityId="large" label="Large"><svg umbraEntityTileIcon class="g-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14" /></svg></umbra-entity-tile>
+  </div>
+  <div class="g-grid">
+    <div>
+      <umbra-entity-row name="Gateway" detail="eu-central · 3 replicas" state="running" meta="2m ago" />
+      <umbra-entity-row name="Billing" state="blocked" [progress]="64" />
+      <umbra-entity-row name="Search index" detail="Rebuilding" state="waiting" [interactive]="true" />
+      <umbra-entity-row name="Mail relay" detail="Selected row" state="done" [interactive]="true" [selected]="true" />
+    </div>
+    <umbra-empty-state title="No jobs yet" description="Create a job to see it here.">
+      <umbra-button umbraEmptyStateAction size="sm">Create job</umbra-button>
+    </umbra-empty-state>
+    <div class="g-glass-stage">
+      <umbra-glass-panel class="g-pad">Glass panel</umbra-glass-panel>
+    </div>
+  </div>
+</section>
+
+<section class="g-section" data-c="overlays">
+  <h2>Overlays</h2>
+  <div class="g-row">
+    <umbra-button id="tip" variant="secondary" umbraTooltip="Runs every night at 02:00 UTC.">Tooltip</umbra-button>
+    <umbra-popover ariaLabel="Filters" [(open)]="popoverOpen">
+      <umbra-button umbraPopoverTrigger id="open-popover" variant="secondary">Popover</umbra-button>
+      <div umbraPopoverContent class="g-pad">
+        <umbra-switch label="Only failures" />
+      </div>
+    </umbra-popover>
+    <umbra-dialog heading="Delete this job" [(open)]="dialogOpen">
+      <umbra-button umbraDialogTrigger id="open-dialog" variant="secondary">Dialog</umbra-button>
+      <p umbraDialogContent class="g-note">This removes 4,128 files and can't be undone.</p>
+      <umbra-button umbraDialogFooter variant="ghost">Cancel</umbra-button>
+      <umbra-button umbraDialogFooter variant="destructive">Delete</umbra-button>
+    </umbra-dialog>
+    <umbra-drawer heading="Job details" [(open)]="drawerOpen">
+      <umbra-button umbraDrawerTrigger id="open-drawer" variant="secondary">Drawer</umbra-button>
+      <div umbraDrawerContent class="g-pad">
+        <umbra-input label="Name" value="Nightly" />
+      </div>
+      <umbra-button umbraDrawerFooter variant="secondary">Save changes</umbra-button>
+    </umbra-drawer>
+  </div>
+</section>
+
+<section class="g-section" data-c="data">
+  <h2>Table</h2>
+  <umbra-table ariaLabel="Services" height="17rem" [rows]="services" [columns]="columns" [rowId]="serviceId" [selectable]="true" [columnPinning]="{ left: ['name'], right: [] }" />
+  <umbra-table ariaLabel="Loading services" height="10rem" [rows]="noServices" [columns]="columns" [loading]="true" [loadingRows]="3" />
+  <umbra-table ariaLabel="Empty services" height="7rem" [rows]="noServices" [columns]="columns" />
+</section>
+
+<section class="g-section" data-c="timeline">
+  <h2>Timeline and chart</h2>
+  <umbra-timeline ariaLabel="Recent activity" [items]="events" [trackBy]="eventKey" [groupBy]="eventGroup" [headerData]="[{ label: 'Events', value: '3' }, { label: 'Window', value: '48h' }]">
+    <ng-template #left let-event><span class="g-note">{{ event.time }}</span></ng-template>
+    <ng-template #right let-event>
+      <div>{{ event.title }}</div>
+      <div class="g-note">{{ event.note }}</div>
+    </ng-template>
+  </umbra-timeline>
+  <umbra-chart ariaLabel="Requests per day" [definition]="chart" [height]="180" />
+</section>
+</main>

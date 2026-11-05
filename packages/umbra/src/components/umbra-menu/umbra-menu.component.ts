@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, ElementRef, QueryList, ViewChildren, input, output } from '@angular/core';
+import { ChangeDetectionStrategy, Component, ElementRef, QueryList, ViewChildren, computed, input, output, signal } from '@angular/core';
 
 export interface UmbraMenuItem {
   id: string;
@@ -14,6 +14,7 @@ export interface UmbraMenuItem {
   templateUrl: './umbra-menu.component.html',
   styleUrl: './umbra-menu.component.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,
+  host: { class: 'umbra-menu' },
 })
 export class UmbraMenuComponent {
   readonly ariaLabel = input.required<string>();
@@ -23,8 +24,20 @@ export class UmbraMenuComponent {
 
   @ViewChildren('menuItem') private readonly menuItems!: QueryList<ElementRef<HTMLButtonElement>>;
 
-  protected tabIndex(index: number): 0 | -1 {
-    return index === this.items().findIndex(item => !item.disabled) ? 0 : -1;
+  private readonly focusedIndex = signal(-1);
+  protected readonly tabbableIndex = computed(() => {
+    const focused = this.focusedIndex();
+    const items = this.items();
+    return items[focused] && !items[focused].disabled ? focused : items.findIndex((item) => !item.disabled);
+  });
+
+  /** Moves focus into the menu; call it after the consumer's overlay opens. */
+  focus(): void {
+    this.menuItems?.get(this.tabbableIndex())?.nativeElement.focus();
+  }
+
+  protected rememberFocus(index: number): void {
+    this.focusedIndex.set(index);
   }
 
   protected select(item: UmbraMenuItem): void {
@@ -34,22 +47,30 @@ export class UmbraMenuComponent {
   }
 
   protected handleKeydown(event: KeyboardEvent): void {
-    const buttons = this.menuItems?.toArray().filter(button => !button.nativeElement.disabled) ?? [];
     if (event.key === 'Escape') {
       event.preventDefault();
       this.dismiss.emit();
       return;
     }
-    if (!buttons.length || !['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)) return;
+    const buttons = this.menuItems?.toArray().filter((button) => !button.nativeElement.disabled) ?? [];
+    if (!buttons.length) return;
+    const current = buttons.findIndex((button) => button.nativeElement === document.activeElement);
+    if (event.key.length === 1 && !event.ctrlKey && !event.metaKey && !event.altKey) {
+      const key = event.key.toLocaleLowerCase();
+      const ordered = [...buttons.slice(current + 1), ...buttons.slice(0, current + 1)];
+      ordered.find((button) => button.nativeElement.textContent?.trim().toLocaleLowerCase().startsWith(key))?.nativeElement.focus();
+      return;
+    }
+    if (!['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)) return;
     event.preventDefault();
-    const current = buttons.findIndex(button => button.nativeElement === document.activeElement);
-    const next = event.key === 'Home'
-      ? 0
-      : event.key === 'End'
-        ? buttons.length - 1
-        : current < 0
-          ? event.key === 'ArrowDown' ? 0 : buttons.length - 1
-          : (current + (event.key === 'ArrowDown' ? 1 : -1) + buttons.length) % buttons.length;
+    const next =
+      event.key === 'Home'
+        ? 0
+        : event.key === 'End'
+          ? buttons.length - 1
+          : current < 0
+            ? event.key === 'ArrowDown' ? 0 : buttons.length - 1
+            : (current + (event.key === 'ArrowDown' ? 1 : -1) + buttons.length) % buttons.length;
     buttons[next].nativeElement.focus();
   }
 }

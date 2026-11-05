@@ -41,3 +41,10 @@
     backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
   }
 }
+
+/* Behind dialogs and drawers. A class because CDK overlays take a backdrop class name. */
+.umbra-scrim {
+  background: var(--scrim);
+  -webkit-backdrop-filter: var(--blur-overlay);
+  backdrop-filter: var(--blur-overlay);
+}

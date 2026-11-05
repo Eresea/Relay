@@ -1,0 +1,18 @@
+{
+  "compilerOptions": {
+    "strict": true,
+    "noImplicitOverride": true,
+    "skipLibCheck": true,
+    "isolatedModules": true,
+    "experimentalDecorators": true,
+    "moduleResolution": "bundler",
+    "importHelpers": true,
+    "target": "ES2022",
+    "module": "ES2022",
+    "lib": ["ES2022", "dom", "dom.iterable"],
+    "types": [],
+    "paths": { "@umbra/*": ["../src/*"] }
+  },
+  "files": ["src/main.ts"],
+  "angularCompilerOptions": { "strictTemplates": true }
+}

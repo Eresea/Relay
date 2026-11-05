@@ -74,6 +74,7 @@ export class UmbraInputComponent implements FormValueControl<string> {
   readonly ariaDescribedBy = input<string>();
   readonly clearLabel = input('Clear input');
   readonly passwordLabel = input('Show password');
+  readonly hidePasswordLabel = input('Hide password');
   readonly touch = output<void>();
   readonly enter = output<void>();
 

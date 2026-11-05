@@ -22,8 +22,8 @@ let nextId = 0;
 })
 export class UmbraSliderComponent implements FormValueControl<number> {
   readonly value = model(0);
-  readonly min = input(0);
-  readonly max = input(100);
+  readonly min = input<number | undefined>(0);
+  readonly max = input<number | undefined>(100);
   readonly step = input(1);
   readonly label = input<string>();
   readonly hint = input<string>();
@@ -47,8 +47,8 @@ export class UmbraSliderComponent implements FormValueControl<number> {
   readonly errorId = `${this.id}-error`;
   readonly hasError = computed(() => this.invalid() || !!this.error());
   readonly percent = computed(() => {
-    const min = this.min();
-    const max = this.max();
+    const min = this.min() ?? 0;
+    const max = this.max() ?? 100;
     if (max <= min) return 0;
     return ((Math.min(max, Math.max(min, this.value())) - min) / (max - min)) * 100;
   });

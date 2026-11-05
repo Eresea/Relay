@@ -1,45 +1,36 @@
+@use '../../styles/umbra/recipes' as *;
+
 :host {
+  --switch-w: calc(var(--space-16) + var(--space-2));
+
   display: inline-block;
   min-width: 0;
 }
 
 .row {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-4);
-  color: var(--text-body);
-}
-
-:host(:not([data-disabled="true"])) .row {
-  cursor: pointer;
+  @include choice-row;
+  line-height: var(--space-10);
 }
 
 .control {
   position: relative;
   display: grid;
-  width: calc(var(--space-24) - var(--space-6));
+  width: var(--switch-w);
   height: var(--space-10);
-  flex: 0 0 auto;
+  flex: none;
   place-items: center;
 }
 
 input {
-  position: absolute;
-  inset: 0;
-  z-index: 1;
-  width: 100%;
-  height: 100%;
-  margin: 0;
-  opacity: 0;
+  @include native-overlay;
 }
 
 .track {
-  box-sizing: border-box;
   width: 100%;
   height: 100%;
-  border: var(--border-width) solid var(--border-default);
+  border: var(--border-width) solid var(--border-control);
   border-radius: var(--radius-pill);
-  background: var(--bg-sunken);
+  background: var(--track);
   transition: var(--transition-control);
 }
 
@@ -50,10 +41,14 @@ input {
   height: var(--space-8);
   border-radius: var(--radius-pill);
   background: var(--text-muted);
+  pointer-events: none;
   transition:
     transform var(--dur-fast) var(--ease-standard),
     background-color var(--dur-fast) var(--ease-standard);
-  pointer-events: none;
+}
+
+.row:hover input:not(:checked):not(:disabled) + .track {
+  border-color: var(--text-muted);
 }
 
 input:checked + .track {
@@ -61,54 +56,63 @@ input:checked + .track {
   background: var(--primary);
 }
 
+.row:hover input:checked:not(:disabled) + .track {
+  border-color: var(--primary-hover);
+  background: var(--primary-hover);
+}
+
 input:checked ~ .thumb {
   transform: translateX(var(--space-8));
   background: var(--primary-text);
 }
 
+:host-context([dir='rtl']) input:checked ~ .thumb {
+  transform: translateX(calc(-1 * var(--space-8)));
+}
+
+input:active:not(:disabled) ~ .thumb {
+  width: calc(var(--space-8) + var(--space-1));
+}
+
+input:active:checked:not(:disabled) ~ .thumb {
+  transform: translateX(calc(var(--space-8) - var(--space-1)));
+}
+
 input:focus-visible + .track {
-  box-shadow: var(--focus-field);
+  box-shadow: var(--focus-ring);
 }
 
-.label-text {
-  font: var(--type-ui);
-}
-
-.required {
-  color: var(--text-muted);
-}
-
-.description {
-  display: block;
-  margin-inline-start: var(--space-24);
-  color: var(--text-muted);
-  font: var(--type-caption);
-}
-
-.error {
-  color: var(--danger);
-}
-
-:host(:hover:not([data-disabled="true"]))
-  input:not(:checked):not([aria-invalid="true"])
-  + .track {
-  border-color: var(--border-strong);
-}
-
-input[aria-invalid="true"] + .track {
+input[aria-invalid='true'] + .track,
+.row:hover input[aria-invalid='true']:not(:checked) + .track {
   border-color: var(--danger);
 }
 
-input[aria-invalid="true"]:checked + .track {
+input[aria-invalid='true']:checked + .track,
+.row:hover input[aria-invalid='true']:checked + .track {
   border-color: var(--danger);
   background: var(--danger);
 }
 
-:host([data-disabled="true"]) {
-  cursor: not-allowed;
-  opacity: 0.5;
+.required {
+  @include field-required;
 }
 
-:host([data-disabled="true"]) input {
+.description {
+  @include field-message;
+  display: block;
+  margin-block-start: var(--space-1);
+  margin-inline-start: calc(var(--switch-w) + var(--space-4));
+}
+
+.error {
+  @include field-error;
+}
+
+:host([data-disabled='true']) {
+  cursor: not-allowed;
+  opacity: var(--opacity-disabled);
+}
+
+:host([data-disabled='true']) input {
   cursor: not-allowed;
 }

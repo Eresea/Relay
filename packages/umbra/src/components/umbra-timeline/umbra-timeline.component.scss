@@ -162,13 +162,7 @@ dd {
     grid-template-columns: var(--space-10) minmax(0, 1fr);
   }
 
-  .loading-row umbra-skeleton:first-child {
+  .loading-row umbra-skeleton {
     grid-column: 2;
-    width: 55% !important;
-  }
-
-  .loading-row umbra-skeleton:last-child {
-    grid-column: 2;
-    width: 85% !important;
   }
 }

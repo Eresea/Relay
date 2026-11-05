@@ -2,7 +2,7 @@
   @if (label()) {
     <label class="date-label" [for]="controlId()">
       {{ label() }}
-      @if (required()) { <span aria-hidden="true">*</span> }
+      @if (required()) { <span class="date-required" aria-hidden="true">*</span> }
     </label>
   }
 
@@ -10,10 +10,11 @@
     class="date-control"
     [attr.data-invalid]="!!resolvedError() || null"
     [attr.data-disabled]="disabled() || null"
+    [attr.data-readonly]="readonly() || null"
     (focusout)="onControlBlur($event)"
   >
-    <input type="hidden" [attr.name]="name()" [value]="value() ?? ''" [disabled]="disabled()" />
-    <div class="date-segments" role="group" [attr.aria-label]="label() || ariaLabel() || 'Date'">
+    <input type="hidden" [attr.name]="name() || null" [value]="value() ?? ''" [disabled]="disabled()" />
+    <div class="date-segments" role="group" [attr.aria-label]="label() || ariaLabel() || resolvedLabels().date">
       <input
         #segment
         class="date-segment date-segment-day"
@@ -21,7 +22,7 @@
         [id]="controlId()"
         [value]="day()"
         [placeholder]="placeholderParts()[0]"
-        [attr.aria-label]="label() ? null : ariaLabel() ? ariaLabel() + ', day' : 'Day'"
+        [attr.aria-label]="(ariaLabel() || label() || resolvedLabels().date) + ', ' + resolvedLabels().day"
         [attr.aria-describedby]="describedBy()"
         [attr.aria-invalid]="!!resolvedError() || null"
         [attr.aria-required]="required() || null"
@@ -43,7 +44,7 @@
         type="text"
         [value]="month()"
         [placeholder]="placeholderParts()[1]"
-        [attr.aria-label]="(ariaLabel() || label() || 'Date') + ', month'"
+        [attr.aria-label]="(ariaLabel() || label() || resolvedLabels().date) + ', ' + resolvedLabels().month"
         [attr.aria-describedby]="describedBy()"
         [attr.aria-invalid]="!!resolvedError() || null"
         [attr.aria-required]="required() || null"
@@ -65,7 +66,7 @@
         type="text"
         [value]="year()"
         [placeholder]="placeholderParts()[2]"
-        [attr.aria-label]="(ariaLabel() || label() || 'Date') + ', year'"
+        [attr.aria-label]="(ariaLabel() || label() || resolvedLabels().date) + ', ' + resolvedLabels().year"
         [attr.aria-describedby]="describedBy()"
         [attr.aria-invalid]="!!resolvedError() || null"
         [attr.aria-required]="required() || null"
@@ -83,7 +84,7 @@
     </div>
 
     @if (showClear() && value() && !disabled() && !readonly()) {
-      <button type="button" class="date-action" aria-label="Clear date" (click)="clearDate()">
+      <button type="button" class="date-action" [attr.aria-label]="resolvedLabels().clear" (click)="clearDate()">
         <svg class="date-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18" /></svg>
       </button>
     }
@@ -103,12 +104,12 @@
     </button>
 
     <ng-template #calendarTemplate>
-      <div [id]="calendarId" class="calendar" role="dialog" aria-label="Choose date" (keydown.escape)="closeCalendar($event)">
+      <div [id]="calendarId" class="calendar" role="dialog" [attr.aria-label]="resolvedLabels().chooseDate" (keydown.escape)="closeCalendar($event)">
         <div class="calendar-heading">
           <button
             type="button"
             class="calendar-nav"
-            [attr.aria-label]="calendarView() === 'days' ? 'Previous month' : calendarView() === 'months' ? 'Previous year' : 'Previous decade'"
+            [attr.aria-label]="calendarView() === 'days' ? resolvedLabels().previousMonth : calendarView() === 'months' ? resolvedLabels().previousYear : resolvedLabels().previousDecade"
             [disabled]="!canGoPrevious()"
             (click)="previousPeriod()"
           >
@@ -120,7 +121,7 @@
               class="calendar-period-button"
               [attr.data-viewed]="calendarView() === 'months' ? '' : null"
               [attr.aria-expanded]="calendarView() === 'months'"
-              [attr.aria-label]="'Choose month, ' + monthLabel()"
+              [attr.aria-label]="resolvedLabels().chooseMonth + ', ' + monthLabel()"
               (click)="showMonths()"
             >{{ monthLabel() }}</button>
             <button
@@ -128,14 +129,14 @@
               class="calendar-period-button"
               [attr.data-viewed]="calendarView() === 'years' ? '' : null"
               [attr.aria-expanded]="calendarView() === 'years'"
-              [attr.aria-label]="'Choose year, ' + yearLabel()"
+              [attr.aria-label]="resolvedLabels().chooseYear + ', ' + yearLabel()"
               (click)="showYears()"
             >{{ yearLabel() }}</button>
           </div>
           <button
             type="button"
             class="calendar-nav"
-            [attr.aria-label]="calendarView() === 'days' ? 'Next month' : calendarView() === 'months' ? 'Next year' : 'Next decade'"
+            [attr.aria-label]="calendarView() === 'days' ? resolvedLabels().nextMonth : calendarView() === 'months' ? resolvedLabels().nextYear : resolvedLabels().nextDecade"
             [disabled]="!canGoNext()"
             (click)="nextPeriod()"
           >
@@ -158,32 +159,38 @@
                   [attr.data-selected]="item.selected ? '' : null"
                   [attr.aria-current]="item.today ? 'date' : null"
                   [attr.aria-label]="item.ariaLabel"
+                  [attr.tabindex]="item.tabbable ? 0 : -1"
+                  (keydown)="onDayKeydown($event, item.date)"
                   (click)="selectDate(item.date)"
                 >{{ item.date.getDate() }}</button>
               }
             </div>
           }
           @case ('months') {
-            <div class="calendar-choice-grid calendar-months" role="group" aria-label="Choose month">
+            <div class="calendar-choice-grid calendar-months" role="group" [attr.aria-label]="resolvedLabels().chooseMonth">
               @for (month of months; track $index) {
                 <button
                   type="button"
                   class="calendar-choice"
                   [attr.data-viewed]="$index === viewDate().getMonth() ? '' : null"
-                  [attr.aria-label]="month + ($index === viewDate().getMonth() ? ', currently displayed' : '')"
+                  [attr.tabindex]="$index === viewDate().getMonth() ? 0 : -1"
+                  (keydown)="onChoiceKeydown($event, 3)"
+                  [attr.aria-label]="month + ($index === viewDate().getMonth() ? ', ' + resolvedLabels().currentlyDisplayed : '')"
                   (click)="selectMonth($index)"
-                >{{ month.slice(0, 3) }}</button>
+                >{{ shortMonths[$index] }}</button>
               }
             </div>
           }
           @case ('years') {
-            <div class="calendar-choice-grid calendar-years" role="group" aria-label="Choose year">
+            <div class="calendar-choice-grid calendar-years" role="group" [attr.aria-label]="resolvedLabels().chooseYear">
               @for (year of yearRange(); track year) {
                 <button
                   type="button"
                   class="calendar-choice"
                   [attr.data-viewed]="year === viewDate().getFullYear() ? '' : null"
-                  [attr.aria-label]="year + (year === viewDate().getFullYear() ? ', currently displayed' : '')"
+                  [attr.tabindex]="year === viewDate().getFullYear() ? 0 : -1"
+                  (keydown)="onChoiceKeydown($event, 5)"
+                  [attr.aria-label]="year + (year === viewDate().getFullYear() ? ', ' + resolvedLabels().currentlyDisplayed : '')"
                   (click)="selectYear(year)"
                 >{{ year }}</button>
               }
@@ -192,8 +199,8 @@
         }
 
         <div class="calendar-footer">
-          <button type="button" (click)="selectToday()">Today</button>
-          <button type="button" (click)="closeCalendar()">Cancel</button>
+          <button type="button" (click)="selectToday()">{{ resolvedLabels().today }}</button>
+          <button type="button" (click)="closeCalendar()">{{ resolvedLabels().cancel }}</button>
         </div>
       </div>
     </ng-template>

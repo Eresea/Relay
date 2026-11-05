@@ -1,0 +1,32 @@
+{
+  "version": 1,
+  "cli": { "analytics": false },
+  "projects": {
+    "gallery": {
+      "projectType": "application",
+      "root": "",
+      "sourceRoot": "src",
+      "architect": {
+        "build": {
+          "builder": "@angular/build:application",
+          "options": {
+            "outputPath": { "base": "dist", "browser": "" },
+            "index": "src/index.html",
+            "browser": "src/main.ts",
+            "tsConfig": "tsconfig.json",
+            "inlineStyleLanguage": "scss",
+            "styles": ["src/styles.scss"],
+            "optimization": false,
+            "sourceMap": false,
+            "outputHashing": "none",
+            "extractLicenses": false
+          }
+        },
+        "serve": {
+          "builder": "@angular/build:dev-server",
+          "options": { "buildTarget": "gallery:build" }
+        }
+      }
+    }
+  }
+}

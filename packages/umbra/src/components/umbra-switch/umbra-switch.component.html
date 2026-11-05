@@ -29,7 +29,7 @@
       [checked]="value()"
       [disabled]="disabled()"
       [required]="required()"
-      [attr.name]="name()"
+      [attr.name]="name() || null"
       [attr.value]="formValue()"
       [attr.aria-invalid]="hasError() || null"
       [attr.aria-label]="label() || ariaLabelledBy() ? null : ariaLabel()"
