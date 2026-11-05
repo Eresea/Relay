@@ -1139,7 +1139,7 @@ export default function Vault() {
                 className="field"
                 type="password"
                 placeholder="Master password"
-                ref={(field) => field?.focus()}
+                autoFocus
                 value={s.masterPassword()}
                 onChange={($event) => {
                   s.masterPassword.set($event.currentTarget.value);
@@ -1190,7 +1190,7 @@ export default function Vault() {
                 className="field"
                 type="password"
                 placeholder="Master password (min. 8 characters)"
-                ref={(field) => field?.focus()}
+                autoFocus
                 value={s.masterPassword()}
                 onChange={($event) => {
                   s.masterPassword.set($event.currentTarget.value);

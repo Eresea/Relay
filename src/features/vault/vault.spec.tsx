@@ -26,6 +26,21 @@ function provideVault(overrides: Record<string, unknown> = {}) {
   });
 }
 
+it('keeps focus on the confirm field while typing a new master password', async () => {
+  provideVault({ vaultStatus: vi.fn().mockResolvedValue({ exists: false, unlocked: false }) });
+  render(<Vault />);
+
+  const password = await screen.findByPlaceholderText(/^Master password/);
+  expect(document.activeElement).toBe(password);
+
+  const confirm = screen.getByPlaceholderText('Confirm master password');
+  confirm.focus();
+  fireEvent.change(confirm, { target: { value: 'a' } });
+  await waitFor(() => expect(confirm).toHaveProperty('value', 'a'));
+
+  expect(document.activeElement).toBe(confirm);
+});
+
 it('unlocks with Windows Hello when it is set up for this vault', async () => {
   const bridge = provideVault();
   render(<Vault />);
