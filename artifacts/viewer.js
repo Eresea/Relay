@@ -14,13 +14,31 @@ const bootstrap = `<script>
   }
   window.relay = Object.freeze({ data: Object.freeze({ get: key => call('get', key), set: (key, value) => call('set', key, value), delete: key => call('delete', key) }) });
 })();<\/script>`;
-window.addEventListener('message', async event => {
-  if (event.source !== frame.contentWindow || !event.data || event.data.type !== 'relay-data') return;
+window.addEventListener('message', async (event) => {
+  if (event.source !== frame.contentWindow || !event.data || event.data.type !== 'relay-data')
+    return;
   const { id, action, key, value } = event.data;
   try {
-    const response = await fetch(`${api}/data`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action, key, value }) });
-    const result = await response.json(); if (!response.ok) throw new Error(result.error);
+    const response = await fetch(`${api}/data`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action, key, value }),
+    });
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.error);
     frame.contentWindow.postMessage({ type: 'relay-result', id, value: result.value }, '*');
-  } catch (error) { frame.contentWindow.postMessage({ type: 'relay-result', id, error: error.message }, '*'); }
+  } catch (error) {
+    frame.contentWindow.postMessage({ type: 'relay-result', id, error: error.message }, '*');
+  }
 });
-fetch(api).then(async response => { const result = await response.json(); if (!response.ok) throw new Error(result.error); document.title = result.name; frame.title = result.name; frame.srcdoc = bootstrap + result.html; }).catch(error => { document.querySelector('#error').textContent = error.message; });
+fetch(api)
+  .then(async (response) => {
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.error);
+    document.title = result.name;
+    frame.title = result.name;
+    frame.srcdoc = bootstrap + result.html;
+  })
+  .catch((error) => {
+    document.querySelector('#error').textContent = error.message;
+  });
