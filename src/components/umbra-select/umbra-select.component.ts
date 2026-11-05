@@ -1,8 +1,10 @@
 import {
+  afterNextRender,
   ChangeDetectionStrategy,
   Component,
   DestroyRef,
   ElementRef,
+  Injector,
   OnInit,
   TemplateRef,
   ViewChild,
@@ -70,8 +72,8 @@ const DEFAULT_LABELS: UmbraSelectLabels = {
   styleUrl: './umbra-select.component.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,
   host: {
-    class: 'inline-block max-w-full',
-    '[class.w-full]': "widthStrategy() === 'full'",
+    class: 'umbra-select',
+    '[class.umbra-select--full]': "widthStrategy() === 'full'",
   },
 })
 export class UmbraSelectComponent<T, V>
@@ -79,6 +81,7 @@ export class UmbraSelectComponent<T, V>
 {
   readonly dataSource = input.required<UmbraSelectDataSource<T, V>>();
   readonly displayWith = input.required<(item: T) => string>();
+  readonly descriptionWith = input<((item: T) => string) | null>(null);
   readonly valueWith = input.required<(item: T) => V>();
   readonly value = model<V | null>(null);
 
@@ -92,6 +95,8 @@ export class UmbraSelectComponent<T, V>
   readonly widthStrategy = input<UmbraSelectWidthStrategy>('trigger');
   readonly prefetch = input(false);
   readonly label = input('');
+  readonly hint = input<string>();
+  readonly error = input<string>();
   readonly isOptionDisabled = input<(item: T) => boolean>(() => false);
   readonly labels = input<Partial<UmbraSelectLabels>>({});
   readonly dropdownPosition = input<'down' | 'up'>('down');
@@ -153,12 +158,28 @@ export class UmbraSelectComponent<T, V>
   readonly hasValue = computed(
     () => this.value() !== null && this.value() !== undefined,
   );
+  readonly triggerId = `umbra-select-${nextId++}-trigger`;
+  readonly hintId = `${this.triggerId}-hint`;
+  readonly errorId = `${this.triggerId}-error`;
+  readonly hasError = computed(() => this.invalid() || !!this.error());
+  readonly describedBy = computed(
+    () =>
+      [
+        this.ariaDescribedBy(),
+        this.error() ? this.errorId : undefined,
+        !this.error() && this.hint() ? this.hintId : undefined,
+      ]
+        .filter(Boolean)
+        .join(' ') || null,
+  );
   readonly triggerAriaLabel = computed(() => {
     const value = this.displayLabel() ?? this.placeholder();
-    return this.label() ? `${this.label()}: ${value}` : value;
+    const name = this.label() ? `${this.label()}: ${value}` : value;
+    return this.required() ? `${name}, required` : name;
   });
 
   private readonly destroyRef = inject(DestroyRef);
+  private readonly injector = inject(Injector);
   private readonly overlay = inject(Overlay);
   private readonly viewContainerRef = inject(ViewContainerRef);
   private readonly query$ = new Subject<string>();
@@ -241,7 +262,7 @@ export class UmbraSelectComponent<T, V>
   private prepareOpen(): void {
     this.activeIndex.set(-1);
     if (!this.defaultResult && !this.state().loadingInitial) this.searchNow('');
-    queueMicrotask(() => this.searchInput?.nativeElement.focus());
+    afterNextRender(() => this.searchInput?.nativeElement.focus(), { injector: this.injector });
   }
 
   close(restoreFocus = false, markTouched = true): void {

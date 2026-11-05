@@ -12,6 +12,7 @@ Work on one component per change. Read `docs/design-system.md` and inspect exist
 3. Check the component's default, hover, focus, pressed, selected, disabled, invalid, loading and reduced-motion states where applicable. Keep accessible names, keyboard behavior and state text explicit.
 4. Review every style against the design-system rules: use tokens for dimensions, colour, radius, elevation, duration and typography; test both themes and narrow layouts in a consumer.
 5. Keep compatibility in the consumer during migration. Do not add old product names or compatibility selectors to Umbra's permanent public surface.
-6. Update `docs/components.md` only when a public contract or reusable decision needs explanation. Keep the source as the inventory.
+6. Add it to `gallery/`, then run `node scripts/audit.mjs` and `npm run check` in `gallery/`; both must pass.
+7. Update `docs/components.md` only when a public contract or reusable decision needs explanation. Keep the source as the inventory.
 
 Use general skills provided by the active consumer project when their task-specific triggers apply; this skill owns only Umbra's component migration and compliance checks.

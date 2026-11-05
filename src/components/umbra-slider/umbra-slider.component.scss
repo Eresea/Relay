@@ -1,138 +1,133 @@
+@use '../../styles/umbra/recipes' as *;
+
 :host {
+  --slider-track-h: var(--space-2);
+  --slider-thumb: var(--space-8);
+  --slider-fill: var(--primary);
+  --slider-edge: var(--border-control);
+
   display: block;
   width: 100%;
   min-width: 0;
   color: var(--text-body);
 }
 
+.layout {
+  @include field-stack;
+  gap: 0;
+}
+
 .heading {
   display: flex;
-  min-height: var(--control-h-sm);
-  align-items: center;
+  align-items: baseline;
   justify-content: space-between;
   gap: var(--space-4);
-  font: var(--type-ui);
   user-select: none;
 }
 
+label {
+  @include field-label;
+}
+
 output {
-  color: var(--text-muted);
-  font: var(--type-mono);
+  @include field-count;
 }
 
 input {
   display: block;
-  box-sizing: border-box;
   width: 100%;
   height: var(--space-12);
   margin: 0;
-  appearance: none;
   background: transparent;
+  appearance: none;
   outline: none;
 }
 
+input[aria-invalid='true'] {
+  --slider-fill: var(--danger);
+  --slider-edge: var(--danger);
+}
+
 input::-webkit-slider-runnable-track {
-  height: var(--space-2);
+  height: var(--slider-track-h);
   border-radius: var(--radius-pill);
   background: linear-gradient(
     to right,
-    var(--primary) 0 var(--umbra-slider-fill),
-    var(--bg-sunken) var(--umbra-slider-fill) 100%
+    var(--slider-fill) 0 var(--umbra-slider-fill),
+    var(--track) var(--umbra-slider-fill) 100%
   );
 }
 
 input::-moz-range-track {
-  height: var(--space-2);
+  height: var(--slider-track-h);
   border-radius: var(--radius-pill);
-  background: var(--bg-sunken);
+  background: var(--track);
 }
 
 input::-moz-range-progress {
-  height: var(--space-2);
+  height: var(--slider-track-h);
   border-radius: var(--radius-pill);
-  background: var(--primary);
+  background: var(--slider-fill);
 }
 
 input::-webkit-slider-thumb {
   box-sizing: border-box;
-  width: var(--space-8);
-  height: var(--space-8);
-  margin-top: calc((var(--space-2) - var(--space-8)) / 2);
-  appearance: none;
-  border: var(--space-1) solid var(--border-strong);
+  width: var(--slider-thumb);
+  height: var(--slider-thumb);
+  margin-block-start: calc((var(--slider-track-h) - var(--slider-thumb)) / 2);
+  border: var(--space-1) solid var(--slider-edge);
   border-radius: var(--radius-pill);
   background: var(--bg-app);
   box-shadow: var(--shadow-xs);
+  appearance: none;
   transition: var(--transition-control);
 }
 
 input::-moz-range-thumb {
   box-sizing: border-box;
-  width: var(--space-8);
-  height: var(--space-8);
-  border: var(--space-1) solid var(--border-strong);
+  width: var(--slider-thumb);
+  height: var(--slider-thumb);
+  border: var(--space-1) solid var(--slider-edge);
   border-radius: var(--radius-pill);
   background: var(--bg-app);
   box-shadow: var(--shadow-xs);
   transition: var(--transition-control);
 }
 
-input:not(:disabled):hover::-webkit-slider-thumb {
+input:not(:disabled):not([aria-invalid='true']):hover::-webkit-slider-thumb {
   border-color: var(--primary);
 }
 
-input:not(:disabled):hover::-moz-range-thumb {
+input:not(:disabled):not([aria-invalid='true']):hover::-moz-range-thumb {
   border-color: var(--primary);
 }
 
 input:focus-visible::-webkit-slider-thumb {
-  box-shadow: var(--focus-ring), var(--shadow-xs);
+  box-shadow: var(--focus-ring);
 }
 
 input:focus-visible::-moz-range-thumb {
-  box-shadow: var(--focus-ring), var(--shadow-xs);
+  box-shadow: var(--focus-ring);
 }
 
-input:active::-webkit-slider-thumb {
+input:active:not(:disabled)::-webkit-slider-thumb {
   transform: translateY(var(--control-press-offset));
 }
 
-input:active::-moz-range-thumb {
+input:active:not(:disabled)::-moz-range-thumb {
   transform: translateY(var(--control-press-offset));
-}
-
-input[aria-invalid='true']::-webkit-slider-runnable-track {
-  outline: var(--border-width) solid var(--danger);
-}
-
-input[aria-invalid='true']::-moz-range-track {
-  outline: var(--border-width) solid var(--danger);
-}
-
-input[aria-invalid='true']::-webkit-slider-thumb {
-  border-color: var(--danger);
-}
-
-input[aria-invalid='true']::-moz-range-thumb {
-  border-color: var(--danger);
 }
 
 input:disabled {
   cursor: not-allowed;
-  opacity: 0.5;
+  opacity: var(--opacity-disabled);
 }
 
-.hint,
-.error {
+small {
+  @include field-message;
   display: block;
-  margin-block-start: var(--space-1);
-  font: var(--type-caption);
-}
-
-.hint {
-  color: var(--text-muted);
 }
 
 .error {
-  color: var(--danger);
+  @include field-error;
 }

@@ -1,12 +1,13 @@
 /* Umbra — motion. Ported verbatim from Umbra tokens/motion.css.
    Nothing bounces, nothing springs, nothing exceeds 240ms. All durations collapse
-   to 0 under prefers-reduced-motion — except an indeterminate indicator, which is
-   slowed rather than frozen (a stopped indicator reads as a hang). */
+   to 0 under prefers-reduced-motion — except indeterminate indicators,
+   which are slowed rather than stopped, and rail transitions, which remain short. */
 :root {
   --dur-instant: 80ms;
   --dur-fast: 120ms;
   --dur-base: 160ms;
   --dur-slow: 240ms;
+  --dur-rail-transition: var(--dur-slow);
   --ease-standard: cubic-bezier(0.2, 0, 0, 1);
   --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
   --ease-in: cubic-bezier(0.4, 0, 1, 1);
@@ -19,6 +20,7 @@
   /* indeterminate loops: slowed, never stopped, under reduced motion */
   --dur-indeterminate: 700ms;
   --dur-skeleton: 1600ms;
+  --dur-tooltip-delay: 400ms;
   --control-press-offset: 0.5px;
 }
 
@@ -26,6 +28,8 @@
 @keyframes umbra-fade-in { from { opacity: 0; transform: translateY(2px); } to { opacity: 1; transform: none; } }
 @keyframes umbra-scale-in { from { opacity: 0; transform: scale(0.97); } to { opacity: 1; transform: none; } }
 @keyframes umbra-slide-up { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+@keyframes umbra-slide-in-right { from { opacity: 0; transform: translateX(100%); } to { opacity: 1; transform: none; } }
+@keyframes umbra-slide-in-left { from { opacity: 0; transform: translateX(-100%); } to { opacity: 1; transform: none; } }
 @keyframes umbra-shimmer { from { background-position: -200% 0; } to { background-position: 200% 0; } }
 @keyframes umbra-indeterminate { 0% { left: -35%; } 100% { left: 100%; } }
 @keyframes umbra-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.45; } }
@@ -36,6 +40,7 @@
     --dur-fast: 0ms;
     --dur-base: 0ms;
     --dur-slow: 0ms;
+    --dur-rail-transition: 160ms;
     --dur-indeterminate: 2400ms;
     --dur-skeleton: 3200ms;
   }

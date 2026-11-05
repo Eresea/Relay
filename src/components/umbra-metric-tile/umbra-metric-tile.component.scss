@@ -1,0 +1,99 @@
+@use '../../styles/umbra/recipes' as *;
+
+
+:host {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  border: var(--border-width) solid var(--border-default);
+  border-radius: var(--radius-md);
+  padding: var(--space-5) var(--space-6);
+  background: var(--surface-card);
+}
+
+:host([data-tone='running']),
+:host([data-tone='positive']) {
+  --metric-ink: var(--success-text);
+}
+
+:host([data-tone='waiting']) {
+  --metric-ink: var(--warning-text);
+}
+
+:host([data-tone='blocked']),
+:host([data-tone='negative']) {
+  --metric-ink: var(--danger-text);
+}
+
+:host([data-tone='accent']) {
+  --metric-ink: var(--text-link);
+}
+
+@each $hue in 'indigo', 'violet', 'cyan', 'emerald', 'amber', 'orange', 'rose' {
+  :host([data-hue='#{$hue}']) {
+    --metric-hue: var(--entity-#{$hue});
+  }
+}
+
+.metric {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: var(--space-1);
+  margin: 0;
+}
+
+.label {
+  @include truncate;
+  order: 2;
+  color: var(--text-muted);
+  font: var(--type-caption);
+}
+
+.figure {
+  display: flex;
+  min-width: 0;
+  order: 1;
+  align-items: baseline;
+  gap: var(--space-3);
+  margin: 0;
+  color: var(--metric-ink, var(--text-body));
+}
+
+.icon {
+  @include slotted-icon(var(--space-7));
+  align-self: center;
+  color: var(--metric-ink, var(--text-muted));
+  font-size: var(--text-sm);
+  line-height: 1;
+}
+
+.icon:empty {
+  display: none;
+}
+
+.hue {
+  width: var(--space-3);
+  height: var(--space-3);
+  flex: none;
+  align-self: center;
+  border-radius: var(--radius-pill);
+  background: var(--metric-hue);
+}
+
+.value {
+  @include truncate;
+  flex: 1;
+  font: var(--type-heading);
+  font-size: var(--text-lg);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: var(--tracking-tight);
+}
+
+.delta {
+  flex: none;
+  color: var(--text-muted);
+  font: var(--type-mono);
+  font-size: var(--text-2xs);
+  font-variant-numeric: tabular-nums;
+}

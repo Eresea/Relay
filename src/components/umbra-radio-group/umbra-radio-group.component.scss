@@ -1,44 +1,42 @@
+@use '../../styles/umbra/recipes' as *;
+
 :host {
   display: block;
   min-width: 0;
 }
 
 fieldset {
-  min-width: 0;
+  @include field-stack;
   margin: 0;
   border: 0;
   padding: 0;
   color: var(--text-body);
-  font: var(--type-ui);
 }
 
 legend {
+  @include field-label;
   margin-block-end: var(--space-3);
   padding: 0;
-  font: var(--type-ui);
 }
 
 .required {
-  color: var(--text-muted);
+  @include field-required;
 }
 
 .options {
   display: flex;
   flex-direction: column;
-  gap: var(--space-3);
+  gap: var(--space-4);
 }
 
-:host([data-orientation="horizontal"]) .options {
+:host([data-orientation='horizontal']) .options {
   flex-flow: row wrap;
-  gap: var(--space-3) var(--space-8);
+  gap: var(--space-4) var(--space-8);
 }
 
 .option {
-  display: inline-flex;
-  align-items: flex-start;
-  gap: var(--space-4);
+  @include choice-row;
   user-select: none;
-  cursor: pointer;
 }
 
 .control {
@@ -46,84 +44,69 @@ legend {
   display: grid;
   width: var(--space-8);
   height: var(--space-8);
-  flex: 0 0 auto;
-  margin-block-start: var(--space-1);
+  flex: none;
   place-items: center;
 }
 
-input,
-.indicator {
-  box-sizing: border-box;
-  width: 100%;
-  height: 100%;
+input {
+  @include native-overlay;
   border-radius: var(--radius-pill);
 }
 
-input {
-  position: absolute;
-  inset: 0;
-  z-index: 1;
-  margin: 0;
-  opacity: 0;
-  cursor: inherit;
+.indicator {
+  @include choice-indicator;
+  border-radius: var(--radius-pill);
 }
 
-.indicator {
-  border: var(--border-width) solid var(--border-default);
-  background: var(--bg-sunken);
-  transition: var(--transition-control);
+.option:hover input:not(:checked):not(:disabled) + .indicator {
+  border-color: var(--text-muted);
 }
 
 input:checked + .indicator {
-  border: calc(var(--space-1) + var(--border-width)) solid var(--primary);
+  border: calc(var(--space-1) + var(--border-width) * 2) solid var(--primary);
   background: var(--bg-app);
+}
+
+.option:hover input:checked:not(:disabled) + .indicator {
+  border-color: var(--primary-hover);
+}
+
+input:active:not(:disabled) + .indicator {
+  transform: translateY(var(--control-press-offset));
 }
 
 input:focus-visible + .indicator {
   box-shadow: var(--focus-ring);
 }
 
-fieldset[aria-invalid="true"] .indicator {
+fieldset[aria-invalid='true'] input:not(:disabled) + .indicator,
+fieldset[aria-invalid='true'] .option:hover input:not(:checked):not(:disabled) + .indicator {
   border-color: var(--danger);
-}
-
-:host(:hover:not([data-disabled="true"]))
-  input:not(:checked):not(:disabled)
-  + .indicator {
-  border-color: var(--border-strong);
 }
 
 .copy {
   display: grid;
-  gap: var(--space-1);
 }
 
 .copy small,
 .message {
-  color: var(--text-muted);
-  font: var(--type-caption);
-}
-
-.disabled-label {
-  color: var(--text-subtle);
-}
-
-.message {
-  display: block;
-  margin-block-start: var(--space-3);
+  @include field-message;
 }
 
 .error {
-  color: var(--danger);
+  @include field-error;
 }
 
-.option[data-disabled="true"] {
-  color: var(--text-muted);
+.option[data-disabled='true'] {
   cursor: not-allowed;
-  opacity: 0.5;
+  opacity: var(--opacity-disabled);
 }
 
-:host([data-disabled="true"]) .options {
+.option[data-disabled='true'] input {
   cursor: not-allowed;
-  opacity: 0.5;
+}
+
+:host([data-disabled='true']) .options {
+  cursor: not-allowed;
+  opacity: var(--opacity-disabled);
 }

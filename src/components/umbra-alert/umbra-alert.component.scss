@@ -1,0 +1,65 @@
+@use '../../styles/umbra/recipes' as *;
+
+
+:host {
+  display: flex;
+  min-width: 0;
+  gap: var(--space-5);
+  border: var(--border-width) solid var(--alert-edge, var(--border-default));
+  border-radius: var(--radius-md);
+  padding: var(--space-5) var(--space-6);
+  background: var(--alert-fill, var(--surface-hover));
+  color: var(--text-muted);
+}
+
+:host([data-tone='success']) {
+  --alert-edge: color-mix(in srgb, var(--success-text) 30%, transparent);
+  --alert-fill: var(--success-quiet);
+  --alert-ink: var(--success-text);
+}
+
+:host([data-tone='warning']) {
+  --alert-edge: color-mix(in srgb, var(--warning-text) 30%, transparent);
+  --alert-fill: var(--warning-quiet);
+  --alert-ink: var(--warning-text);
+}
+
+:host([data-tone='danger']) {
+  --alert-edge: color-mix(in srgb, var(--danger-text) 30%, transparent);
+  --alert-fill: var(--danger-quiet);
+  --alert-ink: var(--danger-text);
+}
+
+.icon {
+  @include slotted-icon(var(--space-8));
+  display: inline-flex;
+  flex: none;
+  color: var(--alert-ink, var(--text-muted));
+}
+
+.content {
+  display: grid;
+  min-width: 0;
+  flex: 1;
+  gap: var(--space-1);
+}
+
+.title {
+  color: var(--text-body);
+  font: var(--type-ui);
+  line-height: var(--leading-snug);
+}
+
+.body {
+  font: var(--type-small);
+}
+
+.icon:empty,
+.body:empty,
+.action:empty {
+  display: none;
+}
+
+.action {
+  flex: none;
+}

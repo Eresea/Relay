@@ -1,0 +1,86 @@
+body {
+  padding: var(--space-16);
+}
+
+.g-title {
+  margin: 0 0 var(--space-2);
+  font: var(--type-title);
+}
+
+.g-lede {
+  margin: 0 0 var(--space-24);
+  color: var(--text-muted);
+}
+
+.g-section {
+  display: grid;
+  gap: var(--space-8);
+  margin-block-end: var(--space-32);
+}
+
+.g-section > h2 {
+  margin: 0;
+  padding-block-end: var(--space-3);
+  border-block-end: var(--border-width) solid var(--border-subtle);
+  font: var(--type-heading);
+}
+
+.g-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-6);
+}
+
+.g-row--top {
+  align-items: flex-start;
+}
+
+.g-stack {
+  display: grid;
+  justify-items: start;
+  gap: var(--space-6);
+}
+
+.g-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(16rem, 100%), 1fr));
+  align-items: start;
+  gap: var(--space-12);
+}
+
+.g-section .g-cell {
+  width: 16rem;
+  max-width: 100%;
+}
+
+.g-note {
+  margin: 0;
+  color: var(--text-muted);
+  font: var(--type-caption);
+}
+
+.g-rail {
+  width: 5rem;
+  height: 15rem;
+  border: var(--border-width) solid var(--border-subtle);
+}
+
+.g-glass-stage {
+  padding: var(--space-16);
+  background: linear-gradient(120deg, var(--entity-violet-edge), var(--entity-cyan-edge));
+}
+
+.g-pad {
+  padding: var(--space-8);
+}
+
+.g-icon {
+  width: var(--space-8);
+  height: var(--space-8);
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}

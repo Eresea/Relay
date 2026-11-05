@@ -1,21 +1,36 @@
+@use '../../styles/umbra/recipes' as *;
+
 :host {
   display: inline-block;
   min-width: 0;
   max-width: 100%;
 }
 
-:host.w-full {
+:host(.umbra-select--full) {
   display: block;
   width: 100%;
 }
 
-.select-shell {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  min-width: 0;
+.select-field {
+  @include field-stack;
 }
 
+.select-label {
+  @include field-label;
+}
+
+.select-required {
+  @include field-required;
+}
+
+.select-shell {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+/* Choice controls are labels until touched: no border or fill at rest. */
 .select-trigger {
   display: flex;
   min-width: 0;
@@ -25,10 +40,11 @@
   justify-content: space-between;
   gap: var(--space-3);
   border: var(--border-width) solid transparent;
-  border-radius: var(--radius-lg);
-  padding: var(--space-2);
+  border-radius: var(--radius-md);
+  padding-block: var(--space-1);
+  padding-inline: var(--space-4) var(--space-3);
   background: transparent;
-  color: var(--text-muted);
+  color: var(--text-body);
   font: var(--type-ui);
   text-align: start;
   transition: var(--transition-control);
@@ -36,7 +52,10 @@
 
 .select-trigger:hover:not(:disabled) {
   background: var(--surface-hover);
-  color: var(--text-body);
+}
+
+.select-trigger:active:not(:disabled) {
+  transform: translateY(var(--control-press-offset));
 }
 
 .select-trigger:focus-visible {
@@ -46,23 +65,15 @@
 
 .select-trigger[aria-expanded='true'] {
   background: var(--surface-active);
-  color: var(--text-body);
 }
 
 .select-trigger[aria-invalid='true'] {
   border-color: var(--danger);
-  color: var(--danger);
 }
 
 .select-trigger:disabled {
-  color: var(--text-muted);
   cursor: not-allowed;
-  opacity: 0.5;
-}
-
-.select-label {
-  color: var(--text-muted);
-  font: var(--type-caption);
+  opacity: var(--opacity-disabled);
 }
 
 .select-copy {
@@ -72,64 +83,46 @@
   gap: var(--space-1);
 }
 
-.select-value {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+.select-value,
+.select-option-label {
+  @include truncate;
 }
 
 .select-value[data-placeholder] {
-  color: var(--text-subtle);
+  color: var(--text-muted);
+}
+
+.select-description,
+.select-option-description {
+  @include truncate;
+  color: var(--text-muted);
+  font: var(--type-caption);
 }
 
 .select-chevron {
   width: var(--space-8);
   height: var(--space-8);
-  color: var(--text-subtle);
-  transition: transform var(--dur-hover) var(--ease-standard);
+  flex: none;
+  color: var(--text-muted);
+  transition: transform var(--dur-fast) var(--ease-standard);
 }
 
 .select-trigger[aria-expanded='true'] .select-chevron {
   transform: rotate(180deg);
 }
 
-.select-trigger:active:not(:disabled) {
-  transform: translateY(var(--control-press-offset));
-}
-
 .select-clear {
-  display: grid;
-  width: var(--space-12);
-  height: var(--space-12);
-  flex: 0 0 auto;
-  place-items: center;
-  border: 0;
-  border-radius: var(--radius-sm);
-  padding: 0;
-  background: transparent;
-  color: var(--text-muted);
-  transition: var(--transition-control);
-}
-
-.select-clear:hover {
-  background: var(--surface-hover);
-  color: var(--text-body);
-}
-
-.select-clear:focus-visible,
-.select-feedback button:focus-visible {
-  outline: none;
-  box-shadow: var(--focus-ring);
+  @include icon-action;
 }
 
 .select-icon {
-  width: var(--space-8);
-  height: var(--space-8);
-  flex: 0 0 auto;
+  width: var(--space-7);
+  height: var(--space-7);
+  flex: none;
 }
 
 .select-panel {
+  @include overlay-panel;
   box-sizing: border-box;
   display: flex;
   flex-direction: column;
@@ -137,35 +130,19 @@
   max-width: calc(100vw - 2 * var(--space-4));
   max-height: calc(100dvh - 2 * var(--space-4));
   overflow: hidden;
-  border: var(--border-width) solid var(--border-strong);
-  border-radius: var(--radius-lg);
-  background: var(--surface-overlay);
-  color: var(--text-body);
-  box-shadow: var(--shadow-md);
 }
 
 .select-search {
-  box-sizing: border-box;
+  @include field-text;
   display: block;
   width: 100%;
   min-height: var(--control-h);
-  border: 0;
-  border-bottom: var(--border-width) solid var(--border-subtle);
-  padding-inline: var(--space-3);
-  background: transparent;
-  color: inherit;
-  font: var(--type-ui);
-  outline: none;
-}
-
-.select-search::placeholder {
-  color: var(--text-muted);
-  opacity: 1;
+  border-block-end: var(--border-width) solid var(--border-subtle);
+  padding-inline: var(--space-6);
 }
 
 .select-search:focus-visible {
-  border-bottom-color: var(--border-focus);
-  background: var(--bg-app);
+  border-block-end-color: var(--border-focus);
 }
 
 .select-listbox {
@@ -176,40 +153,35 @@
 }
 
 .select-option {
-  display: flex;
-  min-height: var(--row-h);
-  align-items: center;
-  justify-content: space-between;
+  @include menu-row;
   gap: var(--space-4);
-  border-radius: var(--radius-lg);
-  padding-inline: var(--space-3);
-  color: var(--text-muted);
-  font: var(--type-ui);
-  user-select: none;
-  transition: var(--transition-control);
+  padding-block: var(--space-1);
+}
+
+.select-option-copy {
+  display: grid;
+  min-width: 0;
+  flex: 1 1 auto;
 }
 
 .select-option[data-active] {
-  background: var(--surface-hover);
-  color: var(--text-body);
-}
-
-.select-option-label {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  @include menu-row-active;
 }
 
 .select-option[data-selected] {
-  background: var(--surface-selected);
-  color: var(--text-body);
+  @include menu-row-selected;
   font-weight: var(--weight-medium);
 }
 
+.select-option[data-selected][data-active] {
+  background: var(--surface-active);
+}
+
 .select-option[data-disabled] {
-  color: var(--text-subtle);
-  opacity: 0.5;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: not-allowed;
+  opacity: var(--opacity-disabled);
 }
 
 .select-feedback {
@@ -226,6 +198,7 @@
 
 .select-feedback button {
   border: 0;
+  border-radius: var(--radius-xs);
   padding: 0;
   background: transparent;
   color: var(--text-body);
@@ -233,4 +206,21 @@
   text-decoration: underline;
   text-underline-offset: var(--space-1);
   transition: var(--transition-control);
+}
+
+.select-feedback button:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+.select-message {
+  @include field-message;
+}
+
+.select-error {
+  @include field-error;
+}
+
+.visually-hidden {
+  @include visually-hidden;
 }

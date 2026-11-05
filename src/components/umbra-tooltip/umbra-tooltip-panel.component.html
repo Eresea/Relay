@@ -1,4 +1,6 @@
-@if (sanitizedHtml(); as safeHtml) {
+@if (template(); as content) {
+  <ng-container [ngTemplateOutlet]="content" />
+} @else if (sanitizedHtml(); as safeHtml) {
   <div [innerHTML]="safeHtml"></div>
 } @else {
   {{ text() }}

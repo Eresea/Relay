@@ -10,6 +10,8 @@
   --inset-hairline: inset 0 1px 0 rgba(255, 255, 255, 0.04);
   --focus-ring: 0 0 0 1px var(--ring-edge), 0 0 0 3px var(--ring);
   --focus-field: 0 0 0 3px var(--ring);
+  --focus-field-danger: 0 0 0 3px var(--ring-danger);
+  --focus-ring-inset: inset 0 0 0 1px var(--ring-edge), inset 0 0 0 3px var(--ring);
 }
 
 :root.light,
@@ -21,4 +23,6 @@
   --inset-hairline: inset 0 1px 0 rgba(255, 255, 255, 0.7);
   --focus-ring: 0 0 0 1px var(--ring-edge), 0 0 0 3px var(--ring);
   --focus-field: 0 0 0 3px var(--ring);
+  --focus-field-danger: 0 0 0 3px var(--ring-danger);
+  --focus-ring-inset: inset 0 0 0 1px var(--ring-edge), inset 0 0 0 3px var(--ring);
 }

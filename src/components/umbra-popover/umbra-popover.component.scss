@@ -1,0 +1,16 @@
+@use '../../styles/umbra/recipes' as *;
+
+
+:host {
+  display: inline-block;
+  vertical-align: middle;
+}
+
+.popover-panel {
+  @include overlay-panel;
+  box-sizing: border-box;
+  min-width: var(--overlay-min-w);
+  max-width: calc(100vw - var(--space-8));
+  max-height: calc(100dvh - var(--space-8));
+  overflow: auto;
+}

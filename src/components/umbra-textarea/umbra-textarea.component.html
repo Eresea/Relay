@@ -12,12 +12,13 @@
     class="field"
     [attr.data-invalid]="hasError() || null"
     [attr.data-disabled]="disabled() || null"
+    [attr.data-readonly]="readonly() || null"
   >
     <textarea
       #control
       [id]="controlId()"
       [value]="value()"
-      [attr.name]="name()"
+      [attr.name]="name() || null"
       [attr.placeholder]="placeholder()"
       [rows]="rows()"
       [style.resize]="autoResize() ? 'none' : resize()"
@@ -38,17 +39,16 @@
     ></textarea>
   </div>
 
-  @if (error()) {
-    <small class="description error" [id]="errorId">{{ error() }}</small>
-  } @else if (hint()) {
-    <small class="description" [id]="hintId">{{ hint() }}</small>
-  }
-  @if (showCount()) {
-    <small class="count" [id]="countId">
-      {{ value().length }}
-      @if (maxLength() !== undefined) {
-        / {{ maxLength() }}
+  @if (error() || hint() || showCount()) {
+    <div class="messages">
+      @if (error()) {
+        <small class="description error" [id]="errorId">{{ error() }}</small>
+      } @else if (hint()) {
+        <small class="description" [id]="hintId">{{ hint() }}</small>
       }
-    </small>
+      @if (showCount()) {
+        <small class="count" [id]="countId">{{ value().length }}@if (maxLength() !== undefined) {/{{ maxLength() }}}</small>
+      }
+    </div>
   }
 </div>

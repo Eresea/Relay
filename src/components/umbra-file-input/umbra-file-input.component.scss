@@ -10,22 +10,43 @@
   width: 100%;
   min-width: 0;
   align-items: center;
+  border-radius: var(--radius-md);
   color: inherit;
   font: inherit;
   transition: var(--transition-control);
 }
 
-.trigger:hover {
-  background: var(--surface-hover);
-  color: var(--text-body);
+/* The input covers the projected control, so that control never sees the pointer. */
+.trigger::after {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: transparent;
+  content: '';
+  pointer-events: none;
+  transition: var(--transition-control);
+}
+
+.trigger:hover::after {
+  background: var(--surface-active);
 }
 
 .trigger:active {
-  transform: translateY(calc(var(--border-width) / 2));
+  transform: translateY(var(--control-press-offset));
 }
 
 .trigger:focus-within {
   box-shadow: var(--focus-ring);
+}
+
+:host([data-disabled='true']) .trigger {
+  cursor: not-allowed;
+  opacity: var(--opacity-disabled);
+  transform: none;
+}
+
+:host([data-disabled='true']) .trigger::after {
+  background: transparent;
 }
 
 input {

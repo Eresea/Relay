@@ -1,0 +1,13 @@
+<ng-content select="[umbraPopoverTrigger]" />
+
+<ng-template #panelTemplate>
+  <div
+    class="popover-panel"
+    [id]="panelId"
+    [attr.role]="triggerHaspopup() || 'dialog'"
+    [attr.aria-label]="ariaLabel()"
+    tabindex="-1"
+  >
+    <ng-content select="[umbraPopoverContent]" />
+  </div>
+</ng-template>

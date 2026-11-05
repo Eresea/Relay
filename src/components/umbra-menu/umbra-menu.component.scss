@@ -1,3 +1,6 @@
+@use '../../styles/umbra/recipes' as *;
+
+
 :host {
   display: block;
   min-width: var(--overlay-min-w);
@@ -10,25 +13,19 @@
 }
 
 button {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-8);
-  min-height: var(--row-h);
+  @include menu-row;
   width: 100%;
-  padding: var(--space-2) var(--space-4);
   border: var(--border-width) solid transparent;
-  border-radius: var(--radius-sm);
   background: transparent;
-  color: var(--text-muted);
-  font: var(--type-ui);
-  text-align: left;
-  transition: background-color var(--dur-hover), color var(--dur-hover), box-shadow var(--dur-hover);
 }
 
-button:hover:not(:disabled) {
-  background: var(--surface-hover);
-  color: var(--text-body);
+button:hover:not(:disabled),
+button:focus-visible {
+  @include menu-row-active;
+}
+
+button:active:not(:disabled) {
+  transform: translateY(var(--control-press-offset));
 }
 
 button:focus-visible {
@@ -36,19 +33,23 @@ button:focus-visible {
   box-shadow: var(--focus-ring);
 }
 
-button.destructive {
-  color: var(--danger);
+button.destructive,
+button.destructive:hover:not(:disabled),
+button.destructive:focus-visible {
+  color: var(--danger-text);
 }
 
 button.destructive:hover:not(:disabled) {
-  color: var(--danger-hover);
+  background: var(--danger-quiet);
 }
 
 button:disabled {
-  opacity: 0.45;
+  cursor: not-allowed;
+  opacity: var(--opacity-disabled);
 }
 
 kbd {
-  color: var(--text-subtle);
+  flex: none;
+  color: var(--text-muted);
   font: var(--type-mono);
 }

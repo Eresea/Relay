@@ -5,6 +5,15 @@
   box-sizing: border-box;
 }
 
+/* Let the modal backdrop receive clicks outside the drawer panel. */
+.cdk-overlay-pane.umbra-drawer-overlay-panel {
+  pointer-events: none;
+}
+
+.umbra-drawer-overlay-panel .drawer-panel {
+  pointer-events: auto;
+}
+
 html {
   color-scheme: dark;
 }

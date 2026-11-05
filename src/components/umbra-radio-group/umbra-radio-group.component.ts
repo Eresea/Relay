@@ -44,14 +44,14 @@ export class UmbraRadioGroupComponent implements FormValueControl<UmbraRadioValu
   readonly disabled = input(false);
   readonly required = input(false);
   readonly invalid = input(false);
-  readonly name = input<string>();
+  readonly name = input('');
   readonly ariaLabel = input<string>();
   readonly ariaLabelledBy = input<string>();
   readonly ariaDescribedBy = input<string>();
   readonly touch = output<void>();
 
   readonly id = `umbra-radio-group-${nextId++}`;
-  readonly controlName = computed(() => this.name() ?? this.id);
+  readonly controlName = computed(() => this.name() || this.id);
   readonly hintId = `${this.id}-hint`;
   readonly errorId = `${this.id}-error`;
   readonly hasError = computed(() => this.invalid() || !!this.error());

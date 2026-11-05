@@ -1,0 +1,45 @@
+@use '../../styles/umbra/recipes' as *;
+
+
+:host {
+  --tile-size: var(--space-14);
+  --tile-glyph: var(--text-base);
+  --tile-radius: var(--radius-sm);
+
+  display: inline-flex;
+  flex: none;
+}
+
+:host([data-size='sm']) {
+  --tile-size: var(--space-10);
+  --tile-glyph: var(--text-xs);
+}
+
+:host([data-size='lg']) {
+  --tile-size: var(--space-16);
+  --tile-glyph: var(--text-lg);
+  --tile-radius: var(--radius-md);
+}
+
+@each $hue in 'indigo', 'violet', 'cyan', 'emerald', 'amber', 'orange', 'rose' {
+  :host([data-hue='#{$hue}']) {
+    --tile-edge: var(--entity-#{$hue}-edge);
+    --tile-fill: var(--entity-#{$hue}-fill);
+    --tile-ink: var(--entity-#{$hue});
+  }
+}
+
+.tile {
+  @include slotted-icon(var(--tile-glyph));
+  display: inline-flex;
+  width: var(--tile-size);
+  height: var(--tile-size);
+  align-items: center;
+  justify-content: center;
+  border: var(--border-width) solid var(--tile-edge);
+  border-radius: var(--tile-radius);
+  background: var(--tile-fill);
+  color: var(--tile-ink);
+  font-size: var(--tile-glyph);
+  line-height: 1;
+}

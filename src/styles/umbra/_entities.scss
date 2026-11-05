@@ -32,7 +32,7 @@
   --status-waiting: var(--amber-400);
   --status-blocked: var(--red-400);
   --status-done: var(--zinc-500);
-  --status-idle: var(--zinc-600);
+  --status-idle: var(--zinc-500);
 }
 
 :root.light,
@@ -59,9 +59,9 @@
   --entity-rose-fill: rgba(225, 29, 72, 0.09);
   --entity-rose-edge: rgba(225, 29, 72, 0.22);
 
-  --status-running: var(--green-500);
-  --status-waiting: var(--amber-500);
+  --status-running: var(--green-700);
+  --status-waiting: var(--amber-700);
   --status-blocked: var(--red-600);
-  --status-done: var(--zinc-400);
-  --status-idle: var(--zinc-300);
+  --status-done: var(--zinc-500);
+  --status-idle: var(--zinc-500);
 }

@@ -2,7 +2,7 @@
 
 Umbra is the shared design system and UI library. This repository owns its visual rules, tokens and reusable components. Consumer projects may vendor it with Git subtree while contributing and updating shared work.
 
-The token and style layer is framework-neutral. Component source currently targets Angular; consumers using another framework can share the styles but need framework-specific component adapters.
+The token and style layer is framework-neutral. Component source currently targets Angular; consumers using another framework can share the styles but need framework-specific component adapters. Components carry their own stylesheets and need no utility-class framework.
 
 ## Subtree workflow
 
@@ -55,3 +55,5 @@ When an Angular path alias maps `@angular/*` directly into `node_modules`, expor
 - `src/components/` contains reusable UI components as they are migrated and audited.
 - `docs/` contains the canonical design system and component contracts.
 - `.agents/skills/umbra-component/` contains the component-specific audit workflow.
+- `scripts/audit.mjs` checks the source against the design system: `node scripts/audit.mjs`.
+- `gallery/` shows every component and checks it in a browser: run `npm install` there once, then `npm start` to browse or `npm run check` to test.

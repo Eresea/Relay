@@ -38,7 +38,7 @@ export class UmbraTextareaComponent implements FormValueControl<string> {
   readonly required = input(false);
   readonly invalid = input(false);
   readonly showCount = input(false);
-  readonly name = input<string>();
+  readonly name = input('');
   readonly autocomplete = input<string>();
   readonly minLength = input<number>();
   readonly maxLength = input<number>();

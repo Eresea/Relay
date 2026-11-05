@@ -1,0 +1,10 @@
+:host {
+  display: block;
+  border-radius: var(--radius-lg);
+  color: var(--text-body);
+}
+
+:host([data-raised]) {
+  background: var(--glass-fill-raised);
+  box-shadow: none;
+}

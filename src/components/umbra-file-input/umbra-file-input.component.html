@@ -4,6 +4,7 @@
     type="file"
     [attr.accept]="accept() || null"
     [multiple]="multiple()"
+    [disabled]="disabled()"
     (change)="fileSelected.emit($event)"
   />
 </label>

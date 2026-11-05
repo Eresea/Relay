@@ -13,3 +13,9 @@
   pointer-events: none;
   animation: umbra-scale-in var(--dur-fast) var(--ease-out) both;
 }
+
+:host(.has-template) {
+  max-inline-size: calc(100vw - var(--space-8));
+  padding: 0;
+  white-space: normal;
+}

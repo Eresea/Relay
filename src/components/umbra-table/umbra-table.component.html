@@ -19,7 +19,7 @@
       >
         <input
           type="checkbox"
-          aria-label="Select all rows"
+          [attr.aria-label]="selectAllLabel()"
           [checked]="tanstack.getIsAllRowsSelected()"
           [indeterminate]="
             tanstack.getIsSomeRowsSelected() && !tanstack.getIsAllRowsSelected()
@@ -182,7 +182,8 @@
             >
               <input
                 type="checkbox"
-                [attr.aria-label]="'Select row ' + row.id"
+                tabindex="-1"
+                [attr.aria-label]="selectRowLabel() + ' ' + row.id"
                 [checked]="row.getIsSelected()"
                 (click)="captureSelectionModifiers($event)"
                 (change)="toggleRow(row, $event)"
@@ -371,12 +372,8 @@
     }
 
     @if (tableRows().length === 0 && !loading()) {
-      <div
-        class="umbra-table__empty"
-        role="row"
-        [style.width.px]="contentWidth()"
-      >
-        No rows to display.
+      <div class="umbra-table__empty" role="row">
+        <div role="gridcell">{{ emptyMessage() }}</div>
       </div>
     }
   </div>

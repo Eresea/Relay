@@ -1,0 +1,55 @@
+@use '../../styles/umbra/recipes' as *;
+
+
+:host {
+  display: inline-block;
+  vertical-align: middle;
+}
+
+.trigger {
+  display: contents;
+}
+
+.dialog-layer {
+  display: grid;
+  box-sizing: border-box;
+  width: 100vw;
+  min-height: 100dvh;
+  place-items: center;
+  padding: var(--space-6);
+}
+
+.dialog-panel {
+  @include overlay-panel(var(--shadow-lg));
+  box-sizing: border-box;
+  width: min(var(--drawer-w-md), 100%);
+  max-height: calc(100dvh - var(--space-12));
+  overflow-y: auto;
+  padding: var(--space-8);
+}
+
+.overlay-header {
+  @include overlay-header;
+  margin-block-end: var(--space-4);
+}
+
+.overlay-footer {
+  @include overlay-footer;
+  margin-block-start: var(--space-8);
+}
+
+.overlay-close {
+  @include icon-action;
+}
+
+.overlay-close svg {
+  @include action-glyph;
+}
+
+.dialog-panel[data-size='sm'] {
+  width: min(var(--drawer-w-sm), 100%);
+}
+
+.dialog-panel[data-size='lg'] {
+  width: min(var(--drawer-w-lg), 100%);
+}

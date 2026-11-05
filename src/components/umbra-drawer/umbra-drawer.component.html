@@ -1,0 +1,29 @@
+<ng-content select="[umbraDrawerTrigger]" />
+
+<ng-template #panelTemplate>
+  <div class="drawer-layer" [attr.data-side]="side()">
+    <div
+      class="drawer-panel"
+      [id]="panelId"
+      role="dialog"
+      [attr.aria-label]="heading() ? null : ariaLabel()"
+      [attr.aria-labelledby]="heading() ? headingId : null"
+      [attr.aria-modal]="true"
+      tabindex="-1"
+      [attr.data-side]="side()"
+      [attr.data-size]="size()"
+      [attr.data-mobile]="mobilePresentation()"
+    >
+      @if (heading()) {
+        <header class="overlay-header">
+          <h2 [id]="headingId">{{ heading() }}</h2>
+          <button type="button" class="overlay-close" [attr.aria-label]="closeLabel()" (click)="close()">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18" /></svg>
+          </button>
+        </header>
+      }
+      <div class="drawer-body"><ng-content select="[umbraDrawerContent]" /></div>
+      <footer class="overlay-footer"><ng-content select="[umbraDrawerFooter]" /></footer>
+    </div>
+  </div>
+</ng-template>

@@ -1,3 +1,5 @@
+@use '../../styles/umbra/recipes' as *;
+
 :host {
   display: block;
   min-width: 0;
@@ -11,8 +13,10 @@
   border-radius: var(--radius-md);
   background: var(--bg-app);
   color: var(--text-body);
-  font: var(--type-ui);
+  font: var(--type-small);
+  font-variant-numeric: tabular-nums;
   contain: strict;
+  container-type: inline-size;
   overscroll-behavior: contain;
 }
 
@@ -21,13 +25,15 @@
   top: 0;
   z-index: 10;
   display: flex;
+  min-width: 100%;
   height: var(--control-h-lg);
-  border-bottom: var(--border-width) solid var(--border-default);
+  border-block-end: var(--border-width) solid var(--border-default);
   background: var(--bg-sunken);
 }
 
 .umbra-table__body {
   position: relative;
+  min-width: 100%;
   min-height: var(--row-h);
 }
 
@@ -36,21 +42,25 @@
   top: 0;
   left: 0;
   display: flex;
-  border-bottom: var(--border-width) solid var(--border-subtle);
-  background: var(--bg-app);
+  min-width: 100%;
+  border-block-end: var(--border-width) solid var(--border-subtle);
+  --row-tint: transparent;
+
+  /* Tints are translucent, so pinned cells layer them over an opaque base. */
+  background: linear-gradient(var(--row-tint), var(--row-tint)), var(--bg-app);
 }
 
 .umbra-table__row:hover {
-  background: var(--surface-hover);
+  --row-tint: var(--surface-hover);
 }
 
 .umbra-table__row[aria-selected='true'] {
-  background: var(--surface-selected);
+  --row-tint: var(--surface-selected);
   font-weight: var(--weight-medium);
 }
 
 .umbra-table__row[aria-selected='true']:hover {
-  background: var(--surface-active);
+  --row-tint: var(--surface-active);
 }
 
 .umbra-table__row--skeleton {
@@ -89,8 +99,9 @@
 .umbra-table__header-cell {
   z-index: 11;
   padding: 0;
-  font: var(--type-caption);
-  font-weight: var(--weight-semibold);
+  color: var(--text-muted);
+  font: var(--type-ui);
+  font-size: var(--text-2xs);
   letter-spacing: var(--tracking-wide);
   text-transform: uppercase;
 }
@@ -112,32 +123,36 @@
   background: transparent;
   color: inherit;
   font: inherit;
+  letter-spacing: inherit;
   text-align: start;
+  text-transform: inherit;
+  transition: var(--transition-control);
 }
 
-.umbra-table__sort-button:not(:disabled):hover,
-.umbra-table__resize-handle:hover {
+.umbra-table__sort-button:not(:disabled):hover {
   background: var(--surface-hover);
+  color: var(--text-body);
 }
 
 .umbra-table__sort-button:disabled {
   color: var(--text-muted);
 }
 
+/* Inset, because neighbouring cells paint over anything outside the cell. */
 .umbra-table__sort-button:focus-visible,
 .umbra-table__data-cell:focus-visible,
 .umbra-table__resize-handle:focus-visible {
   outline: none;
-  box-shadow: var(--focus-ring);
+  box-shadow: var(--focus-ring-inset);
 }
 
 .umbra-table__sort-indicator {
   flex: 0 0 auto;
   width: var(--space-3);
   height: var(--space-3);
-  border-block-start: var(--border-width) solid currentColor;
-  border-inline-end: var(--border-width) solid currentColor;
-  color: var(--text-subtle);
+  border-block-start: calc(var(--border-width) * 1.5) solid currentColor;
+  border-inline-end: calc(var(--border-width) * 1.5) solid currentColor;
+  color: var(--text-body);
 }
 
 .umbra-table__sort-indicator[data-direction="asc"] {
@@ -167,6 +182,25 @@
   touch-action: none;
 }
 
+.umbra-table__resize-handle::after {
+  position: absolute;
+  inset-block: var(--space-3);
+  inset-inline-end: 0;
+  width: var(--border-width);
+  background: transparent;
+  content: '';
+  transition: var(--transition-control);
+}
+
+.umbra-table__header-cell:hover .umbra-table__resize-handle::after {
+  background: var(--border-strong);
+}
+
+.umbra-table__resize-handle:hover::after,
+.umbra-table__resize-handle:focus-visible::after {
+  background: var(--border-focus);
+}
+
 .umbra-table__selection-cell {
   justify-content: center;
   border-inline-end: var(--border-width) solid var(--border-subtle);
@@ -178,15 +212,16 @@
 }
 
 .umbra-table__selection-cell input {
-  width: var(--space-7);
-  height: var(--space-7);
-  margin: 0;
-  accent-color: var(--primary);
+  @include native-checkbox;
 }
 
 .umbra-table__empty {
+  position: sticky;
+  inset-inline-start: 0;
   display: grid;
-  min-height: var(--row-h);
+  width: 100cqi;
+  min-height: calc(var(--row-h) * 2);
   place-items: center;
   color: var(--text-muted);
+  font: var(--type-small);
 }

@@ -1,0 +1,31 @@
+:host {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  color: var(--text-muted);
+  font: var(--type-caption);
+}
+
+.dot {
+  width: var(--space-3);
+  height: var(--space-3);
+  flex: none;
+  border-radius: var(--radius-pill);
+  background: var(--status-color);
+}
+
+@each $state in running, waiting, blocked, done, idle {
+  :host([data-state='#{$state}']) {
+    --status-color: var(--status-#{$state});
+  }
+}
+
+/* Idle and done share a colour; a hollow dot keeps them apart without one. */
+:host([data-state='idle']) .dot {
+  border: var(--border-width) solid var(--status-color);
+  background: transparent;
+}
+
+:host([data-state='running']) .dot {
+  animation: umbra-pulse var(--dur-skeleton) var(--ease-standard) infinite;
+}

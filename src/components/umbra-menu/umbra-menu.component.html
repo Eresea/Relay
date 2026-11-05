@@ -4,7 +4,8 @@
       #menuItem
       type="button"
       role="menuitem"
-      [tabIndex]="tabIndex(index)"
+      [tabIndex]="index === tabbableIndex() ? 0 : -1"
+      (focus)="rememberFocus(index)"
       [disabled]="item.disabled ?? false"
       [class.destructive]="item.destructive ?? false"
       (click)="select(item)"

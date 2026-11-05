@@ -1,4 +1,5 @@
 import {
+  afterNextRender,
   ChangeDetectionStrategy,
   Component,
   computed,
@@ -6,7 +7,9 @@ import {
   effect,
   ElementRef,
   inject,
+  Injector,
   input,
+  LOCALE_ID,
   model,
   output,
   QueryList,
@@ -20,6 +23,8 @@ import { Overlay, OverlayRef } from '@angular/cdk/overlay';
 import { TemplatePortal } from '@angular/cdk/portal';
 import type { FormValueControl } from '@angular/forms/signals';
 import {
+  addDays,
+  isSameDay,
   addMonths,
   eachDayOfInterval,
   endOfMonth,
@@ -37,6 +42,56 @@ import {
 
 type CalendarView = 'days' | 'months' | 'years';
 
+export interface UmbraDateLabels {
+  date: string;
+  day: string;
+  month: string;
+  year: string;
+  clear: string;
+  openCalendar: string;
+  openCalendarFor: (label: string) => string;
+  chooseDate: string;
+  chooseMonth: string;
+  chooseYear: string;
+  previousMonth: string;
+  nextMonth: string;
+  previousYear: string;
+  nextYear: string;
+  previousDecade: string;
+  nextDecade: string;
+  today: string;
+  cancel: string;
+  selected: string;
+  currentlyDisplayed: string;
+  invalid: string;
+  required: string;
+}
+
+const DEFAULT_LABELS: UmbraDateLabels = {
+  date: 'Date',
+  day: 'day',
+  month: 'month',
+  year: 'year',
+  clear: 'Clear date',
+  openCalendar: 'Open calendar',
+  openCalendarFor: (label) => `Open calendar for ${label}`,
+  chooseDate: 'Choose date',
+  chooseMonth: 'Choose month',
+  chooseYear: 'Choose year',
+  previousMonth: 'Previous month',
+  nextMonth: 'Next month',
+  previousYear: 'Previous year',
+  nextYear: 'Next year',
+  previousDecade: 'Previous decade',
+  nextDecade: 'Next decade',
+  today: 'Today',
+  cancel: 'Cancel',
+  selected: 'selected',
+  currentlyDisplayed: 'currently displayed',
+  invalid: 'Enter a valid date in DD/MM/YYYY format.',
+  required: 'Choose a date.',
+};
+
 let nextId = 0;
 
 @Component({
@@ -52,19 +107,24 @@ export class UmbraDateComponent implements FormValueControl<string | null> {
   readonly placeholder = input('DD/MM/YYYY');
   readonly hint = input<string>();
   readonly error = input<string>();
-  readonly name = input<string>();
+  readonly name = input('');
   readonly inputId = input<string>();
   readonly ariaLabel = input<string>();
   readonly disabled = input(false);
   readonly readonly = input(false);
   readonly required = input(false);
   readonly showClear = input(false);
+  readonly labels = input<Partial<UmbraDateLabels>>({});
   readonly touch = output<void>();
 
   @ViewChildren('segment') private segments?: QueryList<ElementRef<HTMLInputElement>>;
   @ViewChild('calendarTrigger') private calendarTrigger?: ElementRef<HTMLButtonElement>;
   @ViewChild('calendarTemplate') private calendarTemplate?: TemplateRef<unknown>;
 
+  private readonly locale = inject(LOCALE_ID);
+  private readonly injector = inject(Injector);
+
+  readonly resolvedLabels = computed(() => ({ ...DEFAULT_LABELS, ...this.labels() }));
   readonly id = `umbra-date-${nextId++}`;
   readonly calendarId = `${this.id}-calendar`;
   readonly controlId = computed(() => this.inputId() ?? this.id);
@@ -82,9 +142,17 @@ export class UmbraDateComponent implements FormValueControl<string | null> {
   readonly open = signal(false);
   readonly viewDate = signal(new Date());
   readonly calendarView = signal<CalendarView>('days');
-  readonly weekdays = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+  /** The day that holds the calendar's single tab stop. */
+  readonly focusDate = signal(new Date());
+  // 2024-01-01 is a Monday; the calendar weeks start on Monday.
+  readonly weekdays = Array.from({ length: 7 }, (_, day) =>
+    new Intl.DateTimeFormat(this.locale, { weekday: 'short' }).format(new Date(2024, 0, day + 1)),
+  );
   readonly months = Array.from({ length: 12 }, (_, month) =>
-    format(new Date(2020, month, 1), 'MMMM'),
+    new Intl.DateTimeFormat(this.locale, { month: 'long' }).format(new Date(2020, month, 1)),
+  );
+  readonly shortMonths = Array.from({ length: 12 }, (_, month) =>
+    new Intl.DateTimeFormat(this.locale, { month: 'short' }).format(new Date(2020, month, 1)),
   );
   readonly yearRange = computed(() => {
     const start = Math.floor(this.viewDate().getFullYear() / 10) * 10;
@@ -122,6 +190,9 @@ export class UmbraDateComponent implements FormValueControl<string | null> {
     const start = startOfWeek(startOfMonth(this.viewDate()), { weekStartsOn: 1 });
     const end = endOfWeek(endOfMonth(this.viewDate()), { weekStartsOn: 1 });
 
+    const fullDate = new Intl.DateTimeFormat(this.locale, { dateStyle: 'full' });
+    const view = this.viewDate();
+    const tabStop = isSameMonth(this.focusDate(), view) ? this.focusDate() : startOfMonth(view);
     return eachDayOfInterval({ start, end }).map((date) => {
       const selected = this.value() === format(date, 'yyyy-MM-dd');
       return {
@@ -129,14 +200,15 @@ export class UmbraDateComponent implements FormValueControl<string | null> {
         outsideMonth: !isSameMonth(date, this.viewDate()),
         today: isToday(date),
         selected,
-        ariaLabel: `${format(date, 'EEEE, MMMM d, yyyy')}${selected ? ', selected' : ''}`,
+        tabbable: isSameDay(date, tabStop),
+        ariaLabel: `${fullDate.format(date)}${selected ? `, ${this.resolvedLabels().selected}` : ''}`,
       };
     });
   });
   readonly resolvedError = computed(() =>
     this.error() ||
-    (this.invalidText() ? 'Enter a valid date in DD/MM/YYYY format.' : '') ||
-    (this.wasTouched() && this.required() && !this.value() ? 'Choose a date.' : ''),
+    (this.invalidText() ? this.resolvedLabels().invalid : '') ||
+    (this.wasTouched() && this.required() && !this.value() ? this.resolvedLabels().required : ''),
   );
   readonly describedBy = computed(() =>
     this.resolvedError()
@@ -146,7 +218,7 @@ export class UmbraDateComponent implements FormValueControl<string | null> {
         : null,
   );
   readonly calendarTriggerLabel = computed(() =>
-    this.label() ? `Open calendar for ${this.label()}` : 'Open calendar',
+    this.label() ? this.resolvedLabels().openCalendarFor(this.label()) : this.resolvedLabels().openCalendar,
   );
 
   private readonly destroyRef = inject(DestroyRef);
@@ -232,7 +304,9 @@ export class UmbraDateComponent implements FormValueControl<string | null> {
     if (this.disabled() || this.readonly() || this.open()) return;
     const value = this.value();
     const date = value ? parseISO(value) : null;
-    this.setViewDate(date && isValid(date) ? date : new Date());
+    const start = date && isValid(date) ? date : new Date();
+    this.setViewDate(start);
+    this.focusDate.set(start);
     this.calendarView.set('days');
 
     const trigger = this.calendarTrigger?.nativeElement;
@@ -273,14 +347,58 @@ export class UmbraDateComponent implements FormValueControl<string | null> {
       if (!openingClick) this.dismissCalendar();
     });
     this.open.set(true);
+    this.focusTabStop();
+  }
+
+  onDayKeydown(event: KeyboardEvent, date: Date): void {
+    const moves: Record<string, () => Date> = {
+      ArrowLeft: () => addDays(date, -1),
+      ArrowRight: () => addDays(date, 1),
+      ArrowUp: () => addDays(date, -7),
+      ArrowDown: () => addDays(date, 7),
+      Home: () => startOfWeek(date, { weekStartsOn: 1 }),
+      End: () => endOfWeek(date, { weekStartsOn: 1 }),
+      PageUp: () => addMonths(date, event.shiftKey ? -12 : -1),
+      PageDown: () => addMonths(date, event.shiftKey ? 12 : 1),
+    };
+    const move = moves[event.key];
+    if (!move) return;
+    event.preventDefault();
+    const next = move();
+    if (next.getFullYear() < 1 || next.getFullYear() > 9999) return;
+    this.focusDate.set(next);
+    if (!isSameMonth(next, this.viewDate())) this.setViewDate(next);
+    this.focusTabStop();
+  }
+
+  onChoiceKeydown(event: KeyboardEvent, columns: number): void {
+    const offsets: Record<string, number> = { ArrowLeft: -1, ArrowRight: 1, ArrowUp: -columns, ArrowDown: columns };
+    const offset = offsets[event.key];
+    if (offset === undefined) return;
+    event.preventDefault();
+    const choice = event.currentTarget as HTMLElement;
+    const choices = [...(choice.parentElement?.children ?? [])] as HTMLElement[];
+    choices[choices.indexOf(choice) + offset]?.focus();
+  }
+
+  private focusTabStop(): void {
+    afterNextRender(
+      () =>
+        this.overlayRef?.overlayElement
+          .querySelector<HTMLElement>('.calendar-day[tabindex="0"], .calendar-choice[tabindex="0"]')
+          ?.focus(),
+      { injector: this.injector },
+    );
   }
 
   showMonths(): void {
     this.calendarView.set('months');
+    this.focusTabStop();
   }
 
   showYears(): void {
     this.calendarView.set('years');
+    this.focusTabStop();
   }
 
   previousPeriod(): void {
@@ -306,6 +424,7 @@ export class UmbraDateComponent implements FormValueControl<string | null> {
   selectYear(year: number): void {
     this.setViewYear(year);
     this.calendarView.set('months');
+    this.focusTabStop();
   }
 
   selectMonth(month: number): void {
@@ -313,6 +432,7 @@ export class UmbraDateComponent implements FormValueControl<string | null> {
     date.setFullYear(date.getFullYear(), month, 1);
     this.setViewDate(date);
     this.calendarView.set('days');
+    this.focusTabStop();
   }
 
   selectDate(date: Date): void {
@@ -334,7 +454,7 @@ export class UmbraDateComponent implements FormValueControl<string | null> {
     this.focusInput();
   }
 
-  closeCalendar(event?: KeyboardEvent): void {
+  closeCalendar(event?: Event): void {
     event?.preventDefault();
     event?.stopPropagation();
     this.dismissCalendar();

@@ -1,0 +1,94 @@
+@use '../../styles/umbra/recipes' as *;
+
+
+:host {
+  display: inline-block;
+  vertical-align: middle;
+}
+
+.drawer-layer {
+  display: flex;
+  width: 100%;
+  height: 100dvh;
+  justify-content: flex-end;
+}
+
+.drawer-layer[data-side='left'] {
+  justify-content: flex-start;
+}
+
+.drawer-panel {
+  @include overlay-panel(var(--shadow-lg));
+  box-sizing: border-box;
+  display: flex;
+  width: min(var(--drawer-w-md), 100vw);
+  height: 100dvh;
+  min-height: 0;
+  flex-direction: column;
+  overflow-y: auto;
+  border-block: 0;
+  border-inline-end: 0;
+  border-radius: 0;
+  animation: umbra-slide-in-right var(--dur-slow) var(--ease-out) both;
+}
+
+.drawer-panel[data-side='left'] {
+  border-inline-start: 0;
+  border-inline-end: var(--border-width) solid var(--border-strong);
+  animation-name: umbra-slide-in-left;
+}
+
+.drawer-panel[data-size='sm'] {
+  width: min(var(--drawer-w-sm), 100vw);
+}
+
+.drawer-panel[data-size='lg'] {
+  width: min(var(--drawer-w-lg), 100vw);
+}
+
+.drawer-panel[data-size='full'] {
+  width: 100vw;
+}
+
+.overlay-header {
+  @include overlay-header;
+  padding: var(--space-6) var(--space-8);
+  border-block-end: var(--border-width) solid var(--border-subtle);
+}
+
+.drawer-body {
+  min-height: 0;
+  flex: 1;
+  overflow-y: auto;
+}
+
+.overlay-footer {
+  @include overlay-footer;
+  padding: var(--space-6) var(--space-8);
+  border-block-start: var(--border-width) solid var(--border-subtle);
+}
+
+.overlay-close {
+  @include icon-action;
+}
+
+.overlay-close svg {
+  @include action-glyph;
+}
+
+@media (max-width: 48rem) {
+  .drawer-layer {
+    align-items: flex-end;
+  }
+
+  .drawer-panel[data-mobile='bottom-sheet'] {
+    width: 100%;
+    height: auto;
+    max-height: 90dvh;
+    border-block-start: var(--border-width) solid var(--border-strong);
+    border-inline: 0;
+    border-start-start-radius: var(--radius-lg);
+    border-start-end-radius: var(--radius-lg);
+    animation-name: umbra-slide-up;
+  }
+}

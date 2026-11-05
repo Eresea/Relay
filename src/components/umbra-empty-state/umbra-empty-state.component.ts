@@ -10,7 +10,17 @@ import { ChangeDetectionStrategy, Component, input } from '@angular/core';
         <ng-content select="[umbraEmptyStateIcon]" />
       </span>
       <div class="content">
-        <h3>{{ title() }}</h3>
+        @switch (headingLevel()) {
+          @case (2) {
+            <h2 class="title">{{ title() }}</h2>
+          }
+          @case (4) {
+            <h4 class="title">{{ title() }}</h4>
+          }
+          @default {
+            <h3 class="title">{{ title() }}</h3>
+          }
+        }
         @if (description()) {
           <p>{{ description() }}</p>
         }
@@ -19,9 +29,10 @@ import { ChangeDetectionStrategy, Component, input } from '@angular/core';
     </section>
   `,
   styleUrl: './umbra-empty-state.component.scss',
-  host: { class: 'umbra-empty-state' },
+  host: { class: 'umbra-empty-state', '[attr.title]': 'null' },
 })
 export class UmbraEmptyStateComponent {
   readonly title = input.required<string>();
   readonly description = input<string | null>(null);
+  readonly headingLevel = input<2 | 3 | 4>(3);
 }

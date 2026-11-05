@@ -35,7 +35,7 @@ export class UmbraCheckboxComponent implements FormValueControl<boolean> {
   readonly disabled = input(false);
   readonly required = input(false);
   readonly invalid = input(false);
-  readonly name = input<string>();
+  readonly name = input('');
   readonly formValue = input("on");
   readonly inputId = input<string>();
   readonly ariaLabel = input<string>();

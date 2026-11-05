@@ -1,0 +1,113 @@
+@use '../../styles/umbra/recipes' as *;
+
+
+:host {
+  display: block;
+  min-width: 0;
+  flex: none;
+}
+
+.umbra-nav-item {
+  position: relative;
+  display: flex;
+  width: 100%;
+  min-width: 0;
+  min-height: var(--space-24);
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  border: var(--border-width) solid transparent;
+  border-radius: var(--radius-sm);
+  padding: var(--space-2);
+  background: transparent;
+  color: var(--text-muted);
+  font: var(--type-caption);
+  text-align: center;
+  user-select: none;
+  transition: var(--transition-control);
+}
+
+.umbra-nav-item:hover:not(:disabled) {
+  background: var(--surface-hover);
+  color: var(--text-body);
+}
+
+.umbra-nav-item:active:not(:disabled) {
+  transform: translateY(var(--control-press-offset));
+}
+
+.umbra-nav-item:focus-visible {
+  z-index: 1;
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+.umbra-nav-item:disabled {
+  cursor: not-allowed;
+  opacity: var(--opacity-disabled);
+}
+
+.umbra-nav-item[data-active],
+.umbra-nav-item[data-active]:hover:not(:disabled) {
+  border-color: var(--border-strong);
+  background: var(--surface-raised);
+  color: var(--text-body);
+}
+
+.umbra-nav-item[data-active]::before {
+  position: absolute;
+  border-radius: var(--radius-pill);
+  background: var(--text-body);
+  content: '';
+}
+
+.umbra-nav-item[data-orientation='vertical'] {
+  flex-direction: column;
+}
+
+.umbra-nav-item[data-orientation='vertical'][data-active]::before {
+  inset-block-start: 50%;
+  inset-inline-start: 0;
+  width: var(--space-1);
+  height: var(--space-12);
+  transform: translateY(-50%);
+}
+
+.umbra-nav-item[data-orientation='horizontal'] {
+  min-height: var(--row-h);
+  justify-content: flex-start;
+  padding-inline: var(--space-4);
+  text-align: start;
+}
+
+.umbra-nav-item[data-orientation='horizontal'][data-active]::before {
+  inset-block-end: 0;
+  inset-inline: var(--space-3);
+  height: var(--space-1);
+}
+
+.icon {
+  @include slotted-icon(var(--space-8));
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+}
+
+.icon:empty {
+  display: none;
+}
+
+.label {
+  @include truncate;
+  max-width: 100%;
+}
+
+.umbra-nav-item[data-orientation='vertical'] .label {
+  overflow: visible;
+  font-size: var(--text-2xs);
+  line-height: var(--leading-tight);
+  overflow-wrap: anywhere;
+  text-wrap: balance;
+  white-space: normal;
+}
