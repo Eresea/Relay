@@ -27,5 +27,5 @@ installed versions from accepting future updates.
 
 Update the matching versions in `package.json`, `src-tauri/tauri.conf.json`,
 and `src-tauri/Cargo.toml`, then push a tag such as `v0.2.0`. The release
-workflow checks that the versions match, builds Linux and Windows updater
-artifacts, signs them, and uploads them to the public release repository.
+workflow checks that the versions match, builds the Windows installer and the
+arm64 Android APK, signs them, and uploads them to the public release repository.

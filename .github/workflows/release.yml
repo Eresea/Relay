@@ -72,14 +72,10 @@ jobs:
           echo "release_id=$release_id" >> "$GITHUB_OUTPUT"
 
   build:
-    name: Build (${{ matrix.os }})
+    name: Build Windows
     needs: release
     if: ${{ inputs.mobile_only != true }}
-    runs-on: ${{ matrix.os }}
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ubuntu-latest, windows-latest]
+    runs-on: windows-latest
     steps:
       - uses: actions/checkout@v5
         with:
@@ -97,20 +93,6 @@ jobs:
         env:
           RELEASE_TAG: ${{ needs.release.outputs.release_tag }}
         run: npm run version:check -- "${RELEASE_TAG#v}"
-
-      - name: Install Linux dependencies
-        if: matrix.os == 'ubuntu-latest'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y \
-            libwebkit2gtk-4.1-dev \
-            libgtk-3-dev \
-            libayatana-appindicator3-dev \
-            librsvg2-dev \
-            libssl-dev \
-            build-essential \
-            file \
-            wget
 
       - name: Validate updater configuration
         shell: bash
@@ -176,7 +158,7 @@ jobs:
           sdkmanager "platforms;android-36" "platform-tools" "build-tools;36.0.0" "ndk;${NDK_VERSION}"
           echo "NDK_HOME=${ANDROID_HOME}/ndk/${NDK_VERSION}" >> "$GITHUB_ENV"
 
-      - run: rustup target add aarch64-linux-android armv7-linux-androideabi i686-linux-android x86_64-linux-android
+      - run: rustup target add aarch64-linux-android
       - run: npm ci
 
       - name: Check version
@@ -234,15 +216,15 @@ jobs:
           writeFileSync(path, gradle);
           NODE
 
-      - name: Build signed Android artifacts
+      - name: Build the signed APK
         env:
           RELAY_LINEAR_CLIENT_ID: ${{ vars.RELAY_LINEAR_CLIENT_ID }}
           ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
           ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
           ANDROID_KEYSTORE_PATH: ${{ runner.temp }}/relay-upload.jks
-        run: npm run android:build -- --aab --apk --ci
+        run: npm run android:build -- --apk --target aarch64 --ci
 
-      - name: Upload Android artifacts to release
+      - name: Upload the APK to the release
         shell: bash
         env:
           GH_TOKEN: ${{ secrets.RELAY_RELEASE_TOKEN }}
@@ -250,14 +232,10 @@ jobs:
           RELEASE_TAG: ${{ needs.release.outputs.release_tag }}
         run: |
           set -euo pipefail
-          aab="$(find src-tauri/gen/android/app/build/outputs/bundle -name '*.aab' -print -quit)"
           apk="$(find src-tauri/gen/android/app/build/outputs/apk -name '*.apk' -print -quit)"
-          test -n "$aab"
           test -n "$apk"
-          cp "$aab" "$RUNNER_TEMP/relay-${RELEASE_TAG}.aab"
           cp "$apk" "$RUNNER_TEMP/relay-${RELEASE_TAG}.apk"
           gh release upload "$RELEASE_TAG" \
-            "$RUNNER_TEMP/relay-${RELEASE_TAG}.aab" \
             "$RUNNER_TEMP/relay-${RELEASE_TAG}.apk" \
             --repo "$RELEASE_REPO" \
             --clobber
