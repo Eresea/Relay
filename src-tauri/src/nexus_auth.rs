@@ -5,10 +5,14 @@
 //! in [`handle_callback`]. The SDK owns PKCE, the keychain session, refresh
 //! and the realtime event stream; this module wires it to Tauri.
 
+use std::path::PathBuf;
 use std::sync::Mutex;
 use std::time::Duration;
 
-use nexus_client::{AuthState, Error as NexusError, EventsHandle, NexusClient, NexusConfig};
+use nexus_client::{
+    AuthState, Error as NexusError, EventsHandle, NexusClient, NexusConfig, StoredSession,
+    TokenStore,
+};
 use serde::Serialize;
 use tauri::{AppHandle, Emitter, Manager};
 use tauri_plugin_opener::OpenerExt;
@@ -71,6 +75,41 @@ fn issuer(app: &AppHandle) -> String {
         .unwrap_or_else(|| DEFAULT_ISSUER.to_owned())
 }
 
+/// The session as a file, for Android: the `keyring` crate has no backend there
+/// and silently keeps secrets in memory, so every launch signed out. A damaged
+/// file only means signing in again.
+///
+/// ponytail: the refresh token is protected by the app sandbox alone. It moves
+/// to Android Keystore with the phone link's key, behind the same biometrics.
+#[cfg_attr(not(any(target_os = "android", test)), allow(dead_code))]
+struct FileTokenStore(PathBuf);
+
+impl TokenStore for FileTokenStore {
+    fn load(&self) -> nexus_client::Result<Option<StoredSession>> {
+        match std::fs::read(&self.0) {
+            Ok(raw) => Ok(serde_json::from_slice(&raw).ok()),
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(None),
+            Err(error) => Err(NexusError::Store(error.to_string())),
+        }
+    }
+
+    fn save(&self, session: &StoredSession) -> nexus_client::Result<()> {
+        let raw =
+            serde_json::to_vec(session).map_err(|error| NexusError::Store(error.to_string()))?;
+        crate::vault::write_atomically(&self.0, &raw)
+            .map_err(|error| NexusError::Store(error.to_string()))
+    }
+
+    fn clear(&self) -> nexus_client::Result<()> {
+        match std::fs::remove_file(&self.0) {
+            Err(error) if error.kind() != std::io::ErrorKind::NotFound => {
+                Err(NexusError::Store(error.to_string()))
+            }
+            _ => Ok(()),
+        }
+    }
+}
+
 /// Builds the client, registers it as managed state and follows its auth
 /// state: every change is emitted to the UI, and the event stream runs
 /// exactly while a session exists.
@@ -84,6 +123,15 @@ pub fn init(app: &AppHandle) -> Result<()> {
         keyring_account: KEYRING_ACCOUNT.into(),
     };
     retire_legacy_session(&config);
+    #[cfg(target_os = "android")]
+    let client = NexusClient::new(
+        config,
+        std::sync::Arc::new(FileTokenStore(
+            crate::link::private_dir(app, "nexus")?.join("session.json"),
+        )),
+    )
+    .map_err(nexus_error)?;
+    #[cfg(not(target_os = "android"))]
     let client = NexusClient::with_keyring(config).map_err(nexus_error)?;
     app.manage(client.clone());
     app.manage(NexusEvents::default());
@@ -280,5 +328,36 @@ pub async fn handle_callback(app: AppHandle, callback: Url) {
             };
             let _ = app.emit("nexus://auth", NexusAuthStatus::signed_out(Some(message)));
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_saved_session_survives_a_restart_and_sign_out_removes_it() {
+        let dir = std::env::temp_dir().join(format!("relay-nexus-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("session.json");
+        let session = StoredSession {
+            access_token: "access".into(),
+            refresh_token: "refresh".into(),
+            expires_at: 42,
+            user: None,
+        };
+
+        assert_eq!(FileTokenStore(path.clone()).load().unwrap(), None);
+        FileTokenStore(path.clone()).save(&session).unwrap();
+        // A new store is what the next launch sees.
+        assert_eq!(FileTokenStore(path.clone()).load().unwrap(), Some(session));
+
+        FileTokenStore(path.clone()).clear().unwrap();
+        FileTokenStore(path.clone()).clear().unwrap();
+        assert_eq!(FileTokenStore(path.clone()).load().unwrap(), None);
+
+        std::fs::write(&path, b"not json").unwrap();
+        assert_eq!(FileTokenStore(path).load().unwrap(), None);
+        std::fs::remove_dir_all(dir).unwrap();
     }
 }
