@@ -251,10 +251,18 @@ pub async fn handle_callback(app: AppHandle, callback: Url) {
         return;
     };
     match client.handle_callback(callback.as_str()).await {
-        Ok(()) => {}
-        Err(
-            NexusError::InvalidCallback | NexusError::NoPendingSignIn | NexusError::StateMismatch,
-        ) => {}
+        Ok(()) => log::info!("Nexus sign-in completed"),
+        Err(NexusError::InvalidCallback) => {}
+        // Not this attempt's link: Relay restarted since it began, or a newer
+        // attempt replaced it. Harmless, but silence here reads as a broken
+        // sign-in, so anyone still signed out is told to start again.
+        Err(error @ (NexusError::NoPendingSignIn | NexusError::StateMismatch)) => {
+            log::warn!("ignored a Nexus sign-in link: {error}");
+            if !is_signed_in(&app) {
+                let message = "That sign-in link is from an older attempt. Sign in again.".into();
+                let _ = app.emit("nexus://auth", NexusAuthStatus::signed_out(Some(message)));
+            }
+        }
         Err(error) => {
             log::warn!("Nexus sign-in failed: {error}");
             let message = match error {
