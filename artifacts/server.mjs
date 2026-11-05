@@ -17,7 +17,7 @@ db.exec(`PRAGMA journal_mode=WAL;
 const files = Object.fromEntries(['index.html', 'library.js', 'viewer.html', 'viewer.js'].map(name => [name, readFileSync(resolve(here, name))]));
 const maxBody = 2 * 1024 * 1024;
 function send(res, status, body, type = 'application/json; charset=utf-8') {
-  res.writeHead(status, { 'Content-Type': type, 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosiff', 'Referrer-Policy': 'no-referrer' });
+  res.writeHead(status, { 'Content-Type': type, 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff', 'Referrer-Policy': 'no-referrer' });
   res.end(type.startsWith('application/json') ? JSON.stringify(body) : body);
 }
 async function body(req) {
