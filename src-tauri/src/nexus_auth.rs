@@ -143,6 +143,9 @@ pub fn init(app: &AppHandle) -> Result<()> {
         if signed_in {
             refresh_events(&app);
         }
+        // A window that asked before this client existed was told "signed out",
+        // and restoring a saved session is not a change the loop below would see.
+        let _ = app.emit("nexus://auth", status_of(&client).await);
         while changes.changed().await.is_ok() {
             let now_signed_in = matches!(*changes.borrow(), AuthState::SignedIn { .. });
             if now_signed_in && !signed_in {
@@ -305,7 +308,12 @@ pub async fn handle_callback(app: AppHandle, callback: Url) {
         return;
     };
     match client.handle_callback(callback.as_str()).await {
-        Ok(()) => log::info!("Nexus sign-in completed"),
+        Ok(()) => {
+            log::info!("Nexus sign-in completed");
+            // Signing in again as the same user changes no state, so the watcher
+            // stays quiet while the window is still waiting to hear the outcome.
+            let _ = app.emit("nexus://auth", status_of(&client).await);
+        }
         Err(NexusError::InvalidCallback) => {}
         // Not this attempt's link: Relay restarted since it began, or a newer
         // attempt replaced it. Harmless, but silence here reads as a broken
