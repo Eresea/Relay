@@ -94,6 +94,13 @@ jobs:
           RELEASE_TAG: ${{ needs.release.outputs.release_tag }}
         run: npm run version:check -- "${RELEASE_TAG#v}"
 
+      # Saved by release-cache.yml: a tag run can only restore from main.
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+          shared-key: release-windows
+          save-if: false
+
       - name: Validate updater configuration
         shell: bash
         env:
@@ -159,6 +166,16 @@ jobs:
           echo "NDK_HOME=${ANDROID_HOME}/ndk/${NDK_VERSION}" >> "$GITHUB_ENV"
 
       - run: rustup target add aarch64-linux-android
+
+      # Saved by release-cache.yml: a tag run can only restore from main.
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+          shared-key: release-android
+          save-if: false
+
+      - uses: gradle/actions/setup-gradle@v4
+
       - run: npm ci
 
       - name: Check version
