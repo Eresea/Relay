@@ -228,6 +228,9 @@ pub enum Error {
     #[error("Linear API request failed: {0}")]
     LinearApi(String),
 
+    #[error("Phone link: {0}")]
+    Link(String),
+
     #[cfg(any(mobile, test))]
     #[allow(dead_code)]
     #[error("mobile update version is invalid: {0}")]

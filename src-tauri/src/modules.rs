@@ -296,6 +296,26 @@ pub static BUILT_IN: &[Manifest] = &[
         invokes: &[("opencloud_", Network)],
     },
     Manifest {
+        id: "link",
+        name: "Phone link",
+        summary: "Built in · your phone asks, this PC answers",
+        description: "Pair your phone with a one-time code, then ask this PC for things from it. Only paired devices can ask, and only for what Relay lists: for now, the running processes. Messages pass through your Nexus account end-to-end encrypted.",
+        icon: "smartphone",
+        hue: "relay",
+        kind: "native",
+        source: "built-in",
+        core: false,
+        surface: None,
+        commands: &[],
+        items: false,
+        signals: false,
+        needs: &[
+            need(Shell, "the system's process list, read-only"),
+            need(Network, "your Nexus account"),
+        ],
+        invokes: &[("link_", Network)],
+    },
+    Manifest {
         id: "modules",
         name: "Modules",
         summary: "Built in · this screen",
@@ -514,7 +534,8 @@ fn apply_background(app: &AppHandle, id: &str, enabled: bool) {
                 crate::gmail::pause(app, &registry);
             }
         }
-        "github" => crate::nexus_auth::set_events(app, enabled),
+        "github" => crate::nexus_auth::restart_events(app),
+        "link" => crate::nexus_auth::refresh_events(app),
         _ => {}
     }
 }

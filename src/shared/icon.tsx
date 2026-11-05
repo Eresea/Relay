@@ -51,6 +51,7 @@ import {
   Mail,
   Shield,
   User,
+  Smartphone,
 } from 'lucide-react';
 
 import { cn } from '@/lib/utils';
@@ -62,6 +63,7 @@ import { cn } from '@/lib/utils';
  * and only these glyphs ship in the bundle.
  */
 const ICONS = {
+  smartphone: Smartphone,
   activity: Activity,
   'arrow-left': ArrowLeft,
   'chevron-down': ChevronDown,

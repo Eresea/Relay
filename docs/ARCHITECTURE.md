@@ -400,3 +400,26 @@ already on the Settings page reaches it by clicking the tab.
 
 Project and task models, agent orchestration, and the context layer that
 lets commands know what you are working on.
+
+## Phone link
+
+`src-tauri/src/link.rs` lets a paired phone ask this PC for things, with Nexus
+carrying the messages and trusted with nothing. Being signed in grants no
+access: the account or the server being compromised must not reach the machine.
+
+- **Pairing** is X25519 authenticated by a one-time code shown on the PC and
+  typed on the phone, which Nexus never sees. Both sides end up with a key only
+  they hold (`link/link.json`; on Android in `no_backup`, out of cloud backup).
+- **Messages** are AES-256-GCM under that key, bound to sender and receiver.
+  Requests expire after a minute and run once, because the inbox redelivers and
+  holds mail while the PC is off.
+- **Actions** are the one `match` in `run_action`, and that code is compiled
+  only for desktop. Nothing can send a program or a command to run. Add to the
+  list only after moving the phone's key into Android Keystore behind
+  biometrics: today's key is a file, which is fine only for read-only actions.
+- **Transport** is one event endpoint shared by the account's installations,
+  its secret kept as a `relay-link` connection. Everyone gets every message and
+  skips those for someone else. The stream is shared with GitHub; a device that
+  never paired does not listen for the link at all.
+
+Revoking a phone on the PC deletes the key, so its messages stop opening.

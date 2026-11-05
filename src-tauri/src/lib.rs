@@ -16,6 +16,7 @@ mod github;
 mod gmail;
 mod jobs;
 mod linear;
+mod link;
 #[cfg(any(mobile, test))]
 #[allow(dead_code)]
 mod mobile_updates;
@@ -113,6 +114,7 @@ pub fn run() {
         .manage(HttpGitHubClient::default())
         .manage(GmailState::default())
         .manage(LinearState::default())
+        .manage(link::Link::default())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_deep_link::init())
         .plugin(tauri_plugin_store::Builder::default().build())
@@ -249,6 +251,10 @@ pub fn run() {
                 commands::linear_project_issues,
                 commands::linear_archive_issue,
                 commands::linear_unarchive_issue,
+                link::link_status,
+                link::link_forget,
+                link::link_pair_start,
+                link::link_pair_cancel,
                 commands::nexus_auth_status,
                 commands::nexus_auth_start,
                 commands::nexus_auth_logout,
@@ -414,6 +420,10 @@ pub fn run() {
             commands::linear_project_issues,
             commands::linear_archive_issue,
             commands::linear_unarchive_issue,
+            link::link_status,
+            link::link_forget,
+            link::link_pair,
+            link::link_processes,
             commands::nexus_auth_status,
             commands::nexus_auth_start,
             commands::nexus_auth_logout,

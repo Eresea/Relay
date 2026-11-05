@@ -93,12 +93,12 @@ pub fn init(app: &AppHandle) -> Result<()> {
         let mut changes = client.watch();
         let mut signed_in = matches!(client.auth_state(), AuthState::SignedIn { .. });
         if signed_in {
-            start_events(&app, &client);
+            refresh_events(&app);
         }
         while changes.changed().await.is_ok() {
             let now_signed_in = matches!(*changes.borrow(), AuthState::SignedIn { .. });
             if now_signed_in && !signed_in {
-                start_events(&app, &client);
+                refresh_events(&app);
                 // A connection Relay already stored in this account (another
                 // installation, or before a sign-out) is picked up here.
                 if let Err(error) = github::adopt_connection(&app).await {
@@ -114,24 +114,30 @@ pub fn init(app: &AppHandle) -> Result<()> {
     Ok(())
 }
 
-/// The inbox stream only carries GitHub events, so it runs while GitHub is on.
-fn start_events(app: &AppHandle, client: &NexusClient) {
-    if !crate::modules::is_enabled(app, "github") {
-        return;
+/// Runs the inbox stream exactly while something needs it: GitHub, or a
+/// phone link that is paired or pairing.
+pub fn refresh_events(app: &AppHandle) {
+    let wanted = crate::modules::is_enabled(app, "github") || crate::link::wanted(app);
+    let state = app.state::<NexusEvents>();
+    let mut events = state.0.lock().unwrap();
+    if !wanted {
+        events.take();
+    } else if events.is_none() {
+        if let Ok(client) = signed_in_client(app) {
+            // The stream spawns tokio tasks, and synchronous commands call this
+            // from a thread outside the runtime.
+            let runtime = tauri::async_runtime::handle();
+            let _guard = runtime.inner().enter();
+            *events = Some(github::events::start(app, &client));
+        }
     }
-    let handle = github::events::start(app, client);
-    *app.state::<NexusEvents>().0.lock().unwrap() = Some(handle);
 }
 
-/// Starts or stops the inbox stream when GitHub is turned on or off.
-pub fn set_events(app: &AppHandle, on: bool) {
-    if !on {
-        app.state::<NexusEvents>().0.lock().unwrap().take();
-        return;
-    }
-    if let Ok(client) = signed_in_client(app) {
-        start_events(app, &client);
-    }
+/// Restarts the stream when GitHub is turned on or off; turning it on must
+/// also bring its webhooks back in sync.
+pub fn restart_events(app: &AppHandle) {
+    app.state::<NexusEvents>().0.lock().unwrap().take();
+    refresh_events(app);
 }
 
 /// Sessions written before the SDK carry no `connections` scope and Nexus

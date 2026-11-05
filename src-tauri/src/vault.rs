@@ -174,7 +174,7 @@ fn write_file(app: &AppHandle, file: &VaultFile) -> Result<()> {
     Ok(())
 }
 
-fn write_atomically(path: &std::path::Path, raw: &[u8]) -> std::io::Result<()> {
+pub(crate) fn write_atomically(path: &std::path::Path, raw: &[u8]) -> std::io::Result<()> {
     let mut temp = path.to_path_buf();
     let mut suffix = [0u8; 12];
     OsRng.fill_bytes(&mut suffix);

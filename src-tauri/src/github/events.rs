@@ -96,13 +96,26 @@ enum InterpretedEvent {
 /// event only after `process_event` succeeded, so a delivery is never lost
 /// and a failed one is retried. Dropping the handle stops the stream; a
 /// `session.revoked` ends the session (the auth watcher then signs the UI out).
+///
+/// The stream is shared with the phone link, which takes its own events first.
+/// While the link alone keeps it running, GitHub deliveries are acknowledged
+/// unread: GitHub is off, and they would otherwise block the link's mail.
 pub fn start(app: &AppHandle, client: &NexusClient) -> EventsHandle {
-    let sync_app = app.clone();
-    tauri::async_runtime::spawn(async move { sync_registered_hooks(&sync_app).await });
+    if crate::modules::is_enabled(app, "github") {
+        let sync_app = app.clone();
+        tauri::async_runtime::spawn(async move { sync_registered_hooks(&sync_app).await });
+    }
     let handler_app = app.clone();
     client.events(move |event| {
         let app = handler_app.clone();
-        async move { process_or_give_up(&app, &event).await }
+        async move {
+            if crate::link::handle(&app, &event).await
+                || !crate::modules::is_enabled(&app, "github")
+            {
+                return Ok(());
+            }
+            process_or_give_up(&app, &event).await
+        }
     })
 }
 

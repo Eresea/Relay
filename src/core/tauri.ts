@@ -11,6 +11,25 @@ import type { ModuleInfo } from './modules';
  * a no-op instead of throwing, and (b) there is one place to look for the
  * full command surface.
  */
+/** A device this one is paired with through the phone link. */
+export interface LinkDevice {
+  readonly id: string;
+  readonly name: string;
+  readonly pairedAt: number;
+}
+
+export interface LinkStatus {
+  /** A PC shows codes and answers; a phone types codes and asks. */
+  readonly role: 'pc' | 'phone';
+  readonly devices: readonly LinkDevice[];
+  readonly pairing: { readonly code: string; readonly expiresAt: number } | null;
+}
+
+export interface LinkProcess {
+  readonly pid: number;
+  readonly name: string;
+}
+
 export class TauriBridge {
   readonly available = '__TAURI_INTERNALS__' in window;
   private latestRuntimeStatus: RuntimeStatusSnapshot = { leaf: null, nexus: null };
@@ -1599,6 +1618,30 @@ export class TauriBridge {
   /** Persists the connector's rules to `settings.json`. */
   async setGithubSettings(settings: GithubConnectorSettings): Promise<void> {
     await this.setSetting('github.settings', settings);
+  }
+
+  linkStatus(): Promise<LinkStatus | null> {
+    return this.invoke<LinkStatus>('link_status');
+  }
+
+  linkForget(id: string): Promise<LinkStatus | null> {
+    return this.invoke<LinkStatus>('link_forget', { id });
+  }
+
+  linkPairStart(): Promise<LinkStatus | null> {
+    return this.invoke<LinkStatus>('link_pair_start');
+  }
+
+  linkPairCancel(): Promise<LinkStatus | null> {
+    return this.invoke<LinkStatus>('link_pair_cancel');
+  }
+
+  linkPair(code: string): Promise<LinkStatus | null> {
+    return this.invoke<LinkStatus>('link_pair', { code });
+  }
+
+  async linkProcesses(deviceId: string): Promise<readonly LinkProcess[]> {
+    return (await this.invoke<LinkProcess[]>('link_processes', { deviceId })) ?? [];
   }
 
   private async invoke<T>(command: string, args: Record<string, unknown> = {}): Promise<T | null> {

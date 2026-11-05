@@ -9,6 +9,7 @@ import { ThemeService } from '@/core/theme';
 import { Github } from '@/features/github/github';
 import { Gmail } from '@/features/gmail/gmail';
 import { LinearSettings } from '@/features/linear/linear-settings';
+import { Link } from '@/features/link/link';
 import { inject } from '@/lib/inject';
 import { signal, useController, useSignals } from '@/lib/signals';
 import { cn } from '@/lib/utils';
@@ -20,7 +21,7 @@ const HUD_TOP_OFFSET_KEY = 'hud.topOffset';
 const DEFAULT_HUD_TOP_OFFSET = 0;
 const MAX_HUD_TOP_OFFSET = 2000;
 
-export type SettingsTab = 'general' | 'github' | 'gmail' | 'linear';
+export type SettingsTab = 'general' | 'github' | 'gmail' | 'linear' | 'link';
 
 function clampHudTopOffset(offset: number): number {
   return Number.isFinite(offset)
@@ -70,6 +71,7 @@ const TABS: readonly { id: SettingsTab; label: string; module?: string }[] = [
   { id: 'github', label: 'GitHub', module: 'github' },
   { id: 'gmail', label: 'Gmail', module: 'gmail' },
   { id: 'linear', label: 'Linear', module: 'linear' },
+  { id: 'link', label: 'Phone link', module: 'link' },
 ];
 
 /**
@@ -169,6 +171,11 @@ export default function Settings({ initialTab = 'general' }: { initialTab?: Sett
       {on('linear') && (
         <div hidden={tab !== 'linear'}>
           <LinearSettings />
+        </div>
+      )}
+      {on('link') && (
+        <div hidden={tab !== 'link'}>
+          <Link />
         </div>
       )}
     </div>
