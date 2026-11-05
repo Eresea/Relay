@@ -118,7 +118,10 @@ fn codex_executable() -> PathBuf {
 
 impl CodexClient {
     async fn start(working_directory: &Path) -> Result<Self> {
-        let mut child = Command::new(codex_executable())
+        let mut command = Command::new(codex_executable());
+        #[cfg(windows)]
+        command.creation_flags(0x0800_0000); // CREATE_NO_WINDOW
+        let mut child = command
             .args(["app-server", "--stdio"])
             .current_dir(working_directory)
             .stdin(std::process::Stdio::piped())

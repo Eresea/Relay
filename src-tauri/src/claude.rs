@@ -349,6 +349,8 @@ pub async fn run(
         return Err(claude_error(format!("{working_directory} is not a folder")));
     }
     let mut command = Command::new(claude_executable());
+    #[cfg(windows)]
+    command.creation_flags(0x0800_0000); // CREATE_NO_WINDOW
     command.args([
         "-p",
         "--input-format",
