@@ -90,5 +90,3 @@ jobs:
       - run: npm run android:init
 
       - run: npm run android:build -- --apk --target aarch64 --ci
-        env:
-          CARGO_LOG: cargo::core::compiler::fingerprint=info
